@@ -185,6 +185,10 @@ if command -v noctalia-greeter-apply-appearance >/dev/null 2>&1; then
 fi
 
 nox_atomic_install 0644 "${NOX_ROOT}/configs/greeter/greeter.toml" /var/lib/noctalia-greeter/greeter.toml
+FIRST_HUMAN_USER="$(nox_list_human_users | head -n1 | awk '{print $1}' || true)"
+if [[ -n "$FIRST_HUMAN_USER" ]]; then
+  printf '\n[user]\ndefault = "%s"\n' "$FIRST_HUMAN_USER" >> /var/lib/noctalia-greeter/greeter.toml
+fi
 chown -R greeter:greeter /var/lib/noctalia-greeter
 chmod 0750 /var/lib/noctalia-greeter
 

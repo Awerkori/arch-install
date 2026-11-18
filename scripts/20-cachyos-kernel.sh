@@ -154,9 +154,11 @@ nox_atomic_install 0755 "${NOX_ROOT}/configs/boot-hooks/95-nox-sbctl-fallback" /
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-secureboot-enroll" /usr/local/bin/nox-secureboot-enroll
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-secureboot-verify" /usr/local/bin/nox-secureboot-verify
 
-# Ensure /boot/limine.conf starts clean with 5s timeout (removing any stale Archinstall entries)
+# Ensure /boot/limine.conf starts clean with 5s timeout and auto-boots linux-cachyos (entry 2 under /+Arch Linux)
 cat > "${BOOT_MP}/limine.conf" <<'EOF'
 timeout: 5
+default_entry: 2
+remember_last_entry: no
 EOF
 
 # 5. Deploy Limine EFI binaries & register NVRAM + fallback
@@ -171,8 +173,20 @@ fi
 nox_info "Executando limine-update para gerar initramfs e entradas linux-cachyos..."
 limine-update
 
+limine_header_changed=0
+if ! grep -Eq '^[[:space:]]*remember_last_entry:' "${BOOT_MP}/limine.conf"; then
+  sed -i '1i remember_last_entry: no' "${BOOT_MP}/limine.conf"
+  limine_header_changed=1
+fi
+if ! grep -Eq '^[[:space:]]*default_entry:' "${BOOT_MP}/limine.conf"; then
+  sed -i '1i default_entry: 2' "${BOOT_MP}/limine.conf"
+  limine_header_changed=1
+fi
 if ! grep -Eq '^[[:space:]]*timeout:' "${BOOT_MP}/limine.conf"; then
   sed -i '1i timeout: 5' "${BOOT_MP}/limine.conf"
+  limine_header_changed=1
+fi
+if [[ "$limine_header_changed" -eq 1 ]]; then
   limine-enroll-config || true
   /etc/boot/hooks/post.d/95-nox-sbctl-fallback || true
 fi

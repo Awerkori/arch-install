@@ -20,7 +20,7 @@ fi
 ROOT_FSTYPE="$(findmnt -no FSTYPE / || true)"
 [[ "$ROOT_FSTYPE" == "btrfs" ]] || nox_die "Sistema de arquivos raiz '/' nao e Btrfs (obtido: ${ROOT_FSTYPE})."
 
-# 1. Ensure 'root' Snapper config exists without recreating over an existing one
+# 1. Ensure 'root' Snapper config exists and /.snapshots is mounted on top-level @.snapshots subvolume
 if ! snapper --no-dbus -c root get-config >/dev/null 2>&1; then
   nox_info "Criando configuracao Snapper 'root'..."
   if [[ -d /.snapshots ]] && mountpoint -q /.snapshots; then
@@ -32,6 +32,20 @@ if ! snapper --no-dbus -c root get-config >/dev/null 2>&1; then
     mount /.snapshots || true
   else
     snapper --no-dbus -c root create-config /
+    btrfs subvolume delete /.snapshots >/dev/null 2>&1 || mkdir -p /.snapshots
+    mkdir -p /.snapshots
+    ROOT_DEV="$(findmnt -no SOURCE / | sed 's/\[.*\]//')"
+    ROOT_UUID="$(blkid -s UUID -o value "$ROOT_DEV" 2>/dev/null || true)"
+    TOP_MNT="$(mktemp -d)"
+    if [[ -n "$ROOT_DEV" ]] && mount -o subvolid=5 "$ROOT_DEV" "$TOP_MNT" 2>/dev/null; then
+      [[ -e "${TOP_MNT}/@.snapshots" ]] || btrfs subvolume create "${TOP_MNT}/@.snapshots"
+      umount "$TOP_MNT"
+    fi
+    rmdir "$TOP_MNT" 2>/dev/null || true
+    if ! awk '$2 == "/.snapshots" {found=1} END{exit !found}' /etc/fstab 2>/dev/null && [[ -n "$ROOT_UUID" ]]; then
+      printf 'UUID=%s\t/.snapshots\tbtrfs\trw,noatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvol=/@.snapshots\t0 0\n' "$ROOT_UUID" >> /etc/fstab
+    fi
+    mount /.snapshots 2>/dev/null || { [[ -n "$ROOT_DEV" ]] && mount -o "subvol=/@.snapshots" "$ROOT_DEV" /.snapshots; }
   fi
 fi
 
