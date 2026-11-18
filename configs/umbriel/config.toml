@@ -72,15 +72,13 @@ hide_when_typing = false
 follows_mouse = false
 
 [layout]
-mode = "scrolling"
+mode = "dwindle"
 gap = 0
 width_presets = [0.333, 0.5, 0.667]
 
-[layout.scrolling]
-default_extent_fraction = 0.5
-center_underfull_strip = true
-center_focused = false
-expand_single_column = true
+[layout.dwindle]
+preserve_split = false
+new_toward_cursor = false
 
 [keybinds]
 # Applications & Desktop
@@ -140,7 +138,8 @@ expand_single_column = true
 "Mod+Shift+9" = "window-move-to-workspace 9"
 "Mod+Shift+0" = "window-move-to-workspace 10"
 
-# Sizing & Scratchpad
+# Sizing, Dwindle split & Scratchpad
+"Mod+V" = { action = "layout-toggle-split", repeat = false }
 "Mod+R" = "window-cycle-primary-extent"
 "Mod+Shift+R" = "window-cycle-primary-extent-back"
 "Mod+Minus" = "window-modify-primary-extent -0.05"

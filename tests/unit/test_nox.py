@@ -27,6 +27,14 @@ class TestUserConfigurationContract(unittest.TestCase):
         self.assertEqual(cfg["swap"]["enabled"], False)
         self.assertEqual(cfg["kernels"], ["linux-zen"])
 
+    def test_umbriel_default_layout_is_dwindle(self) -> None:
+        toml_text = (REPO / "configs/umbriel/config.toml").read_text(encoding="utf-8")
+        import tomllib
+        parsed = tomllib.loads(toml_text)
+        self.assertEqual(parsed["layout"]["mode"], "dwindle")
+        self.assertIn("dwindle", parsed["layout"])
+        self.assertNotIn("scrolling", parsed["layout"])
+
 
 class TestHostSafetyGuard(unittest.TestCase):
     def test_install_blocks_unarmed_non_chroot_execution(self) -> None:

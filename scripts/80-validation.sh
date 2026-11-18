@@ -42,6 +42,7 @@ check "luciole-git instalado e .desktop presente" bash -c "pacman -Q luciole-git
 check "hushmic-bin instalado" bash -c "pacman -Q hushmic-bin >/dev/null && command -v hushmic >/dev/null"
 check "greetd habilitado e apontando para noctalia-greeter-session" bash -c "systemctl is-enabled greetd.service >/dev/null && grep -q noctalia-greeter-session /etc/greetd/config.toml"
 check "umbriel config validate OK" bash -c "umbriel config validate -c /etc/skel/.config/umbriel/config.toml"
+check "umbriel layout padrao dwindle" bash -c "grep -Eq '^[[:space:]]*mode[[:space:]]*=[[:space:]]*\"dwindle\"' /etc/skel/.config/umbriel/config.toml && ! grep -Eq '^[[:space:]]*mode[[:space:]]*=[[:space:]]*\"(scrolling|master|stacking)\"' /etc/skel/.config/umbriel/config.toml"
 check "visudo validado sem NOPASSWD" bash -c "visudo -cf /etc/sudoers >/dev/null && visudo -cf /etc/sudoers.d/10-wheel >/dev/null && ! grep -rq NOPASSWD /etc/sudoers /etc/sudoers.d/"
 
 # 5. Services enabled
