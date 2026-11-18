@@ -14,8 +14,12 @@ focus_on_activate = false
 honor_restored_maximize = false
 
 [environment]
+LANG = "en_US.UTF-8"
+LC_MESSAGES = "en_US.UTF-8"
 QT_QPA_PLATFORMTHEME = "qt5ct:qt6ct"
 ELECTRON_OZONE_PLATFORM_HINT = "auto"
+AMD_VULKAN_ICD = "RADV"
+MESA_SHADER_CACHE_MAX_SIZE = "12G"
 
 [workspaces]
 back_and_forth = false

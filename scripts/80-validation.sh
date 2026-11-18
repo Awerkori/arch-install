@@ -25,14 +25,24 @@ check() {
   fi
 }
 
-# 1. CachyOS repos & single kernel + Limine
-check "repos cachyos configurados" bash -c "pacman-conf --repo-list | grep -q 'cachyos-znver4\|cachyos-v4'"
+# 1. CachyOS repos priority order & single kernel + Limine
+check "repos cachyos configurados na ordem oficial antes de Arch" bash -c '
+  repos="$(pacman-conf --repo-list | tr "\n" " ")"
+  grep -Eq "^cachyos-(znver4|v4) cachyos-core-(znver4|v4) cachyos-extra-(znver4|v4) cachyos core extra multilib" <<<"$repos"
+'
 check "linux-cachyos e headers instalados" bash -c "pacman -Q linux-cachyos linux-cachyos-headers >/dev/null"
 check "nenhum kernel concorrente instalado" bash -c "! pacman -Q linux linux-zen linux-lts linux-hardened >/dev/null 2>&1"
 check "arquivos de boot limine e cachyos presentes" bash -c "test -s '${BOOT_MP}/EFI/limine/limine_x64.efi' && test -s '${BOOT_MP}/EFI/BOOT/BOOTX64.EFI' && test -s '${BOOT_MP}/limine.conf'"
 check "limine-mkinitcpio-hook e limine-snapper-sync instalados" bash -c "pacman -Q limine limine-mkinitcpio-hook limine-snapper-sync >/dev/null"
 check "limine.conf contem linux-cachyos sem linux-zen e sem arch-limine" bash -c "grep -q linux-cachyos '${BOOT_MP}/limine.conf' && ! grep -q linux-zen '${BOOT_MP}/limine.conf' && test ! -d '${BOOT_MP}/EFI/arch-limine'"
 check "hook btrfs-overlayfs presente em /etc/mkinitcpio.conf" bash -c "grep -Eq '^HOOKS=.*(btrfs-overlayfs|sd-btrfs-overlayfs)' /etc/mkinitcpio.conf"
+
+# 1b. System language (en_US.UTF-8), timezone (America/Sao_Paulo), keyboard + cedilla, performance configs
+check "idioma padrao en_US.UTF-8 configurado e gerado" bash -c "grep -qx 'LANG=en_US.UTF-8' /etc/locale.conf && locale -a | grep -qiE '^en_US\.utf-?8\$'"
+check "fuso horario America/Sao_Paulo configurado" bash -c "readlink -f /etc/localtime | grep -q 'America/Sao_Paulo\$'"
+check "teclado us/intl e cedilha (.XCompose) configurados" bash -c "grep -qx 'KEYMAP=us-acentos' /etc/vconsole.conf && grep -q 'ccedilla' /etc/skel/.XCompose"
+check "sysctl de performance e gamemode.ini presentes" bash -c "test -s /etc/sysctl.d/99-nox-performance.conf && test -s /etc/gamemode.ini"
+check "mesa e vulkan-radeon 64/32 bits instalados" bash -c "pacman -Q mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon >/dev/null"
 
 # 2. Pacman & Paru from CachyOS
 check "pacman instalado do CachyOS" bash -c "pacman -Qi pacman | grep -qE 'Installed From[[:space:]]*:[[:space:]]*cachyos'"

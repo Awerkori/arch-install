@@ -26,7 +26,8 @@ class TestUserConfigurationContract(unittest.TestCase):
         self.assertNotIn("grub", cfg["packages"])
         self.assertEqual(cfg["network_config"]["type"], "nm_iwd")
         self.assertEqual(cfg["locale_config"]["kb_layout"], "us-acentos")
-        self.assertEqual(cfg["locale_config"]["sys_lang"], "pt_BR.UTF-8")
+        self.assertEqual(cfg["locale_config"]["sys_lang"], "en_US.UTF-8")
+        self.assertEqual(cfg["timezone"], "America/Sao_Paulo")
         self.assertEqual(cfg["swap"]["enabled"], False)
         self.assertEqual(cfg["kernels"], ["linux-zen"])
 
@@ -37,6 +38,10 @@ class TestUserConfigurationContract(unittest.TestCase):
         self.assertEqual(parsed["layout"]["mode"], "dwindle")
         self.assertIn("dwindle", parsed["layout"])
         self.assertNotIn("scrolling", parsed["layout"])
+        self.assertEqual(parsed["environment"]["LANG"], "en_US.UTF-8")
+        self.assertEqual(parsed["environment"]["AMD_VULKAN_ICD"], "RADV")
+        self.assertTrue((REPO / "configs/sysctl/99-nox-performance.conf").is_file())
+        self.assertTrue((REPO / "configs/gamemode/gamemode.ini").is_file())
 
 
 class TestHostSafetyGuard(unittest.TestCase):

@@ -64,6 +64,9 @@ if (( SWAP_SIZE_G > 0 )); then
   if ! grep -qF '/nox-swap/swapfile ' /etc/fstab; then
     printf '/nox-swap/swapfile none swap defaults,pri=10 0 0\n' >> /etc/fstab
   fi
+
+  # Unmount temporary chroot mountpoint so post-command genfstab() will not emit duplicate /nox-swap lines
+  umount /nox-swap || true
 else
   nox_warn "Espaco insuficiente (${ROOT_AVAIL_GIB}G) para swapfile Btrfs; mantendo apenas ZRAM."
 fi

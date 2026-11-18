@@ -30,10 +30,13 @@ if pacman -Qq paru-git >/dev/null 2>&1; then
 fi
 paru --version
 
-# 2. Configure scx_loader for scx_lavd in Gaming mode
+# 2. Configure scx_loader (scx_lavd Gaming), gamemode, and complementary performance sysctl
 nox_atomic_install 0644 "${NOX_ROOT}/configs/scx_loader/config.toml" /etc/scx_loader/config.toml
+nox_atomic_install 0644 "${NOX_ROOT}/configs/gamemode/gamemode.ini" /etc/gamemode.ini
+nox_atomic_install 0644 "${NOX_ROOT}/configs/sysctl/99-nox-performance.conf" /etc/sysctl.d/99-nox-performance.conf
 
-# 3. Enable system services & timers (no --now in chroot)
+# 3. Enable system services & timers; disable unnecessary boot wait-online delay
+systemctl disable NetworkManager-wait-online.service >/dev/null 2>&1 || true
 for unit in \
   scx_loader.service \
   ananicy-cpp.service \

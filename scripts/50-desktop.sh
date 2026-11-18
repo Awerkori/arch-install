@@ -14,12 +14,20 @@ nox_wait_pacman_lock
 
 # Ensure forbidden environments are never requested
 PKGS=(
-  # Graphics & Mesa/RADV/XWayland
+  # Graphics & Mesa/RADV/Vulkan/VA-API (64 + 32-bit) & XWayland
   mesa
   lib32-mesa
   vulkan-radeon
   lib32-vulkan-radeon
-  libva-mesa-driver
+  vulkan-icd-loader
+  lib32-vulkan-icd-loader
+  vulkan-mesa-layers
+  lib32-vulkan-mesa-layers
+  libva
+  lib32-libva
+  vulkan-tools
+  libva-utils
+  mesa-utils
   xorg-xwayland
   # Umbriel + Portals + Polkit + DBus
   umbriel

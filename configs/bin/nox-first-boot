@@ -37,5 +37,38 @@ if command -v limine-snapper-sync >/dev/null 2>&1 && [[ -f /boot/limine.conf ]];
   limine-snapper-sync || true
 fi
 
+# 4. Optimize Btrfs mount options in /etc/fstab (add noatime cleanly; deduplicate /nox-swap)
+if [[ -f /etc/fstab ]]; then
+  python3 - /etc/fstab <<'PY'
+import os, sys
+p = sys.argv[1]
+lines = open(p, "r", encoding="utf-8").read().splitlines()
+out, seen_nox_swap = [], False
+for line in lines:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        out.append(line)
+        continue
+    parts = stripped.split()
+    if len(parts) >= 4 and parts[1] == "/nox-swap":
+        if seen_nox_swap:
+            continue
+        seen_nox_swap = True
+    if len(parts) >= 4 and parts[2] == "btrfs":
+        opts = [o for o in parts[3].split(",") if o]
+        if "noatime" not in opts and "atime" not in opts:
+            opts = [o for o in opts if o != "relatime"]
+            opts.append("noatime")
+        parts[3] = ",".join(opts)
+        out.append(" ".join(parts))
+    else:
+        out.append(line)
+tmp = p + ".nox.tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")
+os.replace(tmp, p)
+PY
+fi
+
 date -Iseconds > "$DONE_FILE"
 systemctl disable nox-first-boot.service >/dev/null 2>&1 || true

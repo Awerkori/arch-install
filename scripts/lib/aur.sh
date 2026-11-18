@@ -42,10 +42,26 @@ nox_aur_install_pkg() {
   nox_aur_setup_user
   rm -rf "$workdir"
   mkdir -p "$workdir"
-  chown "${NOX_AUR_USER}:${NOX_AUR_USER}" "$workdir"
+  cat > "${NOX_AUR_HOME}/.gitconfig" <<'EOF'
+[http]
+	version = HTTP/1.1
+	lowSpeedLimit = 1024
+	lowSpeedTime = 20
+EOF
+  chown -R "${NOX_AUR_USER}:${NOX_AUR_USER}" "$workdir" "${NOX_AUR_HOME}/.gitconfig"
 
   nox_info "Clonando AUR '$pkgname' como usuario nao-root '$NOX_AUR_USER'..."
-  su -s /usr/bin/bash "$NOX_AUR_USER" -c "git clone --depth 1 'https://aur.archlinux.org/${pkgname}.git' '${workdir}/src'"
+  local clone_ok=false attempt
+  for attempt in 1 2 3; do
+    rm -rf "${workdir}/src"
+    if su -s /usr/bin/bash "$NOX_AUR_USER" -c "git clone --depth 1 'https://aur.archlinux.org/${pkgname}.git' '${workdir}/src'"; then
+      clone_ok=true
+      break
+    fi
+    nox_warn "Tentativa ${attempt}/3 de clonar AUR '${pkgname}' falhou; aguardando 3s..."
+    sleep 3
+  done
+  $clone_ok || nox_die "Falha ao clonar repositorio AUR '${pkgname}' apos 3 tentativas."
 
   local pkgbuild="${workdir}/src/PKGBUILD"
   nox_aur_inspect_pkgbuild "$pkgbuild"
@@ -88,12 +104,22 @@ PY
   fi
 
   nox_info "Compilando '$pkgname' via makepkg sem root..."
-  su -s /usr/bin/bash "$NOX_AUR_USER" -c "
-    set -euo pipefail
-    export HOME='${NOX_AUR_HOME}'
-    cd '${workdir}/src'
-    makepkg --noconfirm --nodeps
-  "
+  local build_ok=false b_attempt
+  for b_attempt in 1 2 3; do
+    if su -s /usr/bin/bash "$NOX_AUR_USER" -c "
+      set -euo pipefail
+      export HOME='${NOX_AUR_HOME}'
+      export GIT_CONFIG_GLOBAL='${NOX_AUR_HOME}/.gitconfig'
+      cd '${workdir}/src'
+      makepkg --noconfirm --nodeps
+    "; then
+      build_ok=true
+      break
+    fi
+    nox_warn "Tentativa ${b_attempt}/3 de makepkg para '${pkgname}' falhou; aguardando 4s..."
+    sleep 4
+  done
+  $build_ok || nox_die "Falha em makepkg para '${pkgname}' apos 3 tentativas."
 
   local built_pkgs=()
   while IFS= read -r f; do

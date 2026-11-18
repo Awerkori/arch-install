@@ -116,7 +116,7 @@ ROOT_DEV="$(findmnt -no SOURCE / | sed 's/\[.*//')"
 ROOT_UUID="$(blkid -s UUID -o value "$ROOT_DEV" || true)"
 [[ -n "$ROOT_UUID" ]] || nox_die "Nao foi possivel obter UUID de '${ROOT_DEV}' para kernel cmdline do Limine."
 
-CMDLINE_STR="root=UUID=${ROOT_UUID} rw rootflags=subvol=/@ rootfstype=btrfs quiet loglevel=3 systemd.show_status=auto rd.udev.log_level=3 amd_pstate=active zswap.enabled=0"
+CMDLINE_STR="root=UUID=${ROOT_UUID} rw rootflags=subvol=/@ rootfstype=btrfs quiet loglevel=3 systemd.show_status=auto rd.udev.log_level=3 amd_pstate=active amd_iommu=on iommu=pt zswap.enabled=0 nowatchdog"
 install -d -m 0755 /etc/kernel /etc/default
 printf '%s\n' "$CMDLINE_STR" > /etc/kernel/cmdline
 
