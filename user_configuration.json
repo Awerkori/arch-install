@@ -1,5 +1,5 @@
 {
-  "archinstall-language": "English",
+  "archinstall_language": "English",
   "app_config": {
     "audio_config": {
       "audio": "pipewire"
@@ -16,7 +16,7 @@
     }
   },
   "bootloader_config": {
-    "bootloader": "Grub",
+    "bootloader": "Limine",
     "removable": false,
     "uki": false
   },
@@ -50,7 +50,6 @@
     "curl",
     "ethtool",
     "git",
-    "grub-btrfs",
     "inotify-tools",
     "iw",
     "jq",

@@ -55,7 +55,7 @@ EOF
 nox_atomic_install 0440 "${NOX_ROOT}/configs/sudoers/10-wheel" /etc/sudoers.d/10-wheel
 visudo -cf /etc/sudoers >/dev/null || nox_die "Falha na validacao visudo de /etc/sudoers!"
 visudo -cf /etc/sudoers.d/10-wheel >/dev/null || nox_die "Falha na validacao visudo de /etc/sudoers.d/10-wheel!"
-if grep -rn 'NOPASSWD' /etc/sudoers /etc/sudoers.d/ 2>/dev/null; then
+if grep -rnE '^[^#]*NOPASSWD' /etc/sudoers /etc/sudoers.d/ 2>/dev/null; then
   nox_die "Detectado NOPASSWD nao autorizado em configuracao sudoers!"
 fi
 

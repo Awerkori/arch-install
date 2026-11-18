@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# Stage 60: Btrfs Snapper (root only, max 2 PRE+POST), snap-pac, grub-btrfsd, immediate cleanup hook.
+# Stage 60: Btrfs Snapper (root only, max 2 PRE+POST), snap-pac, limine-snapper-sync, immediate cleanup hook.
 set -Eeuo pipefail
 source "${NOX_ROOT}/scripts/lib/common.sh"
 
 nox_assert_target_context
 if $NOX_DRY_RUN; then
-  nox_info "[DRY-RUN] 60-snapshots: configuraria Snapper root (max 2), snap-pac e grub-btrfsd."
+  nox_info "[DRY-RUN] 60-snapshots: configuraria Snapper root (max 2), snap-pac e limine-snapper-sync."
   exit 0
 fi
 
 nox_wait_pacman_lock
-pacman -S --needed --noconfirm snapper snap-pac grub-btrfs inotify-tools
+pacman -S --needed --noconfirm snapper snap-pac limine-snapper-sync inotify-tools xxhash
+
+BOOT_MP="/boot"
+if ! findmnt /boot >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
+  BOOT_MP="/efi"
+fi
 
 ROOT_FSTYPE="$(findmnt -no FSTYPE / || true)"
 [[ "$ROOT_FSTYPE" == "btrfs" ]] || nox_die "Sistema de arquivos raiz '/' nao e Btrfs (obtido: ${ROOT_FSTYPE})."
@@ -19,7 +24,6 @@ ROOT_FSTYPE="$(findmnt -no FSTYPE / || true)"
 if ! snapper --no-dbus -c root get-config >/dev/null 2>&1; then
   nox_info "Criando configuracao Snapper 'root'..."
   if [[ -d /.snapshots ]] && mountpoint -q /.snapshots; then
-    # Temporary unmount if /.snapshots subvolume was pre-created by archinstall without snapper config
     umount /.snapshots
     rmdir /.snapshots 2>/dev/null || true
     snapper --no-dbus -c root create-config /
@@ -49,7 +53,6 @@ if snapper --no-dbus -c home get-config >/dev/null 2>&1; then
     NUMBER_CLEANUP=yes \
     NUMBER_LIMIT=0 \
     NUMBER_LIMIT_IMPORTANT=0
-  # Delete any initial home snapshots created during base install
   home_ids="$(snapper --no-dbus --jsonout -c home list | python3 -c 'import sys,json; d=json.load(sys.stdin); entries=d.get("home", d) if isinstance(d,dict) else d; print(" ".join(str(e["number"]) for e in entries if int(e.get("number",0))!=0))' || true)"
   if [[ -n "$home_ids" ]]; then
     # shellcheck disable=SC2086
@@ -74,21 +77,18 @@ nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-snapper-cleanup" "${NOX_LIB
 nox_atomic_install 0644 "${NOX_ROOT}/configs/pacman-hooks/zz-99-nox-snapper-cleanup.hook" \
   /etc/pacman.d/hooks/zz-99-nox-snapper-cleanup.hook
 
-# 7. Configure grub-btrfsd service for /.snapshots
-mkdir -p /etc/systemd/system/grub-btrfsd.service.d
-cat > /etc/systemd/system/grub-btrfsd.service.d/override.conf <<'EOF'
-[Service]
-ExecStart=
-ExecStart=/usr/bin/grub-btrfsd --syslog /.snapshots
-EOF
-systemctl enable grub-btrfsd.service
+# 7. Enable limine-snapper-sync service (uses /etc/default/limine + 10-limine-snapper-sync snapper plugin)
+systemctl enable limine-snapper-sync.service
+
+# Ensure //Snapshots placeholder exists under OS block in limine.conf if not added yet
+if [[ -f "${BOOT_MP}/limine.conf" ]] && ! grep -qE '^[[:space:]]*/+Snapshots' "${BOOT_MP}/limine.conf"; then
+  printf '  //Snapshots\n' >> "${BOOT_MP}/limine.conf"
+fi
 
 # 8. Prune any excess initial snapshots left by base installation
 "${NOX_LIBEXEC_DIR}/nox-snapper-cleanup" || true
 
-# 9. Regenerate GRUB config to include grub-btrfs submenu support
-if [[ -f /boot/grub/grub.cfg ]]; then
-  grub-mkconfig -o /boot/grub/grub.cfg || true
-fi
+# 9. Sync Limine snapshot entries cleanly offline/target
+limine-snapper-sync || nox_warn "limine-snapper-sync retornou aviso na sincronizacao inicial (sem snapshots iniciais ainda)."
 
-nox_info "Politica Snapper root (max 2), snap-pac e grub-btrfsd configurados."
+nox_info "Politica Snapper root (max 2), snap-pac e limine-snapper-sync configurados."

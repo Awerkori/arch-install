@@ -39,10 +39,15 @@ fi
 export NOX_BOOT_MP="$BOOT_MP"
 
 ROOT_AVAIL_KB=$(df -Pk / | awk 'NR==2 {print $4}')
+BOOT_TOTAL_KB=$(df -Pk "$BOOT_MP" | awk 'NR==2 {print $2}')
 BOOT_AVAIL_KB=$(df -Pk "$BOOT_MP" | awk 'NR==2 {print $4}')
 (( ROOT_AVAIL_KB >= 8 * 1024 * 1024 )) || nox_die "Espaco livre insuficiente em '/' (${ROOT_AVAIL_KB} KiB; minimo 8 GiB)."
-(( BOOT_AVAIL_KB >= 250 * 1024 )) || nox_die "Espaco livre insuficiente em '${BOOT_MP}' (${BOOT_AVAIL_KB} KiB; minimo 250 MiB)."
-nox_info "Espaco livre OK: /=$((ROOT_AVAIL_KB/1024)) MiB, ${BOOT_MP}=$((BOOT_AVAIL_KB/1024)) MiB."
+(( BOOT_TOTAL_KB >= 1500 * 1024 )) || nox_die "Particao EFI '${BOOT_MP}' muito pequena para Limine+snapshots ($((BOOT_TOTAL_KB/1024)) MiB; minimo 2 GiB, recomendado 4 GiB)."
+(( BOOT_AVAIL_KB >= 500 * 1024 )) || nox_die "Espaco livre insuficiente em '${BOOT_MP}' (${BOOT_AVAIL_KB} KiB; minimo 500 MiB)."
+if (( BOOT_TOTAL_KB < 3800 * 1024 )); then
+  nox_warn "ESP '${BOOT_MP}' com $((BOOT_TOTAL_KB/1024)) MiB (abaixo dos 4 GiB recomendados para Limine + limine-snapper-sync)."
+fi
+nox_info "Espaco livre OK: /=$((ROOT_AVAIL_KB/1024)) MiB, ${BOOT_MP}=$((BOOT_AVAIL_KB/1024))/$((BOOT_TOTAL_KB/1024)) MiB."
 
 # 3. Verify pacman lock and HTTPS/DNS
 nox_wait_pacman_lock
