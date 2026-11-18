@@ -1,0 +1,22 @@
+# Ignore raw sources, VM images, ISO, private secrets, and local test outputs
+*.iso
+*.iso.sig
+*.qcow2
+*.img
+*.fd
+*.zip
+*.tar.gz
+*.tar.xz
+*.pkg.tar.zst
+private/
+sources/
+lab/
+evidence/raw/
+.env
+*.key
+*.pem
+*.log
+__pycache__/
+.pytest_cache/
+tests/vm/work/
+dist/

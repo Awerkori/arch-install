@@ -1,0 +1,43 @@
+[session]
+default = "Umbriel"
+
+[appearance]
+scheme = "Noctalia"
+password_style = "default"
+hide_logo = false
+power_buttons_position = "bottom-right"
+scheme_selector_position = "top-right"
+theme_mode = "dark"
+corner_radius_scale = 1.0
+
+[clock]
+enabled = true
+position = "above-panel"
+time_format = "{:%H:%M}"
+date_format = "%A, %x"
+time_font_size = 48
+date_font_size = 14
+
+[output]
+use_synced_settings = true
+
+[idle]
+timeout = 300
+
+[cursor]
+theme = "Adwaita"
+size = 24
+path = "/usr/share/icons"
+
+[pointer]
+accel_profile = "flat"
+
+[keyboard]
+layout = "us"
+variant = "intl"
+options = ""
+numlock = true
+
+[auth]
+allow_empty_password = false
+request_timeout = 60

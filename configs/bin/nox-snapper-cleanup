@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Keep only the latest valid snap-pac PRE+POST pair on Snapper root config."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+
+def parse_snapper_json(raw: str) -> list[dict[str, Any]]:
+    data = json.loads(raw)
+    if isinstance(data, dict) and "root" in data:
+        return list(data["root"])
+    if isinstance(data, list):
+        return list(data)
+    return []
+
+
+def compute_deletions(entries: list[dict[str, Any]]) -> tuple[list[int], str]:
+    managed: list[dict[str, Any]] = []
+    for e in entries:
+        num = int(e.get("number", 0))
+        if num == 0 or e.get("active") or e.get("default"):
+            continue
+        if e.get("cleanup") != "number":
+            continue
+        userdata = e.get("userdata") or {}
+        if userdata.get("important") == "yes":
+            continue
+        managed.append(e)
+
+    managed.sort(key=lambda x: int(x["number"]))
+    if len(managed) <= 2:
+        return [], "within-limit"
+
+    by_num = {int(e["number"]): e for e in managed}
+    # Find latest complete PRE+POST pair
+    latest_pair: tuple[int, int] | None = None
+    for e in reversed(managed):
+        if e.get("type") == "post":
+            pre_num = e.get("pre-number")
+            if pre_num is not None and int(pre_num) in by_num:
+                pre_entry = by_num[int(pre_num)]
+                if pre_entry.get("type") == "pre":
+                    latest_pair = (int(pre_num), int(e["number"]))
+                    break
+
+    if latest_pair is None:
+        return [], "no-complete-pair-abort-cleanup"
+
+    # Never prune if there is a newer unpaired PRE after latest_pair (failed/in-progress txn)
+    max_pair_num = max(latest_pair)
+    for e in managed:
+        if int(e["number"]) > max_pair_num and e.get("type") == "pre":
+            return [], "unpaired-newer-pre-preserved"
+
+    keep = set(latest_pair)
+    to_delete = [int(e["number"]) for e in managed if int(e["number"]) not in keep]
+    return to_delete, f"keep-pair:{latest_pair[0]}+{latest_pair[1]}"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input-json", type=Path, default=None)
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+
+    if args.input_json:
+        raw = args.input_json.read_text(encoding="utf-8")
+    else:
+        res = subprocess.run(
+            ["snapper", "--no-dbus", "--jsonout", "-c", "root", "list"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode != 0 or not res.stdout.strip():
+            return 0
+        raw = res.stdout
+
+    entries = parse_snapper_json(raw)
+    to_delete, reason = compute_deletions(entries)
+    if args.dry_run:
+        print(json.dumps({"delete": to_delete, "reason": reason}))
+        return 0
+
+    if not to_delete:
+        return 0
+
+    cmd = ["snapper", "--no-dbus", "-c", "root", "delete", "--sync", *(str(n) for n in to_delete)]
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if res.returncode != 0:
+        print(f"nox-snapper-cleanup warning: {res.stderr.strip()}", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

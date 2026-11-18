@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Runs once on real booted system (system context) for boot-time-only checks.
+set -Eeuo pipefail
+
+STATE_DIR="/var/lib/nox-archinstall"
+DONE_FILE="${STATE_DIR}/first-boot.done"
+mkdir -p "$STATE_DIR"
+
+if [[ -f "$DONE_FILE" ]]; then
+  exit 0
+fi
+
+# 1. Ensure sysctl settings (BBR/fq + cachyos-settings) are applied
+modprobe tcp_bbr >/dev/null 2>&1 || true
+sysctl --system >/dev/null 2>&1 || true
+
+# 2. Conditional Wi-Fi regulatory domain remediation (only if self-managed + country BR)
+if command -v iw >/dev/null 2>&1; then
+  REG_OUT="$(iw reg get 2>/dev/null || true)"
+  if printf '%s\n' "$REG_OUT" | grep -q '(self-managed)' && \
+     printf '%s\n' "$REG_OUT" | grep -q 'country BR:'; then
+    if systemctl is-failed --quiet cachyos-iw-set-regdomain.service 2>/dev/null || \
+       systemctl list-unit-files cachyos-iw-set-regdomain.service >/dev/null 2>&1; then
+      systemctl mask cachyos-iw-set-regdomain.service >/dev/null 2>&1 || true
+      systemctl mask cachyos-iw-set-regdomain.path >/dev/null 2>&1 || true
+      systemctl reset-failed cachyos-iw-set-regdomain.service >/dev/null 2>&1 || true
+      echo "Masked redundant cachyos-iw-set-regdomain (self-managed PHY with country BR)."
+    fi
+  fi
+fi
+
+# 3. Verify GRUB configuration on booted target if grub-mkconfig hasn't seen live mounts
+if [[ -f /boot/grub/grub.cfg ]] && command -v grub-mkconfig >/dev/null 2>&1; then
+  if ! grep -q 'vmlinuz-linux-cachyos' /boot/grub/grub.cfg; then
+    grub-mkconfig -o /boot/grub/grub.cfg || true
+  fi
+fi
+
+date -Iseconds > "$DONE_FILE"
+systemctl disable nox-first-boot.service >/dev/null 2>&1 || true

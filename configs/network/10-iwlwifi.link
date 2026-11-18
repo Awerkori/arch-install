@@ -1,0 +1,7 @@
+[Match]
+Driver=iwlwifi
+
+[Link]
+TCPSegmentationOffload=false
+GenericSegmentationOffload=true
+GenericReceiveOffload=true

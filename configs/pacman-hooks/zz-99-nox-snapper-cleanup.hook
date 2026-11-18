@@ -1,0 +1,11 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Manter somente o par PRE+POST mais recente de snapshots root (Nox policy)...
+When = PostTransaction
+Exec = /usr/local/libexec/nox/nox-snapper-cleanup

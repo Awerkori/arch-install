@@ -1,0 +1,11 @@
+[Unit]
+Description=Nox Desktop Session Initialization (Display Profile, Dark Mode, XDG, Audio)
+After=umbriel-session.target pipewire.service wireplumber.service
+Wants=pipewire.service wireplumber.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/nox/nox-session-init
+
+[Install]
+WantedBy=umbriel-session.target

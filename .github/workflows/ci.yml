@@ -1,0 +1,39 @@
+name: Nox Archinstall CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck and shfmt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck shfmt jq
+
+      - name: Bash syntax and ShellCheck
+        run: |
+          mapfile -t sh_files < <(find . -maxdepth 4 -type f -name '*.sh' -o -path './configs/bin/nox-fuxi-h3-fix' -o -path './configs/bin/nox-first-boot' -o -path './configs/bin/nox-session-init' | sort)
+          for f in "${sh_files[@]}"; do
+            bash -n "$f"
+          done
+          shellcheck -x -P . "${sh_files[@]}"
+
+      - name: Run unit and contract tests
+        run: |
+          python3 -m unittest discover -s tests/unit -p 'test_*.py' -v
+
+      - name: Secret and private data scan
+        run: |
+          ! grep -rnE 'ghp_|gho_|github_pat_|BEGIN (OPENSSH|RSA|EC) PRIVATE KEY|20:35:43:1E:44:2D' \
+            --exclude-dir=.git --exclude-dir=dist --exclude-dir=reports .

@@ -1,0 +1,81 @@
+{
+  "archinstall-language": "English",
+  "app_config": {
+    "audio_config": {
+      "audio": "pipewire"
+    },
+    "bluetooth_config": {
+      "enabled": true
+    },
+    "fonts_config": {
+      "fonts": [
+        "noto-fonts",
+        "noto-fonts-emoji",
+        "noto-fonts-cjk"
+      ]
+    }
+  },
+  "bootloader_config": {
+    "bootloader": "Grub",
+    "removable": false,
+    "uki": false
+  },
+  "custom_commands": [
+    "echo 'Configure release URL via scripts/build-release.sh before publishing' && exit 1"
+  ],
+  "hostname": "Nox-Device-PC",
+  "kernels": [
+    "linux-zen"
+  ],
+  "locale_config": {
+    "console_font": "default8x16",
+    "kb_layout": "us-acentos",
+    "sys_enc": "UTF-8",
+    "sys_lang": "pt_BR.UTF-8"
+  },
+  "mirror_config": {
+    "optional_repositories": [
+      "multilib"
+    ]
+  },
+  "network_config": {
+    "type": "nm_iwd"
+  },
+  "ntp": true,
+  "packages": [
+    "amd-ucode",
+    "base-devel",
+    "bash-completion",
+    "btrfs-progs",
+    "curl",
+    "ethtool",
+    "git",
+    "grub-btrfs",
+    "inotify-tools",
+    "iw",
+    "jq",
+    "linux-firmware",
+    "python",
+    "snap-pac",
+    "snapper",
+    "sudo",
+    "xdg-user-dirs",
+    "xdg-utils"
+  ],
+  "pacman_config": {
+    "color": true,
+    "parallel_downloads": 5
+  },
+  "profile_config": {
+    "profile": {
+      "custom_settings": {},
+      "details": [],
+      "main": "Minimal"
+    }
+  },
+  "swap": {
+    "algorithm": "zstd",
+    "enabled": false
+  },
+  "timezone": "America/Sao_Paulo"
+}

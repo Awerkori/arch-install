@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Dynamic HAVIT Fuxi H3 PipeWire/ALSA mixer remediation (idempotent, hardware-safe).
+set -Eeuo pipefail
+
+PACTL_CARDS_FILE=""
+AMIXER_CONTENTS_FILE=""
+ALSA_CARDS_FILE="/proc/asound/cards"
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pactl-cards) PACTL_CARDS_FILE="$2"; shift 2 ;;
+    --amixer-contents) AMIXER_CONTENTS_FILE="$2"; shift 2 ;;
+    --alsa-cards) ALSA_CARDS_FILE="$2"; shift 2 ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+wait_for_pipewire() {
+  local tries=0
+  while (( tries < 20 )); do
+    if pactl info >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+    ((tries++))
+  done
+  return 1
+}
+
+if [[ -z "$PACTL_CARDS_FILE" ]]; then
+  if ! wait_for_pipewire; then
+    echo "SKIP-HARDWARE: PipeWire nao disponivel nesta sessao."
+    exit 0
+  fi
+  CARDS_OUTPUT="$(pactl list cards 2>/dev/null || true)"
+else
+  CARDS_OUTPUT="$(cat "$PACTL_CARDS_FILE")"
+fi
+
+CARD_NAME="$(printf '%s\n' "$CARDS_OUTPUT" | awk '
+  /^[[:space:]]*Name:[[:space:]]*alsa_card\./ && tolower($0) ~ /fuxi[-_]?h3|xiisound/ {
+    sub(/^[[:space:]]*Name:[[:space:]]*/, "", $0)
+    print $0
+    exit
+  }
+')"
+
+if [[ -z "$CARD_NAME" ]]; then
+  echo "SKIP-HARDWARE: Headset Fuxi H3 nao conectado."
+  exit 0
+fi
+
+# Verify announced profile before applying (prefer digital iec958, fallback analog)
+PROFILE_BLOCK="$(printf '%s\n' "$CARDS_OUTPUT" | awk -v target="$CARD_NAME" '
+  $0 ~ "Name: " target "$" { in_card = 1; next }
+  in_card && /^Card #[0-9]+/ { exit }
+  in_card { print }
+')"
+
+CHOSEN_PROFILE=""
+for cand in "output:iec958-stereo+input:mono-fallback" "output:analog-stereo+input:mono-fallback"; do
+  if printf '%s\n' "$PROFILE_BLOCK" | grep -qF "$cand:"; then
+    CHOSEN_PROFILE="$cand"
+    break
+  fi
+done
+
+if [[ -z "$CHOSEN_PROFILE" ]]; then
+  echo "WARN: Nenhum perfil esperado encontrado para $CARD_NAME." >&2
+  exit 0
+fi
+
+ACTIVE_PROFILE="$(printf '%s\n' "$PROFILE_BLOCK" | sed -n 's/^[[:space:]]*Active Profile:[[:space:]]*//p' | head -n1)"
+
+# Detect ALSA card ID (FuxiH3 or matching USB audio card)
+ALSA_ID=""
+if [[ -r "$ALSA_CARDS_FILE" ]]; then
+  ALSA_ID="$(sed -n 's/^[[:space:]]*[0-9]\+[[:space:]]*\[\([^][:space:]]\+\).*/\1/p' "$ALSA_CARDS_FILE" | grep -iE 'Fuxi|XiiSound' | head -n1 || true)"
+fi
+ALSA_ID="${ALSA_ID:-FuxiH3}"
+
+if [[ -z "$AMIXER_CONTENTS_FILE" ]]; then
+  AMIXER_OUT="$(amixer -c "$ALSA_ID" contents 2>/dev/null || true)"
+else
+  AMIXER_OUT="$(cat "$AMIXER_CONTENTS_FILE")"
+fi
+
+NUMID="$(printf '%s\n' "$AMIXER_OUT" | awk "
+  /name='PCM Playback Volume',index=1/ {
+    if (match(\$0, /numid=[0-9]+/)) {
+      val = substr(\$0, RSTART + 6, RLENGTH - 6)
+      print val
+      exit
+    }
+  }
+")"
+
+if $DRY_RUN; then
+  echo "CARD_NAME=$CARD_NAME"
+  echo "ACTIVE_PROFILE=$ACTIVE_PROFILE"
+  echo "CHOSEN_PROFILE=$CHOSEN_PROFILE"
+  echo "ALSA_ID=$ALSA_ID"
+  echo "NUMID=${NUMID:-none}"
+  exit 0
+fi
+
+if [[ "$ACTIVE_PROFILE" != "$CHOSEN_PROFILE" ]]; then
+  pactl set-card-profile "$CARD_NAME" "$CHOSEN_PROFILE"
+fi
+
+# Unmute Fuxi PCM hardware channel without clobbering @DEFAULT_SINK@ to 100%
+amixer -c "$ALSA_ID" sset 'PCM' unmute >/dev/null 2>&1 || true
+
+if [[ -n "$NUMID" && "$NUMID" =~ ^[0-9]+$ ]]; then
+  amixer -c "$ALSA_ID" cset "numid=${NUMID}" 100 >/dev/null 2>&1 || true
+fi
+
+echo "OK: Fuxi H3 ($CARD_NAME, perfil=$CHOSEN_PROFILE, numid=${NUMID:-none}) verificado."
