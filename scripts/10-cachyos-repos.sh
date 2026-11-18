@@ -124,6 +124,7 @@ fi
 
 nox_info "Executando atualizacao coerente completa (pacman -Syyu)..."
 pacman -Syyu --noconfirm
+pacman -S --noconfirm cachyos/pacman >/dev/null 2>&1 || true
 
 # Verify pacman fork provenance
 pacman -Qi pacman | grep -E 'Version|Installed From|Architecture'
