@@ -1,0 +1,7 @@
+[Unit]
+Description=Re-apply HAVIT Fuxi H3 PipeWire/ALSA mixer fix on hotplug
+After=pipewire.service wireplumber.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/nox/nox-fuxi-h3-fix

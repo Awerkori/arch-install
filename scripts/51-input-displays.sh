@@ -15,19 +15,22 @@ nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-first-boot" "${NOX_LIBEXEC_
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-session-init" "${NOX_LIBEXEC_DIR}/nox-session-init"
 ln -sf "${NOX_LIBEXEC_DIR}/nox-display-profile" /usr/local/bin/nox-display-profile
 
-# 2. System locale = en_US.UTF-8, Timezone = America/Sao_Paulo, Keyboard = us/intl + Cedilla (.XCompose)
+# 2. System locale = en_CA.UTF-8 (with en_US.UTF-8 fallback), Timezone = America/Sao_Paulo, Keyboard = us/intl + Cedilla (.XCompose)
 if [[ -f /etc/locale.gen ]]; then
-  sed -i 's/^#[[:space:]]*\(en_US\.UTF-8 UTF-8\)/\1/' /etc/locale.gen
-  if ! grep -Eq '^[[:space:]]*en_US\.UTF-8[[:space:]]+UTF-8' /etc/locale.gen; then
-    printf 'en_US.UTF-8 UTF-8\n' >> /etc/locale.gen
-  fi
+  for loc in "en_CA.UTF-8 UTF-8" "en_US.UTF-8 UTF-8"; do
+    sed -i "s/^#[[:space:]]*\(${loc//./\\.}\)/\1/" /etc/locale.gen
+    if ! grep -Eq "^[[:space:]]*${loc//./\\.}" /etc/locale.gen; then
+      printf '%s\n' "$loc" >> /etc/locale.gen
+    fi
+  done
 fi
-if ! locale -a 2>/dev/null | grep -qiE '^en_US\.utf-?8$'; then
+if ! locale -a 2>/dev/null | grep -qiE '^en_CA\.utf-?8$' || ! locale -a 2>/dev/null | grep -qiE '^en_US\.utf-?8$'; then
   locale-gen
 fi
 cat > /etc/locale.conf <<'EOF'
-LANG=en_US.UTF-8
-LC_MESSAGES=en_US.UTF-8
+LANG=en_CA.UTF-8
+LC_MESSAGES=en_CA.UTF-8
+LANGUAGE=en_CA:en_US:en
 EOF
 chmod 0644 /etc/locale.conf
 
@@ -41,8 +44,9 @@ python3 - /etc/environment <<'PY'
 import os, re, sys
 p = sys.argv[1]
 desired = {
-    "LANG": "en_US.UTF-8",
-    "LC_MESSAGES": "en_US.UTF-8",
+    "LANG": "en_CA.UTF-8",
+    "LC_MESSAGES": "en_CA.UTF-8",
+    "LANGUAGE": "en_CA:en_US:en",
     "QT_QPA_PLATFORMTHEME": "qt5ct:qt6ct",
     "AMD_VULKAN_ICD": "RADV",
     "MESA_SHADER_CACHE_MAX_SIZE": "12G",

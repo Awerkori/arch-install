@@ -38,11 +38,12 @@ check "limine.conf contem linux-cachyos sem linux-zen e sem arch-limine" bash -c
 check "hook btrfs-overlayfs presente em /etc/mkinitcpio.conf" bash -c "grep -Eq '^HOOKS=.*(btrfs-overlayfs|sd-btrfs-overlayfs)' /etc/mkinitcpio.conf"
 check "cadeia criptografica Limine + sbctl validada (nox-secureboot-verify)" /usr/local/bin/nox-secureboot-verify
 
-# 1b. System language (en_US.UTF-8), timezone (America/Sao_Paulo), keyboard + cedilla, performance configs
-check "idioma padrao en_US.UTF-8 configurado e gerado" bash -c "grep -qx 'LANG=en_US.UTF-8' /etc/locale.conf && locale -a | grep -qiE '^en_US\.utf-?8\$'"
+# 1b. System language (en_CA.UTF-8 + en_US fallback), timezone (America/Sao_Paulo), keyboard + cedilla, performance configs
+check "idioma padrao en_CA.UTF-8 com fallback en_US configurado e gerado" bash -c "grep -qx 'LANG=en_CA.UTF-8' /etc/locale.conf && grep -qx 'LANGUAGE=en_CA:en_US:en' /etc/locale.conf && locale -a | grep -qiE '^en_CA\.utf-?8\$' && locale -a | grep -qiE '^en_US\.utf-?8\$'"
 check "fuso horario America/Sao_Paulo configurado" bash -c "readlink -f /etc/localtime | grep -q 'America/Sao_Paulo\$'"
 check "teclado us/intl e cedilha (.XCompose) configurados" bash -c "grep -qx 'KEYMAP=us-acentos' /etc/vconsole.conf && grep -q 'ccedilla' /etc/skel/.XCompose"
-check "sysctl de performance e gamemode.ini presentes" bash -c "test -s /etc/sysctl.d/99-nox-performance.conf && test -s /etc/gamemode.ini"
+check "sysctl de performance e gamemode.ini presentes" bash -c "test -s /etc/sysctl.d/99-nox-performance.conf && test -s /etc/gamemode.ini && test -s /etc/modprobe.d/iwlwifi-ax210.conf"
+check "regras Fuxi H3 hotplug e BlueZ/WirePlumber presentes" bash -c "test -s /etc/udev/rules.d/85-nox-fuxi-h3.rules && test -s /etc/xdg/wireplumber/wireplumber.conf.d/52-fuxi-h3-profile.conf && test -s /etc/systemd/user/nox-fuxi-h3.path"
 check "mesa e vulkan-radeon 64/32 bits instalados" bash -c "pacman -Q mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon >/dev/null"
 
 # 2. Pacman & Paru from CachyOS

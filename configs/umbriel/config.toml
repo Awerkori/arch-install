@@ -1,4 +1,4 @@
-# Nox Archinstall — Umbriel Configuration
+# Nox Archinstall — Umbriel Configuration (Hyprland + Ambxst Keybind Parity + Dwindle)
 
 [include.optional]
 files = ["outputs.toml", "outputs.local.toml"]
@@ -14,8 +14,9 @@ focus_on_activate = false
 honor_restored_maximize = false
 
 [environment]
-LANG = "en_US.UTF-8"
-LC_MESSAGES = "en_US.UTF-8"
+LANG = "en_CA.UTF-8"
+LC_MESSAGES = "en_CA.UTF-8"
+LANGUAGE = "en_CA:en_US:en"
 QT_QPA_PLATFORMTHEME = "qt5ct:qt6ct"
 ELECTRON_OZONE_PLATFORM_HINT = "auto"
 AMD_VULKAN_ICD = "RADV"
@@ -50,6 +51,7 @@ offset_y = 2
 
 [input]
 middle_click_paste = true
+client_window_drag = true
 window_drag_toggle = "none"
 
 [input.keyboard]
@@ -73,54 +75,87 @@ follows_focus = false
 hide_when_typing = false
 
 [input.focus]
-follows_mouse = false
+follows_mouse = "sloppy"
 
 [layout]
 mode = "dwindle"
 gap = 0
-width_presets = [0.333, 0.5, 0.667]
+extent_presets = [0.333, 0.5, 0.667]
 
 [layout.dwindle]
 preserve_split = false
 new_toward_cursor = false
 
+# Defining [keybinds] replaces Umbriel's built-in bind set completely.
+# Matches active Hyprland + Ambxst keybinds (precedence preserved; no invented binds).
+# Built-in Super+MouseLeft drag (move) and Super+MouseRight drag (resize) remain active.
 [keybinds]
-# Applications & Desktop
+# Core apps & session
+"Mod+Q" = { action = "spawn kitty", repeat = false }
+"Mod+E" = { action = "spawn luciole", repeat = false }
+"Ctrl+E" = { action = "spawn luciole", repeat = false }
 "Mod" = "spawn noctalia msg panel-toggle launcher"
-"Mod+D" = { action = "spawn noctalia msg panel-toggle launcher", repeat = false }
-"Mod+Return" = { action = "spawn kitty", repeat = false }
-"Super+E" = { action = "spawn luciole", repeat = false }
-"Mod+S" = { action = "spawn noctalia msg panel-toggle control-center", repeat = false }
-"Mod+Comma" = { action = "spawn noctalia msg settings-toggle", repeat = false }
+"Mod+R" = { action = "spawn noctalia msg panel-toggle launcher", repeat = false }
+"Mod+M" = { action = "session-quit", repeat = false }
 "Mod+Escape" = { action = "spawn noctalia msg panel-toggle session", repeat = false }
-"Alt+Tab" = "spawn noctalia msg window-switcher hold"
-"Alt+Shift+Tab" = "spawn noctalia msg window-switcher hold reverse"
+"Mod+L" = { action = "spawn noctalia msg session lock", repeat = false }
 
-# Window management
-"Mod+Q" = { action = "window-close", repeat = false }
+# Noctalia panels & tools (Ambxst replacements)
+"Mod+D" = { action = "spawn noctalia msg panel-toggle control-center", repeat = false }
+"Mod+V" = { action = "spawn noctalia msg panel-toggle clipboard", repeat = false }
+"Mod+Period" = { action = "spawn noctalia msg panel-toggle launcher /emo", repeat = false }
+"Mod+Comma" = { action = "spawn noctalia msg panel-toggle wallpaper", repeat = false }
+"Mod+Tab" = { action = "overview-toggle", repeat = false }
+"Mod+Shift+C" = { action = "spawn noctalia msg settings-toggle", repeat = false }
+"Mod+Shift+S" = { action = "spawn noctalia msg screenshot-region", repeat = false }
+"Mod+Shift+A" = { action = "spawn noctalia msg screenshot-annotate", repeat = false }
+"Mod+Shift+B" = { action = "spawn noctalia msg bar-toggle", repeat = false }
+"Mod+Alt+B" = { action = "spawn sh -c 'umbriel msg config-reload && noctalia msg config-reload'", repeat = false }
+
+# Window actions & Dwindle
+"Mod+C" = { action = "window-close", repeat = false }
+"Mod+Space" = { action = "window-toggle-floating", repeat = false }
 "Mod+F" = { action = "window-toggle-fullscreen", repeat = false }
-"Mod+T" = { action = "window-toggle-floating", repeat = false }
-"Mod+P" = { action = "window-toggle-pinned", repeat = false }
-"Mod+M" = { action = "window-toggle-maximize-to-edges", repeat = false }
-"Mod+O" = { action = "overview-toggle", repeat = false }
+"Mod+Shift+F" = { action = "window-toggle-maximize-to-edges", repeat = false }
+"Mod+Ctrl+F" = { action = "window-toggle-maximize", repeat = false }
+"Mod+J" = { action = "layout-toggle-split", repeat = false }
+"Mod+Ctrl+Space" = { action = "window-center", repeat = false }
+"Mod+Shift+V" = { action = "scratchpad-toggle", repeat = false }
+"Mod+Alt+V" = { action = "window-move-to-scratchpad", repeat = false }
 
-# Focus navigation
+# Focus navigation (Arrows + Super+Ctrl Vim/ZX aliases)
 "Mod+Left" = "window-focus-left"
-"Mod+Down" = "window-focus-down"
-"Mod+Up" = "window-focus-up"
 "Mod+Right" = "window-focus-right"
-"Mod+H" = "window-focus-left"
-"Mod+J" = "window-focus-down"
-"Mod+K" = "window-focus-up"
-"Mod+L" = "window-focus-right"
+"Mod+Up" = "window-focus-up"
+"Mod+Down" = "window-focus-down"
+"Mod+Ctrl+H" = "window-focus-left"
+"Mod+Ctrl+Z" = "window-focus-left"
+"Mod+Ctrl+L" = "window-focus-right"
+"Mod+Ctrl+X" = "window-focus-right"
+"Mod+Ctrl+K" = "window-focus-up"
+"Mod+Ctrl+J" = "window-focus-down"
 
-# Move columns / windows
-"Mod+Shift+Left" = "column-move-left"
-"Mod+Shift+Right" = "column-move-right"
+# Move windows in Dwindle (Super+Shift+Arrows + Vim aliases)
+"Mod+Shift+Left" = "window-move-left"
+"Mod+Shift+H" = "window-move-left"
+"Mod+Shift+Right" = "window-move-right"
+"Mod+Shift+L" = "window-move-right"
 "Mod+Shift+Up" = "window-move-up"
+"Mod+Shift+K" = "window-move-up"
 "Mod+Shift+Down" = "window-move-down"
+"Mod+Shift+J" = "window-move-down"
 
-# Workspaces (1..10)
+# Resize windows (Super+Alt+Arrows + Vim aliases)
+"Mod+Alt+Right" = "window-modify-primary-extent +0.05"
+"Mod+Alt+L" = "window-modify-primary-extent +0.05"
+"Mod+Alt+Left" = "window-modify-primary-extent -0.05"
+"Mod+Alt+H" = "window-modify-primary-extent -0.05"
+"Mod+Alt+Down" = "window-modify-secondary-extent +0.05"
+"Mod+Alt+J" = "window-modify-secondary-extent +0.05"
+"Mod+Alt+Up" = "window-modify-secondary-extent -0.05"
+"Mod+Alt+K" = "window-modify-secondary-extent -0.05"
+
+# Workspaces 1..10 (switch & move)
 "Mod+1" = "workspace-switch 1"
 "Mod+2" = "workspace-switch 2"
 "Mod+3" = "workspace-switch 3"
@@ -141,40 +176,51 @@ new_toward_cursor = false
 "Mod+Shift+8" = "window-move-to-workspace 8"
 "Mod+Shift+9" = "window-move-to-workspace 9"
 "Mod+Shift+0" = "window-move-to-workspace 10"
+"Mod+Alt+1" = "window-move-to-workspace 1"
+"Mod+Alt+2" = "window-move-to-workspace 2"
+"Mod+Alt+3" = "window-move-to-workspace 3"
+"Mod+Alt+4" = "window-move-to-workspace 4"
+"Mod+Alt+5" = "window-move-to-workspace 5"
+"Mod+Alt+6" = "window-move-to-workspace 6"
+"Mod+Alt+7" = "window-move-to-workspace 7"
+"Mod+Alt+8" = "window-move-to-workspace 8"
+"Mod+Alt+9" = "window-move-to-workspace 9"
+"Mod+Alt+0" = "window-move-to-workspace 10"
 
-# Sizing, Dwindle split & Scratchpad
-"Mod+V" = { action = "layout-toggle-split", repeat = false }
-"Mod+R" = "window-cycle-primary-extent"
-"Mod+Shift+R" = "window-cycle-primary-extent-back"
-"Mod+Minus" = "window-modify-primary-extent -0.05"
-"Mod+Equal" = "window-modify-primary-extent +0.05"
-"Mod+Shift+Space" = "window-move-to-scratchpad"
-"Mod+Space" = "scratchpad-toggle"
+# Workspace stepping & scroll (Ambxst precedence: WheelDown=prev, WheelUp=next)
+"Mod+Z" = "workspace-previous"
+"Mod+Shift+Z" = "workspace-previous"
+"Mod+X" = "workspace-next"
+"Mod+Shift+X" = "workspace-next"
+"Mod+WheelDown" = { action = "workspace-previous", cooldown_ms = 120 }
+"Mod+WheelUp" = { action = "workspace-next", cooldown_ms = 120 }
 
-# Media & Brightness
-"XF86AudioRaiseVolume" = { action = "spawn noctalia msg volume-up", allow_when_locked = true }
-"XF86AudioLowerVolume" = { action = "spawn noctalia msg volume-down", allow_when_locked = true }
+# Media, volume, mic mute & brightness (Noctalia OSD + allow_when_locked)
+"XF86AudioRaiseVolume" = { action = "spawn noctalia msg volume-up 10", allow_when_locked = true }
+"XF86AudioLowerVolume" = { action = "spawn noctalia msg volume-down 10", allow_when_locked = true }
 "XF86AudioMute" = { action = "spawn noctalia msg volume-mute", allow_when_locked = true, repeat = false }
+"XF86AudioMicMute" = { action = "spawn noctalia msg mic-mute", allow_when_locked = true, repeat = false }
 "XF86AudioPlay" = { action = "spawn noctalia msg media toggle", allow_when_locked = true, repeat = false }
+"XF86AudioPause" = { action = "spawn noctalia msg media toggle", allow_when_locked = true, repeat = false }
+"XF86AudioStop" = { action = "spawn noctalia msg media stop", allow_when_locked = true, repeat = false }
 "XF86AudioNext" = { action = "spawn noctalia msg media next", allow_when_locked = true }
 "XF86AudioPrev" = { action = "spawn noctalia msg media previous", allow_when_locked = true }
-"XF86MonBrightnessUp" = { action = "spawn noctalia msg brightness-up", allow_when_locked = true }
-"XF86MonBrightnessDown" = { action = "spawn noctalia msg brightness-down", allow_when_locked = true }
+"XF86MonBrightnessUp" = { action = "spawn noctalia msg brightness-up 5", allow_when_locked = true }
+"XF86MonBrightnessDown" = { action = "spawn noctalia msg brightness-down 5", allow_when_locked = true }
 
 # Window rules
 [[window_rule]]
 blur = true
-blur_optimized = true
 
 [[window_rule]]
 match.app_id = "^dev.noctalia.Noctalia$"
 default_floating = true
-default_size = [1020, 900]
+default_floating_size_px = { width = 1020, height = 900 }
 
 [[window_rule]]
 match.app_id = "^dev.noctalia.UmbrielSharePicker$"
 default_floating = true
-default_size = [800, 600]
+default_floating_size_px = { width = 800, height = 600 }
 
 # Layer rules
 [[layer_rule]]
@@ -182,8 +228,3 @@ match.namespace = "^noctalia-(bar-[^\"]+|notification|dock|panel|attached-panel|
 blur = true
 blur_ignore_alpha = 0.6
 blur_optimized = false
-
-[animation]
-enabled = true
-duration_ms = 200
-curve = "easeout"

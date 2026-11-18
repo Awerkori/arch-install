@@ -18,8 +18,10 @@ systemctl enable NetworkManager.service
 systemctl disable iwd.service >/dev/null 2>&1 || true
 
 nox_atomic_install 0644 "${NOX_ROOT}/configs/network/wifi_backend.conf" /etc/NetworkManager/conf.d/wifi_backend.conf
+nox_atomic_install 0644 "${NOX_ROOT}/configs/network/wifi-powersave-off.conf" /etc/NetworkManager/conf.d/wifi-powersave-off.conf
 nox_atomic_install 0644 "${NOX_ROOT}/configs/network/iwd-main.conf" /etc/iwd/main.conf
 nox_atomic_install 0644 "${NOX_ROOT}/configs/network/10-iwlwifi.link" /etc/systemd/network/10-iwlwifi.link
+nox_atomic_install 0644 "${NOX_ROOT}/configs/network/iwlwifi-ax210.conf" /etc/modprobe.d/iwlwifi-ax210.conf
 nox_atomic_install 0644 "${NOX_ROOT}/configs/sysctl/99-bbr.conf" /etc/sysctl.d/99-bbr.conf
 nox_atomic_install 0644 "${NOX_ROOT}/configs/sysctl/modules-bbr.conf" /etc/modules-load.d/bbr.conf
 

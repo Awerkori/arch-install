@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch Fuxi H3 USB hotplug trigger
+
+[Path]
+PathChanged=/run/nox-fuxi-h3-trigger
+
+[Install]
+WantedBy=umbriel-session.target
