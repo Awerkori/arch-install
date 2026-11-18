@@ -49,9 +49,10 @@ if (( BOOT_TOTAL_KB < 3800 * 1024 )); then
 fi
 nox_info "Espaco livre OK: /=$((ROOT_AVAIL_KB/1024)) MiB, ${BOOT_MP}=$((BOOT_AVAIL_KB/1024))/$((BOOT_TOTAL_KB/1024)) MiB."
 
-# 3. Verify pacman lock and HTTPS/DNS
+# 3. Verify pacman lock and HTTPS/DNS (dual-stack with IPv4 fallback)
 nox_wait_pacman_lock
-curl --proto '=https' --tlsv1.2 -fsSI --retry 3 --max-time 15 "https://mirror.cachyos.org/repo/x86_64/cachyos/" >/dev/null \
+curl --proto '=https' --tlsv1.2 -fsSI --connect-timeout 8 --retry 3 --max-time 20 "https://mirror.cachyos.org/repo/x86_64/cachyos/" >/dev/null \
+  || curl -4 --proto '=https' --tlsv1.2 -fsSI --connect-timeout 8 --retry 3 --max-time 20 "https://mirror.cachyos.org/repo/x86_64/cachyos/" >/dev/null \
   || nox_die "Sem conectividade HTTPS/DNS para mirror.cachyos.org."
 
 # 4. Install hardware profile metadata

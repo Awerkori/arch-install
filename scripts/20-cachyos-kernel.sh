@@ -20,7 +20,7 @@ fi
 nox_info "Instalando linux-cachyos, headers, limine e limine-mkinitcpio-hook..."
 pacman -S --needed --noconfirm \
   linux-cachyos linux-cachyos-headers amd-ucode linux-firmware \
-  limine efibootmgr limine-mkinitcpio-hook xxhash
+  limine efibootmgr limine-mkinitcpio-hook sbctl xxhash
 
 # Remove GRUB packages explicitly if somehow present
 for gpkg in grub grub-btrfs os-prober; do
@@ -127,6 +127,7 @@ FIND_BOOTLOADERS=no
 BOOT_ORDER="*, *fallback, Snapshots"
 ENABLE_SORT=no
 ENABLE_VERIFICATION=yes
+ENABLE_ENROLL_LIMINE_CONFIG=yes
 SPACE_NUMBER=2
 KERNEL_CMDLINE[default]=${CMDLINE_STR}
 
@@ -139,6 +140,19 @@ SNAPSHOT_FORMAT_CHOICE=2
 HASH_FUNCTION=xxhash
 EOF
 chmod 0644 /etc/default/limine
+
+# 4b. Generate unique per-installation Secure Boot keys (never shipped in repo) & install boot/enroll hooks
+if ! sbctl setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
+  nox_info "Gerando chaves privadas individuais de Secure Boot (sbctl create-keys)..."
+  sbctl create-keys
+fi
+
+install -d -m 0755 /etc/boot/hooks/pre.d /etc/boot/hooks/post.d
+[[ -e /etc/boot/hooks/pre.d/10-limine-reset-enroll ]] || ln -sf /usr/bin/limine-reset-enroll /etc/boot/hooks/pre.d/10-limine-reset-enroll
+[[ -e /etc/boot/hooks/post.d/90-limine-enroll-config ]] || ln -sf /usr/bin/limine-enroll-config /etc/boot/hooks/post.d/90-limine-enroll-config
+nox_atomic_install 0755 "${NOX_ROOT}/configs/boot-hooks/95-nox-sbctl-fallback" /etc/boot/hooks/post.d/95-nox-sbctl-fallback
+nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-secureboot-enroll" /usr/local/bin/nox-secureboot-enroll
+nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-secureboot-verify" /usr/local/bin/nox-secureboot-verify
 
 # Ensure /boot/limine.conf starts clean with 5s timeout (removing any stale Archinstall entries)
 cat > "${BOOT_MP}/limine.conf" <<'EOF'
@@ -153,12 +167,19 @@ else
   limine-install --skip-uefi
 fi
 
-# 6. Build initramfs with btrfs-overlayfs and register linux-cachyos in /boot/limine.conf
+# 6. Build initramfs with btrfs-overlayfs and register linux-cachyos in /boot/limine.conf (also enrolls + signs via hooks)
 nox_info "Executando limine-update para gerar initramfs e entradas linux-cachyos..."
 limine-update
 
 if ! grep -Eq '^[[:space:]]*timeout:' "${BOOT_MP}/limine.conf"; then
   sed -i '1i timeout: 5' "${BOOT_MP}/limine.conf"
+  limine-enroll-config || true
+  /etc/boot/hooks/post.d/95-nox-sbctl-fallback || true
+fi
+
+# Guarantee EFI binaries are enrolled + signed cleanly
+if [[ -d /sys/firmware/efi ]]; then
+  /usr/local/bin/nox-secureboot-verify || nox_die "Falha na verificacao de assinatura/checksum Limine+sbctl."
 fi
 
 # 7. Strict verification of Limine binaries & config

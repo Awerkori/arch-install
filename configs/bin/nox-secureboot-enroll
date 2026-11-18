@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Explicit-confirmation UEFI Secure Boot key enrollment helper (preserves Microsoft Option ROM CA by default).
+set -Eeuo pipefail
+
+YES_CONFIRM=false
+USE_MICROSOFT=true
+IGNORE_IMMUTABLE=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --yes-enroll-uefi-keys) YES_CONFIRM=true ;;
+    --no-microsoft) USE_MICROSOFT=false ;;
+    --ignore-immutable) IGNORE_IMMUTABLE=true ;;
+    -h|--help)
+      cat <<'USAGE'
+Usage: sudo nox-secureboot-enroll [options]
+  --yes-enroll-uefi-keys   Non-interactive confirmation to modify UEFI NVRAM keys
+  --no-microsoft           Do NOT enroll Microsoft UEFI/Option-ROM certificates (VM/custom-only; NOT recommended on real GPUs)
+  --ignore-immutable       Pass --ignore-immutable to sbctl enroll-keys
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg" >&2
+      exit 2
+      ;;
+  esac
+done
+
+(( EUID == 0 )) || { echo "Run as root (sudo nox-secureboot-enroll)." >&2; exit 1; }
+[[ -d /sys/firmware/efi ]] || { echo "System is not booted in UEFI mode." >&2; exit 1; }
+command -v sbctl >/dev/null 2>&1 || { echo "sbctl is not installed." >&2; exit 1; }
+
+if ! sbctl setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
+  echo "Generating per-installation private Secure Boot keys..."
+  sbctl create-keys
+fi
+
+STATUS_JSON="$(sbctl status --json 2>/dev/null || true)"
+if ! printf '%s' "$STATUS_JSON" | grep -q '"setup_mode": true'; then
+  echo "UEFI firmware is NOT in Setup Mode." >&2
+  echo "To enroll custom Secure Boot keys:" >&2
+  echo "  1. Reboot into UEFI/BIOS settings (systemctl reboot --firmware-setup)" >&2
+  echo "  2. Switch Secure Boot to Custom / Setup Mode (clear existing PK/KEK/db keys)" >&2
+  echo "  3. Boot back into Arch Linux and run: sudo nox-secureboot-enroll" >&2
+  exit 1
+fi
+
+if ! $YES_CONFIRM; then
+  echo "WARNING: This will write Secure Boot keys (PK/KEK/db) into UEFI NVRAM."
+  if $USE_MICROSOFT; then
+    echo "Microsoft 3rd-party/UEFI CA certificates will be preserved (--microsoft) for GPU/firmware Option ROM compatibility."
+  else
+    echo "WARNING: --no-microsoft selected; third-party PCIe/GPU Option ROMs may fail unless built into firmware."
+  fi
+  read -r -p "Type ENROLL to continue: " reply
+  [[ "$reply" == "ENROLL" ]] || { echo "Aborted by user." >&2; exit 1; }
+fi
+
+ENROLL_ARGS=()
+$USE_MICROSOFT && ENROLL_ARGS+=(--microsoft)
+$IGNORE_IMMUTABLE && ENROLL_ARGS+=(--ignore-immutable)
+
+sbctl enroll-keys "${ENROLL_ARGS[@]}"
+
+if command -v limine-install >/dev/null 2>&1; then
+  limine-install --fallback
+fi
+if command -v limine-enroll-config >/dev/null 2>&1; then
+  limine-enroll-config
+fi
+if [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]]; then
+  /etc/boot/hooks/post.d/95-nox-sbctl-fallback
+fi
+
+echo "UEFI Secure Boot keys enrolled and Limine signed."
+echo "Next step (if Secure Boot was disabled during Setup Mode): enable Secure Boot in UEFI/BIOS and reboot."
+sbctl status || true

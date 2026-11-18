@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Verify Limine + sbctl + BLAKE2 boot chain cryptographic integrity.
+set -Eeuo pipefail
+
+REQUIRE_ACTIVE=false
+for arg in "$@"; do
+  case "$arg" in
+    --require-active) REQUIRE_ACTIVE=true ;;
+    -h|--help)
+      echo "Usage: nox-secureboot-verify [--require-active]"
+      exit 0
+      ;;
+    *) echo "Unknown option: $arg" >&2; exit 2 ;;
+  esac
+done
+
+BOOT_MP="/boot"
+if ! findmnt /boot >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
+  BOOT_MP="/efi"
+fi
+
+FAILS=0
+pass() { echo "[PASS] $*"; }
+fail() { echo "[FAIL] $*" >&2; ((FAILS++)) || true; }
+
+command -v sbctl >/dev/null 2>&1 || { fail "sbctl missing"; exit 1; }
+
+if sbctl setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
+  pass "sbctl per-install private keys present"
+else
+  fail "sbctl keys not generated"
+fi
+
+if [[ -f /etc/default/limine ]] && \
+   grep -Eq '^[[:space:]]*ENABLE_VERIFICATION=yes' /etc/default/limine && \
+   grep -Eq '^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=yes' /etc/default/limine; then
+  pass "/etc/default/limine enables verification + config enrollment"
+else
+  fail "/etc/default/limine missing ENABLE_VERIFICATION=yes or ENABLE_ENROLL_LIMINE_CONFIG=yes"
+fi
+
+for efi in "${BOOT_MP}/EFI/limine/limine_x64.efi" "${BOOT_MP}/EFI/BOOT/BOOTX64.EFI"; do
+  if [[ -s "$efi" ]] && sbctl verify "$efi" 2>/dev/null | grep -q 'is signed'; then
+    pass "signed EFI binary: $efi"
+  else
+    fail "unsigned or missing EFI binary: $efi"
+  fi
+done
+
+if [[ -s "${BOOT_MP}/limine.conf" ]]; then
+  bad_paths="$(grep -E '^[[:space:]]*(path|module_path):' "${BOOT_MP}/limine.conf" | grep -Ev '#[0-9a-fA-F]{64,128}[[:space:]]*$' || true)"
+  if [[ -z "$bad_paths" ]] && grep -qE '^[[:space:]]*(path|module_path):.*#[0-9a-fA-F]{64,128}' "${BOOT_MP}/limine.conf"; then
+    pass "${BOOT_MP}/limine.conf all kernel/initramfs paths carry BLAKE2 checksums"
+  else
+    fail "${BOOT_MP}/limine.conf missing BLAKE2 checksums: ${bad_paths}"
+  fi
+else
+  fail "missing ${BOOT_MP}/limine.conf"
+fi
+
+if $REQUIRE_ACTIVE; then
+  if sbctl status --json 2>/dev/null | grep -q '"secure_boot": true'; then
+    pass "UEFI Secure Boot is actively enforced"
+  else
+    fail "UEFI Secure Boot is NOT active (--require-active)"
+  fi
+fi
+
+(( FAILS == 0 ))

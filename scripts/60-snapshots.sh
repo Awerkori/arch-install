@@ -83,12 +83,16 @@ systemctl enable limine-snapper-sync.service
 # Ensure //Snapshots placeholder exists under OS block in limine.conf if not added yet
 if [[ -f "${BOOT_MP}/limine.conf" ]] && ! grep -qE '^[[:space:]]*/+Snapshots' "${BOOT_MP}/limine.conf"; then
   printf '  //Snapshots\n' >> "${BOOT_MP}/limine.conf"
+  command -v limine-enroll-config >/dev/null 2>&1 && limine-enroll-config >/dev/null 2>&1 || true
+  [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true
 fi
 
 # 8. Prune any excess initial snapshots left by base installation
 "${NOX_LIBEXEC_DIR}/nox-snapper-cleanup" || true
 
-# 9. Sync Limine snapshot entries cleanly offline/target
+# 9. Sync Limine snapshot entries cleanly offline/target & keep config enrollment + EFI signatures updated
 limine-snapper-sync || nox_warn "limine-snapper-sync retornou aviso na sincronizacao inicial (sem snapshots iniciais ainda)."
+command -v limine-enroll-config >/dev/null 2>&1 && limine-enroll-config >/dev/null 2>&1 || true
+[[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true
 
 nox_info "Politica Snapper root (max 2), snap-pac e limine-snapper-sync configurados."

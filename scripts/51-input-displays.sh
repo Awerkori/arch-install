@@ -106,8 +106,15 @@ EOF
 
 printf 'kitty.desktop\n' > /etc/skel/.config/xdg-terminals.list
 
-# 4. Umbriel main configuration + safe outputs.toml baseline
+# 4. Umbriel main configuration + safe outputs.toml baseline + optional local override template
 nox_atomic_install 0644 "${NOX_ROOT}/configs/umbriel/config.toml" /etc/skel/.config/umbriel/config.toml
+cat > /etc/skel/.config/umbriel/outputs.local.toml <<'EOF'
+# Optional manual monitor overrides (loaded after outputs.toml, preserved across updates/logins).
+# Uncomment and adjust if you need a fine vertical offset on physical hardware:
+# [output."HDMI-A-1"]
+# position = [2560, -350]
+EOF
+chmod 0644 /etc/skel/.config/umbriel/outputs.local.toml
 "${NOX_LIBEXEC_DIR}/nox-display-profile" \
   --profile "${NOX_CFG_DIR}/hardware.json" \
   --output /etc/skel/.config/umbriel/outputs.toml || true
@@ -127,6 +134,10 @@ while IFS=: read -r uname uid gid uhome _shell; do
   if [[ -f /etc/skel/.config/umbriel/outputs.toml ]]; then
     nox_atomic_install 0644 /etc/skel/.config/umbriel/outputs.toml "${uhome}/.config/umbriel/outputs.toml"
     chown "${uid}:${gid}" "${uhome}/.config/umbriel/outputs.toml"
+  fi
+  if [[ ! -f "${uhome}/.config/umbriel/outputs.local.toml" ]]; then
+    nox_atomic_install 0644 /etc/skel/.config/umbriel/outputs.local.toml "${uhome}/.config/umbriel/outputs.local.toml"
+    chown "${uid}:${gid}" "${uhome}/.config/umbriel/outputs.local.toml"
   fi
   if [[ ! -f "${uhome}/.config/kitty/kitty.conf" ]]; then
     nox_atomic_install 0644 /etc/skel/.config/kitty/kitty.conf "${uhome}/.config/kitty/kitty.conf"

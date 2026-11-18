@@ -15,6 +15,9 @@ evidence/raw/
 .env
 *.key
 *.pem
+*.crt
+*.der
+sbctl-keys/
 *.log
 __pycache__/
 .pytest_cache/

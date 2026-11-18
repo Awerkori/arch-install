@@ -53,3 +53,26 @@ Os itens abaixo dependem de periféricos e GPU físicos (Tipo C) e não podem se
    ethtool -k wlan0 | grep -E 'tcp-segmentation-offload|generic-segmentation-offload|generic-receive-offload'
    ```
    (Se desejar desativar power save na conexão específica: `nmcli connection modify "<CONEXAO>" 802-11-wireless.powersave 2`.)
+
+8. **Ajuste fino de alinhamento vertical do monitor AOC (opcional):**
+   - Posição padrão configurada: `[2560, -350]` em `~/.config/umbriel/outputs.toml`.
+   - Para ajustar manualmente sem perder na próxima atualização/login, edite `~/.config/umbriel/outputs.local.toml`:
+     ```toml
+     [output."HDMI-A-1"]
+     position = [2560, -350]
+     ```
+     e aplique com `umbriel msg config-reload`.
+
+9. **Ativação final do Secure Boot no hardware físico (etapa mínima na BIOS):**
+   Durante a instalação, `sbctl`, chaves privadas únicas (`/var/lib/sbctl/keys/`), assinatura do Limine (`limine_x64.efi` e `BOOTX64.EFI`) e enrollment criptográfico do `limine.conf` (`ENABLE_ENROLL_LIMINE_CONFIG=yes`) já foram automatizados. Para ativar o enforcement na UEFI:
+   1. Reinicie para o setup UEFI/BIOS (`systemctl reboot --firmware-setup`).
+   2. Em **Security / Boot -> Secure Boot**, coloque em **Custom / Setup Mode** (limpando/deletando chaves PK/KEK/db existentes) e **salve**.
+   3. Inicie o Arch Linux normalmente e execute (requer confirmação explícita; inclui certificados Microsoft por padrão para preservar Option ROM da GPU Radeon):
+      ```bash
+      sudo nox-secureboot-enroll
+      ```
+   4. Reinicie na BIOS, ative **Secure Boot = Enabled** e confirme após o boot:
+      ```bash
+      sudo sbctl status
+      sudo nox-secureboot-verify --require-active
+      ```

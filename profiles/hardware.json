@@ -23,7 +23,7 @@
       "match_model_keywords": ["24B35", "AOC"],
       "mode": "1920x1080@100",
       "fallback_mode": "1920x1080@60",
-      "position": [2560, -400],
+      "position": [2560, -350],
       "scale": 1.0,
       "transform": "90",
       "workspace": 10

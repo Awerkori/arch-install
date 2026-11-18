@@ -42,6 +42,20 @@ class TestUserConfigurationContract(unittest.TestCase):
         self.assertEqual(parsed["environment"]["AMD_VULKAN_ICD"], "RADV")
         self.assertTrue((REPO / "configs/sysctl/99-nox-performance.conf").is_file())
         self.assertTrue((REPO / "configs/gamemode/gamemode.ini").is_file())
+        self.assertTrue((REPO / "configs/boot-hooks/95-nox-sbctl-fallback").is_file())
+        self.assertTrue((REPO / "configs/bin/nox-secureboot-enroll").is_file())
+        self.assertTrue((REPO / "configs/bin/nox-secureboot-verify").is_file())
+
+    def test_secureboot_enroll_refuses_non_root_without_confirm(self) -> None:
+        if os.geteuid() == 0:
+            return
+        res = subprocess.run(
+            ["bash", str(REPO / "configs/bin/nox-secureboot-enroll")],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(res.returncode, 0)
 
 
 class TestHostSafetyGuard(unittest.TestCase):
@@ -100,7 +114,7 @@ class TestDisplayProfile(unittest.TestCase):
         )
         self.assertIn('xwayland_primary_output = "DP-2"', out)
         self.assertIn('mode = "2560x1440@165"', out)
-        self.assertIn('position = [2560, -400]', out)
+        self.assertIn('position = [2560, -350]', out)
         self.assertIn('transform = "90"', out)
 
     def test_secondary_disconnected_or_swapped_order(self) -> None:
