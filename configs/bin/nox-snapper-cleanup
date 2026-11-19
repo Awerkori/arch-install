@@ -63,23 +63,42 @@ def compute_deletions(entries: list[dict[str, Any]]) -> tuple[list[int], str]:
     return to_delete, f"keep-pair:{latest_pair[0]}+{latest_pair[1]}"
 
 
+def snapper_cmd(*args: str, use_dbus: bool) -> list[str]:
+    base = ["snapper"]
+    if not use_dbus:
+        base.append("--no-dbus")
+    return [*base, *args]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-json", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
+    use_dbus = False
     if args.input_json:
         raw = args.input_json.read_text(encoding="utf-8")
     else:
+        # Prefer D-Bus when snapperd is available on booted system so its cache stays coherent;
+        # fall back to --no-dbus inside chroot/offline stages.
         res = subprocess.run(
-            ["snapper", "--no-dbus", "--jsonout", "-c", "root", "list"],
+            snapper_cmd("--jsonout", "-c", "root", "list", use_dbus=True),
             capture_output=True,
             text=True,
             check=False,
         )
-        if res.returncode != 0 or not res.stdout.strip():
-            return 0
+        if res.returncode == 0 and res.stdout.strip():
+            use_dbus = True
+        else:
+            res = subprocess.run(
+                snapper_cmd("--jsonout", "-c", "root", "list", use_dbus=False),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if res.returncode != 0 or not res.stdout.strip():
+                return 0
         raw = res.stdout
 
     entries = parse_snapper_json(raw)
@@ -91,7 +110,7 @@ def main() -> int:
     if not to_delete:
         return 0
 
-    cmd = ["snapper", "--no-dbus", "-c", "root", "delete", "--sync", *(str(n) for n in to_delete)]
+    cmd = snapper_cmd("-c", "root", "delete", "--sync", *(str(n) for n in to_delete), use_dbus=use_dbus)
     res = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if res.returncode != 0:
         print(f"nox-snapper-cleanup warning: {res.stderr.strip()}", file=sys.stderr)

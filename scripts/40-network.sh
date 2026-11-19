@@ -16,6 +16,7 @@ pacman -S --needed --noconfirm networkmanager iwd iw ethtool
 # Ensure only NetworkManager manages Wi-Fi via iwd backend (do not enable standalone iwd.service)
 systemctl enable NetworkManager.service
 systemctl disable iwd.service >/dev/null 2>&1 || true
+systemctl disable NetworkManager-wait-online.service >/dev/null 2>&1 || true
 
 nox_atomic_install 0644 "${NOX_ROOT}/configs/network/wifi_backend.conf" /etc/NetworkManager/conf.d/wifi_backend.conf
 nox_atomic_install 0644 "${NOX_ROOT}/configs/network/wifi-powersave-off.conf" /etc/NetworkManager/conf.d/wifi-powersave-off.conf

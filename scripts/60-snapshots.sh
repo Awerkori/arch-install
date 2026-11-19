@@ -86,10 +86,11 @@ systemctl enable snapper-cleanup.timer
 # 5. Configure snap-pac exclusively for root
 nox_atomic_install 0644 "${NOX_ROOT}/configs/snapper/snap-pac.ini" /etc/snap-pac.ini
 
-# 6. Install immediate post-transaction cleanup helper & hook (runs after zz-snap-pac-post.hook)
+# 6. Install immediate post-transaction cleanup helper & hook (runs strictly AFTER zz-snap-pac-post.hook: zzz- > zz-)
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-snapper-cleanup" "${NOX_LIBEXEC_DIR}/nox-snapper-cleanup"
-nox_atomic_install 0644 "${NOX_ROOT}/configs/pacman-hooks/zz-99-nox-snapper-cleanup.hook" \
-  /etc/pacman.d/hooks/zz-99-nox-snapper-cleanup.hook
+rm -f /etc/pacman.d/hooks/zz-99-nox-snapper-cleanup.hook
+nox_atomic_install 0644 "${NOX_ROOT}/configs/pacman-hooks/zzz-99-nox-snapper-cleanup.hook" \
+  /etc/pacman.d/hooks/zzz-99-nox-snapper-cleanup.hook
 
 # 7. Enable limine-snapper-sync service (uses /etc/default/limine + 10-limine-snapper-sync snapper plugin)
 systemctl enable limine-snapper-sync.service

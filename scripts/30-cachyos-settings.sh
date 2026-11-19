@@ -33,6 +33,11 @@ paru --version
 # 2. Configure scx_loader (scx_lavd Gaming), gamemode, and complementary performance sysctl
 nox_atomic_install 0644 "${NOX_ROOT}/configs/scx_loader/config.toml" /etc/scx_loader/config.toml
 nox_atomic_install 0644 "${NOX_ROOT}/configs/gamemode/gamemode.ini" /etc/gamemode.ini
+if getent group gamemode >/dev/null 2>&1; then
+  while IFS=$'\t' read -r uname _ _; do
+    [[ -n "$uname" ]] && usermod -aG gamemode "$uname" >/dev/null 2>&1 || true
+  done < <(nox_list_human_users)
+fi
 nox_atomic_install 0644 "${NOX_ROOT}/configs/sysctl/99-nox-performance.conf" /etc/sysctl.d/99-nox-performance.conf
 
 # 3. Enable system services & timers; disable unnecessary boot wait-online delay
