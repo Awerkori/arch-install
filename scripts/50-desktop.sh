@@ -25,9 +25,6 @@ PKGS=(
   lib32-vulkan-mesa-layers
   libva
   lib32-libva
-  vulkan-tools
-  libva-utils
-  mesa-utils
   xorg-xwayland
   # Umbriel + Portals + Polkit + DBus
   umbriel

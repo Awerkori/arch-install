@@ -1,7 +1,7 @@
 # Nox Archinstall — Umbriel Configuration (Hyprland + Ambxst Keybind Parity + Dwindle)
 
 [include.optional]
-files = ["outputs.toml", "outputs.local.toml"]
+files = ["outputs.toml", "outputs.local.toml", "noctalia.toml"]
 
 [general]
 autostart = ["noctalia"]

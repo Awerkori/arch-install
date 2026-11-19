@@ -2,7 +2,7 @@
 default = "Umbriel"
 
 [appearance]
-scheme = "Noctalia"
+scheme = "ObsidianPurple"
 password_style = "default"
 hide_logo = false
 power_buttons_position = "bottom-right"
@@ -10,13 +10,32 @@ scheme_selector_position = "top-right"
 theme_mode = "dark"
 corner_radius_scale = 1.0
 
+[appearance.palette]
+primary = "#9333ea"
+on_primary = "#faf5ff"
+secondary = "#c4b5fd"
+on_secondary = "#160b2b"
+tertiary = "#fbbf24"
+on_tertiary = "#1f1402"
+error = "#fb7185"
+on_error = "#2b0610"
+surface = "#090610"
+on_surface = "#f5f2ff"
+surface_variant = "#120a1f"
+on_surface_variant = "#d4c6f7"
+outline = "#3a255c"
+hover = "#25183c"
+on_hover = "#faf5ff"
+
+[appearance.wallpaper]
+path = "/usr/share/nox-archinstall/wallpapers/obsidian-purple.png"
+fill_color = "#090610"
+
 [clock]
 enabled = true
 position = "above-panel"
 time_format = "{:%H:%M}"
 date_format = "%A, %x"
-time_font_size = 48
-date_font_size = 14
 
 [output]
 use_synced_settings = true
@@ -29,8 +48,6 @@ theme = "Adwaita"
 size = 24
 path = "/usr/share/icons"
 
-[pointer]
-accel_profile = "flat"
 
 [keyboard]
 layout = "us"

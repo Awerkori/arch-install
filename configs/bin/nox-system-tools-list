@@ -38,6 +38,19 @@ def parse_desktop_entry(path: Path) -> dict[str, str]:
     return data
 
 
+CONCISE_SUBTITLES = {
+    "btop.desktop": "System resource monitor",
+    "dev.noctalia.Noctalia.desktop": "Desktop shell settings",
+    "limine-snapper-restore.desktop": "Restore Btrfs snapshot",
+    "nwg-look.desktop": "GTK3 appearance editor",
+    "org.pulseaudio.pavucontrol.desktop": "Audio volume mixer",
+    "qt5ct.desktop": "Qt5 configuration utility",
+    "qt6ct.desktop": "Qt6 configuration utility",
+    "qv4l2.desktop": "Video4Linux test utility",
+    "qvidcap.desktop": "Video4Linux capture viewer",
+}
+
+
 def collect_hidden_tools(user_dir: Path, sys_dir: Path) -> list[tuple[str, str, str]]:
     if not user_dir.is_dir():
         return []
@@ -53,7 +66,7 @@ def collect_hidden_tools(user_dir: Path, sys_dir: Path) -> list[tuple[str, str, 
         if sys_data.get("NoDisplay", "").lower() == "true":
             continue
         name = sys_data.get("Name") or ov_data.get("Name") or ov.stem
-        desc = sys_data.get("Comment") or sys_data.get("GenericName") or "System Tool"
+        desc = CONCISE_SUBTITLES.get(ov.name) or sys_data.get("GenericName") or sys_data.get("Comment") or "System Tool"
         entries.append((name, desc, ov.name))
     entries.sort(key=lambda item: item[0].lower())
     return entries

@@ -289,8 +289,9 @@ class TestSystemToolsLauncher(unittest.TestCase):
             )
             self.assertEqual(
                 res.stdout.splitlines(),
-                ["btop++\tResource monitor", "Qt6 Settings\tQt6 Configuration Tool"],
+                ["btop++\tSystem resource monitor", "Qt6 Settings\tQt6 configuration utility"],
             )
+            self.assertFalse(any("gtk" in line.lower() for line in res.stdout.splitlines() if "btop++" in line))
 
             launch = subprocess.run(
                 [
@@ -301,7 +302,7 @@ class TestSystemToolsLauncher(unittest.TestCase):
                     "--sys-dir",
                     str(sys_dir),
                     "--dry-run",
-                    "Qt6 Settings\tQt6 Configuration Tool",
+                    "Qt6 Settings\tQt6 configuration utility",
                 ],
                 capture_output=True,
                 text=True,
@@ -320,6 +321,41 @@ class TestSystemToolsLauncher(unittest.TestCase):
         self.assertIn("nox_sync_hidden_tech_desktops", appearance_sh)
         self.assertIn("nox_sync_hidden_tech_desktops", snapshots_sh)
         self.assertIn("limine-snapper-restore.desktop", val_sh)
+
+
+class TestObsidianPurplePolish(unittest.TestCase):
+    def test_obsidian_purple_assets_and_palette_contract(self) -> None:
+        import tomllib
+
+        palette = json.loads((REPO / "configs/noctalia/palettes/ObsidianPurple.json").read_text(encoding="utf-8"))
+        self.assertEqual(palette["version"], 2)
+        dark = palette["dark"]
+        self.assertEqual(dark["surface"], "#090610")
+        self.assertEqual(dark["primary"], "#9333ea")
+        self.assertIn("normal", dark["terminal"])
+        self.assertIn("bright", dark["terminal"])
+        self.assertTrue((REPO / "configs/wallpapers/obsidian-purple.png").is_file())
+        self.assertTrue((REPO / "configs/firefox/nox-theme.js").is_file())
+        self.assertTrue((REPO / "configs/gtk/gtk.css").is_file())
+
+        theme_toml = tomllib.loads((REPO / "configs/noctalia/nox-theme.toml").read_text(encoding="utf-8"))
+        self.assertEqual(theme_toml["theme"]["source"], "custom")
+        self.assertEqual(theme_toml["theme"]["custom_palette"], "ObsidianPurple")
+        self.assertIn("umbriel", theme_toml["theme"]["templates"]["builtin_ids"])
+
+        launcher_toml = tomllib.loads((REPO / "configs/noctalia/nox-launcher.toml").read_text(encoding="utf-8"))
+        self.assertEqual(launcher_toml["shell"]["launcher"]["providers"]["calculator"]["global"], False)
+        self.assertEqual(launcher_toml["shell"]["launcher"]["providers"]["calculator"]["prefix"], "calc")
+
+        gtk_ini = (REPO / "configs/gtk/settings.ini").read_text(encoding="utf-8")
+        self.assertIn("gtk-theme-name=adw-gtk3-dark", gtk_ini)
+        self.assertIn("gtk-application-prefer-dark-theme=1", gtk_ini)
+
+        desktop_sh = (REPO / "scripts/50-desktop.sh").read_text(encoding="utf-8")
+        for pkg in ("vulkan-tools", "mesa-utils", "libva-utils"):
+            self.assertNotIn(f"  {pkg}\n", desktop_sh)
+        for kept in ("mesa", "vulkan-radeon", "libva"):
+            self.assertIn(f"  {kept}\n", desktop_sh)
 
 
 class TestSnapperCleanup(unittest.TestCase):

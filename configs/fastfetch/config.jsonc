@@ -3,17 +3,25 @@
   // Nox Archinstall — Fastfetch default configuration
   // To switch to a custom Project Nox logo later, replace "source": "arch" with a file path (e.g. ~/.config/fastfetch/nox-logo.txt).
   "logo": {
-    "source": "arch",
+    "source": "arch_small",
+    "color": {
+      "1": "38;2;147;51;234",
+      "2": "38;2;196;181;253"
+    },
     "padding": {
       "top": 1,
-      "left": 2,
-      "right": 3
+      "left": 1,
+      "right": 2
     }
   },
   "display": {
-    "separator": "  ",
+    "separator": " ",
+    "color": {
+      "keys": "38;2;196;181;253",
+      "title": "38;2;251;191;36"
+    },
     "key": {
-      "width": 12
+      "width": 9
     }
   },
   "modules": [

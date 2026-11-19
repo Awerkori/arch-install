@@ -106,6 +106,7 @@ font_size        11.0
 shell            /usr/bin/bash
 confirm_os_window_close 0
 background_opacity 0.94
+include themes/noctalia.conf
 EOF
 
 printf 'kitty.desktop\n' > /etc/skel/.config/xdg-terminals.list
@@ -145,6 +146,9 @@ while IFS=: read -r uname uid gid uhome _shell; do
   fi
   if [[ ! -f "${uhome}/.config/kitty/kitty.conf" ]]; then
     nox_atomic_install 0644 /etc/skel/.config/kitty/kitty.conf "${uhome}/.config/kitty/kitty.conf"
+    chown "${uid}:${gid}" "${uhome}/.config/kitty/kitty.conf"
+  elif ! grep -qx 'include themes/noctalia.conf' "${uhome}/.config/kitty/kitty.conf"; then
+    printf '\ninclude themes/noctalia.conf\n' >> "${uhome}/.config/kitty/kitty.conf"
     chown "${uid}:${gid}" "${uhome}/.config/kitty/kitty.conf"
   fi
   nox_atomic_install 0644 /etc/skel/.config/xdg-terminals.list "${uhome}/.config/xdg-terminals.list"
