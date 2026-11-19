@@ -54,7 +54,21 @@ EOF
   local clone_ok=false attempt
   for attempt in 1 2 3; do
     rm -rf "${workdir}/src"
-    if su -s /usr/bin/bash "$NOX_AUR_USER" -c "git clone --depth 1 'https://aur.archlinux.org/${pkgname}.git' '${workdir}/src'"; then
+    if su -s /usr/bin/bash "$NOX_AUR_USER" -c "
+      export HOME='${NOX_AUR_HOME}' GIT_CONFIG_GLOBAL='${NOX_AUR_HOME}/.gitconfig'
+      timeout 45 git clone --depth 1 -4 'https://aur.archlinux.org/${pkgname}.git' '${workdir}/src'
+    "; then
+      clone_ok=true
+      break
+    fi
+    rm -rf "${workdir:?}/src" "${workdir:?}/${pkgname}"
+    if su -s /usr/bin/bash "$NOX_AUR_USER" -c "
+      set -euo pipefail
+      curl -fsSL -4 --connect-timeout 15 --max-time 45 'https://aur.archlinux.org/cgit/aur.git/snapshot/${pkgname}.tar.gz' -o '${workdir}/${pkgname}.tar.gz'
+      tar -xzf '${workdir}/${pkgname}.tar.gz' -C '${workdir}'
+      mv '${workdir}/${pkgname}' '${workdir}/src'
+      rm -f '${workdir}/${pkgname}.tar.gz'
+    "; then
       clone_ok=true
       break
     fi

@@ -38,8 +38,8 @@ check "limine.conf contem Arch Linux -> Project Nox (kernel-id=linux-cachyos), t
   test -s '${BOOT_MP}/nox-limine-wallpaper.png' &&
   grep -q 'kernel-id=linux-cachyos' '${BOOT_MP}/limine.conf' &&
   grep -Eq '^[[:space:]]*//Project Nox\$' '${BOOT_MP}/limine.conf' &&
-  grep -Eq '^[[:space:]]*//Snapshots\$' '${BOOT_MP}/limine.conf' &&
-  ! grep -Eq '^[[:space:]]*//\+Snapshots\$' '${BOOT_MP}/limine.conf' &&
+  ! grep -Eq '^[[:space:]]*/+\+Snapshots\b' '${BOOT_MP}/limine.conf' &&
+  (! grep -qE '/@\.snapshots/[0-9]+' '${BOOT_MP}/limine.conf' || grep -Eq '^[[:space:]]*//Snapshots$' '${BOOT_MP}/limine.conf') &&
   grep -q '^wallpaper: boot():/nox-limine-wallpaper.png#' '${BOOT_MP}/limine.conf' &&
   grep -qx 'interface_branding: Project Nox' '${BOOT_MP}/limine.conf' &&
   grep -qx 'default_entry: Arch Linux/Project Nox' '${BOOT_MP}/limine.conf' &&
