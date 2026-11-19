@@ -18,14 +18,21 @@ fi
 NOX_INIT_MARKER="${XDG_STATE_HOME:-$HOME/.local/state}/noctalia/.nox-obsidian-init-v1"
 if [[ ! -f "$NOX_INIT_MARKER" ]] && command -v noctalia >/dev/null 2>&1; then
   mkdir -p "$(dirname "$NOX_INIT_MARKER")"
-  (
-    sleep 1
-    if [[ -f /usr/share/nox-archinstall/wallpapers/obsidian-purple.png ]]; then
-      noctalia msg wallpaper-set /usr/share/nox-archinstall/wallpapers/obsidian-purple.png >/dev/null 2>&1 || true
+  for _ in $(seq 1 40); do
+    if noctalia msg wallpaper-get >/dev/null 2>&1; then
+      break
     fi
+    sleep 0.5
+  done
+  if [[ -f /usr/share/nox-archinstall/wallpapers/obsidian-purple.png ]]; then
+    if noctalia msg wallpaper-set /usr/share/nox-archinstall/wallpapers/obsidian-purple.png >/dev/null 2>&1; then
+      noctalia msg templates-apply >/dev/null 2>&1 || true
+      touch "$NOX_INIT_MARKER"
+    fi
+  else
     noctalia msg templates-apply >/dev/null 2>&1 || true
     touch "$NOX_INIT_MARKER"
-  ) >/dev/null 2>&1 &
+  fi
 fi
 
 # 3. Ensure Luciole (directories) and Firefox Pure (HTTP/HTTPS/HTML) are XDG defaults

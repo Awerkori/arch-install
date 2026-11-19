@@ -332,8 +332,13 @@ class TestObsidianPurplePolish(unittest.TestCase):
         dark = palette["dark"]
         self.assertEqual(dark["surface"], "#090610")
         self.assertEqual(dark["primary"], "#9333ea")
-        self.assertIn("normal", dark["terminal"])
-        self.assertIn("bright", dark["terminal"])
+        for mode in ("dark", "light"):
+            term = palette[mode]["terminal"]
+            for req in ("foreground", "background", "selection_fg", "selection_bg", "cursor", "cursor_text", "normal", "bright"):
+                self.assertIn(req, term)
+        session_init = (REPO / "configs/bin/nox-session-init").read_text(encoding="utf-8")
+        self.assertNotIn(") >/dev/null 2>&1 &", session_init)
+        self.assertIn("noctalia msg wallpaper-get", session_init)
         self.assertTrue((REPO / "configs/wallpapers/obsidian-purple.png").is_file())
         self.assertTrue((REPO / "configs/firefox/nox-theme.js").is_file())
         self.assertTrue((REPO / "configs/gtk/gtk.css").is_file())

@@ -195,6 +195,34 @@
     "terminal_bright_blue": "#7c3aed",
     "terminal_bright_magenta": "#9333ea",
     "terminal_bright_cyan": "#0891b2",
-    "terminal_bright_white": "#faf8ff"
+    "terminal_bright_white": "#faf8ff",
+    "terminal": {
+      "foreground": "#160d26",
+      "background": "#faf8ff",
+      "cursor": "#6b21a8",
+      "cursor_text": "#faf8ff",
+      "selection_fg": "#160d26",
+      "selection_bg": "#e9d5ff",
+      "normal": {
+        "black": "#2e1065",
+        "red": "#be123c",
+        "green": "#15803d",
+        "yellow": "#b45309",
+        "blue": "#5b21b6",
+        "magenta": "#7e22ce",
+        "cyan": "#0e7490",
+        "white": "#d4c6f7"
+      },
+      "bright": {
+        "black": "#6b5990",
+        "red": "#e11d48",
+        "green": "#16a34a",
+        "yellow": "#d97706",
+        "blue": "#7c3aed",
+        "magenta": "#9333ea",
+        "cyan": "#0891b2",
+        "white": "#faf8ff"
+      }
+    }
   }
 }
