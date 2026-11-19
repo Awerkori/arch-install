@@ -24,12 +24,15 @@ ROOT_FSTYPE="$(findmnt -no FSTYPE / || true)"
 if ! snapper --no-dbus -c root get-config >/dev/null 2>&1; then
   nox_info "Criando configuracao Snapper 'root'..."
   if [[ -d /.snapshots ]] && mountpoint -q /.snapshots; then
+    SNAP_DEV="$(findmnt -no SOURCE /.snapshots | sed 's/\[.*\]//')"
+    SNAP_SUBVOL="$(findmnt -no OPTIONS /.snapshots | tr ',' '\n' | sed -n 's/^subvol=//p' | head -n1)"
+    SNAP_SUBVOL="${SNAP_SUBVOL:-/@.snapshots}"
     umount /.snapshots
     rmdir /.snapshots 2>/dev/null || true
     snapper --no-dbus -c root create-config /
     btrfs subvolume delete /.snapshots >/dev/null 2>&1 || true
     mkdir -p /.snapshots
-    mount /.snapshots || true
+    mount /.snapshots 2>/dev/null || mount -o "subvol=${SNAP_SUBVOL}" "$SNAP_DEV" /.snapshots
   else
     snapper --no-dbus -c root create-config /
     btrfs subvolume delete /.snapshots >/dev/null 2>&1 || mkdir -p /.snapshots
@@ -47,6 +50,12 @@ if ! snapper --no-dbus -c root get-config >/dev/null 2>&1; then
     fi
     mount /.snapshots 2>/dev/null || { [[ -n "$ROOT_DEV" ]] && mount -o "subvol=/@.snapshots" "$ROOT_DEV" /.snapshots; }
   fi
+fi
+
+# Inform limine-snapper-sync when /.snapshots is backed by top-level /@.snapshots
+if findmnt -no OPTIONS /.snapshots 2>/dev/null | tr ',' '\n' | grep -qE '^subvol=/?@\.snapshots$'; then
+  sed -i '/^ROOT_SNAPSHOTS_PATH=/d' /etc/default/limine
+  printf 'ROOT_SNAPSHOTS_PATH="/@.snapshots"\n' >> /etc/default/limine
 fi
 
 # 2. Enforce retention policy on root: max 2 number snapshots (PRE+POST), no timeline

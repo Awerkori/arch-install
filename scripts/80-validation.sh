@@ -36,6 +36,7 @@ check "arquivos de boot limine e cachyos presentes" bash -c "test -s '${BOOT_MP}
 check "limine-mkinitcpio-hook, limine-snapper-sync e sbctl instalados" bash -c "pacman -Q limine limine-mkinitcpio-hook limine-snapper-sync sbctl >/dev/null"
 check "limine.conf contem linux-cachyos sem linux-zen e sem arch-limine" bash -c "grep -q linux-cachyos '${BOOT_MP}/limine.conf' && ! grep -q linux-zen '${BOOT_MP}/limine.conf' && test ! -d '${BOOT_MP}/EFI/arch-limine'"
 check "hook btrfs-overlayfs presente em /etc/mkinitcpio.conf" bash -c "grep -Eq '^HOOKS=.*(btrfs-overlayfs|sd-btrfs-overlayfs)' /etc/mkinitcpio.conf"
+check "/.snapshots montado como subvolume Btrfs" bash -c "mountpoint -q /.snapshots && btrfs subvolume show /.snapshots >/dev/null"
 check "cadeia criptografica Limine + sbctl validada (nox-secureboot-verify)" /usr/local/bin/nox-secureboot-verify
 
 # 1b. System language (en_CA.UTF-8 + en_US fallback), timezone (America/Sao_Paulo), keyboard + cedilla, performance configs
