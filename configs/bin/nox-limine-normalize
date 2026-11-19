@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Normalize /boot/limine.conf visual naming and unattended boot defaults safely.
+
+--pre:
+  Temporarily restore `//Project Nox` back to `//linux-cachyos` strictly on the
+  top-level entry under `/+Arch Linux` whose block carries
+  `comment: kernel-id=linux-cachyos`. This keeps limine-entry-tool and
+  limine-snapper-sync operating on their canonical upstream entry name without
+  duplicating entries.
+
+--post:
+  1. Ensure the global Limine header enforces unattended 5s auto-boot via a
+     stable named entry path:
+       timeout: 5
+       default_entry: Arch Linux/Project Nox
+       remember_last_entry: no
+  2. Rename the top-level `//linux-cachyos` heading under `/+Arch Linux` (only
+     when its entry block contains `comment: kernel-id=linux-cachyos`) to
+     `//Project Nox`, preserving `kernel-id=linux-cachyos`, paths, hashes,
+     cmdline, and all `//Snapshots` subentries intact.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import sys
+from pathlib import Path
+
+HEADER_KEYS = ("timeout", "default_entry", "remember_last_entry")
+DESIRED_HEADER = [
+    "timeout: 5",
+    "default_entry: Arch Linux/Project Nox",
+    "remember_last_entry: no",
+]
+
+
+def _entry_depth(line: str) -> int:
+    s = line.lstrip(" \t")
+    if not s.startswith("/"):
+        return 0
+    n = 0
+    while n < len(s) and s[n] == "/":
+        n += 1
+    return n
+
+
+def _is_entry_line(line: str) -> bool:
+    return _entry_depth(line) > 0
+
+
+def _split_top_header(lines: list[str]) -> tuple[list[str], list[str]]:
+    for idx, line in enumerate(lines):
+        if _is_entry_line(line):
+            return lines[:idx], lines[idx:]
+    return lines, []
+
+
+def _normalize_header(header: list[str]) -> list[str]:
+    key_re = re.compile(r"^\s*(timeout|default_entry|remember_last_entry)\s*:")
+    kept = [line for line in header if not key_re.match(line)]
+    return list(DESIRED_HEADER) + kept
+
+
+def _rename_primary_kernel_entry(body: list[str], src_name: str, dst_name: str) -> list[str]:
+    out = list(body)
+    in_arch_os = False
+    i = 0
+    while i < len(out):
+        line = out[i]
+        depth = _entry_depth(line)
+        if depth == 1:
+            title = line.lstrip(" \t")[1:].lstrip("+")
+            in_arch_os = title.strip() == "Arch Linux"
+            i += 1
+            continue
+
+        if in_arch_os and depth == 2:
+            indent_len = len(line) - len(line.lstrip(" \t"))
+            indent = line[:indent_len]
+            rest = line[indent_len + 2 :]
+            plus_prefix = "+" if rest.startswith("+") else ""
+            entry_title = rest[len(plus_prefix) :].strip()
+
+            # Find block end (next entry line at any depth)
+            j = i + 1
+            while j < len(out) and not _is_entry_line(out[j]):
+                j += 1
+
+            block = out[i + 1 : j]
+            has_cachyos_id = any(
+                re.match(r"^\s*comment\s*:\s*kernel-id=linux-cachyos\b", b)
+                for b in block
+            )
+            if has_cachyos_id and entry_title == src_name:
+                out[i] = f"{indent}//{plus_prefix}{dst_name}"
+            i = j
+            continue
+
+        i += 1
+    return out
+
+
+def transform(text: str, mode: str) -> str:
+    lines = text.splitlines()
+    header, body = _split_top_header(lines)
+    if mode == "pre":
+        new_body = _rename_primary_kernel_entry(body, "Project Nox", "linux-cachyos")
+        new_lines = header + new_body
+    elif mode == "post":
+        new_header = _normalize_header(header)
+        new_body = _rename_primary_kernel_entry(body, "linux-cachyos", "Project Nox")
+        new_lines = new_header + new_body
+    else:
+        raise ValueError(f"Unsupported mode: {mode}")
+    return "\n".join(new_lines) + ("\n" if new_lines else "")
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description="Normalize Limine config for Project Nox.")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--pre", action="store_true", help="Restore canonical //linux-cachyos before boot tools run.")
+    group.add_argument("--post", action="store_true", help="Apply //Project Nox and unattended boot header after boot tools run.")
+    parser.add_argument("--file", default=None, help="Path to limine.conf (default: ${ESP_PATH:-/boot}/limine.conf)")
+    args = parser.parse_args(argv)
+
+    conf_path = Path(args.file) if args.file else Path(os.environ.get("ESP_PATH", "/boot")) / "limine.conf"
+    if not conf_path.is_file():
+        return 0
+
+    original = conf_path.read_text(encoding="utf-8")
+    updated = transform(original, "pre" if args.pre else "post")
+    if updated != original:
+        tmp = conf_path.with_name(conf_path.name + ".nox.tmp")
+        tmp.write_text(updated, encoding="utf-8")
+        os.replace(tmp, conf_path)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

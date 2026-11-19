@@ -23,7 +23,7 @@ jobs:
 
       - name: Bash syntax and ShellCheck
         run: |
-          mapfile -t sh_files < <(find . -maxdepth 4 -type f -name '*.sh' -o -path './configs/bin/nox-fuxi-h3-fix' -o -path './configs/bin/nox-first-boot' -o -path './configs/bin/nox-session-init' | sort)
+          mapfile -t sh_files < <(find . -maxdepth 4 -type f \( -name '*.sh' -o -path './configs/bin/nox-fuxi-h3-fix' -o -path './configs/bin/nox-first-boot' -o -path './configs/bin/nox-session-init' -o -path './configs/boot-hooks/*' \) | sort)
           for f in "${sh_files[@]}"; do
             bash -n "$f"
           done

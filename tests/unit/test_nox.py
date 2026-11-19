@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.machinery
+import importlib.util
 import json
 import os
 import subprocess
@@ -212,33 +214,100 @@ class TestFuxiH3Fix(unittest.TestCase):
             cpath.unlink(missing_ok=True)
 
 
-class TestHushMicSetup(unittest.TestCase):
-    def test_excludes_monitor_hdmi_navi_and_picks_analog(self) -> None:
-        devs = [
-            {"name": "alsa_output.pci-navi.hdmi.monitor", "description": "Monitor of Navi HDMI"},
-            {"name": "alsa_input.hushmic", "description": "HushMic Virtual Microphone"},
-            {"name": "alsa_input.pci-0000_12_00.6.analog-stereo", "description": "Ryzen HD Audio Realtek ALC1220 Analog"},
-        ]
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
-            json.dump(devs, tf)
-            tpath = Path(tf.name)
-        try:
+class TestLimineNormalize(unittest.TestCase):
+    def test_roundtrip_pre_and_post_preserves_kernel_id_and_snapshots(self) -> None:
+        sample = """timeout: 5
+default_entry: 2
+remember_last_entry: yes
+/+Arch Linux
+comment: Arch Linux
+comment: machine-id=abc123 order-priority=50
+  //linux-cachyos
+  comment: Kernel version: 7.3.5-1-cachyos
+  comment: kernel-id=linux-cachyos
+  protocol: linux
+  path: boot():/abc123/linux-cachyos/vmlinuz#deadbeef
+
+  //Snapshots
+  ///8 | 2026-11-19 00:00:02
+  ////linux-cachyos
+  comment: kernel-id=linux-cachyos
+"""
+        loader = importlib.machinery.SourceFileLoader(
+            "nox_limine_normalize", str(REPO / "configs/bin/nox-limine-normalize")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        post = mod.transform(sample, "post")
+        self.assertIn("timeout: 5\ndefault_entry: Arch Linux/Project Nox\nremember_last_entry: no\n", post)
+        self.assertIn("  //Project Nox\n", post)
+        self.assertNotIn("  //linux-cachyos\n", post)
+        self.assertIn("  comment: kernel-id=linux-cachyos\n", post)
+        self.assertIn("  ////linux-cachyos\n", post)
+
+        pre = mod.transform(post, "pre")
+        self.assertIn("  //linux-cachyos\n", pre)
+        self.assertNotIn("  //Project Nox\n", pre)
+
+
+class TestSystemToolsLauncher(unittest.TestCase):
+    def test_lists_and_resolves_only_hidden_overrides_without_touching_usr_share(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sys_dir = root / "sys"
+            usr_dir = root / "usr"
+            sys_dir.mkdir()
+            usr_dir.mkdir()
+
+            (sys_dir / "kitty.desktop").write_text("[Desktop Entry]\nName=kitty\nExec=kitty\n", encoding="utf-8")
+            (sys_dir / "qt6ct.desktop").write_text(
+                "[Desktop Entry]\nName=Qt6 Settings\nComment=Qt6 Configuration Tool\nExec=qt6ct\nTerminal=false\n",
+                encoding="utf-8",
+            )
+            (sys_dir / "btop.desktop").write_text(
+                "[Desktop Entry]\nName=btop++\nComment=Resource monitor\nExec=btop\nTerminal=true\n",
+                encoding="utf-8",
+            )
+            (usr_dir / "qt6ct.desktop").write_text("[Desktop Entry]\nType=Application\nName=Qt6 Settings\nNoDisplay=true\n", encoding="utf-8")
+            (usr_dir / "btop.desktop").write_text("[Desktop Entry]\nType=Application\nName=btop++\nNoDisplay=true\n", encoding="utf-8")
+
             res = subprocess.run(
                 [
                     "python3",
-                    str(REPO / "configs/bin/nox-hushmic-setup"),
-                    "--devices-json",
-                    str(tpath),
-                    "--dry-run",
+                    str(REPO / "configs/bin/nox-system-tools-list"),
+                    "--user-dir",
+                    str(usr_dir),
+                    "--sys-dir",
+                    str(sys_dir),
                 ],
                 capture_output=True,
                 text=True,
                 check=True,
             )
-            out = json.loads(res.stdout)
-            self.assertEqual(out["selected_mic"], "alsa_input.pci-0000_12_00.6.analog-stereo")
-        finally:
-            tpath.unlink(missing_ok=True)
+            self.assertEqual(
+                res.stdout.splitlines(),
+                ["btop++\tResource monitor", "Qt6 Settings\tQt6 Configuration Tool"],
+            )
+
+            launch = subprocess.run(
+                [
+                    "python3",
+                    str(REPO / "configs/bin/nox-system-tools-launch"),
+                    "--user-dir",
+                    str(usr_dir),
+                    "--sys-dir",
+                    str(sys_dir),
+                    "--dry-run",
+                    "Qt6 Settings\tQt6 Configuration Tool",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertEqual(launch.stdout.strip(), "qt6ct")
 
 
 class TestSnapperCleanup(unittest.TestCase):

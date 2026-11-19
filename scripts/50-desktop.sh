@@ -60,12 +60,16 @@ PKGS=(
   noto-fonts-cjk
   noto-fonts-emoji
   ttf-jetbrains-mono-nerd
-  # Clipboard & Wayland utilities
+  # Clipboard, Wayland, browser & standard CLI tools
   wl-clipboard
   jq
+  firefox-pure
+  btop
+  rocm-smi-lib
+  fastfetch
 )
 
-nox_info "Instalando stack desktop oficial (Umbriel + Noctalia + Greeter + Kitty + Mesa)..."
+nox_info "Instalando stack desktop oficial (Umbriel + Noctalia + Greeter + Kitty + Firefox Pure + Btop + Fastfetch + Mesa)..."
 pacman -S --needed --noconfirm "${PKGS[@]}"
 
 # Build & install Luciole from AUR as unprivileged user (noctalia-dev/luciole)
@@ -83,8 +87,9 @@ while IFS=: read -r uname _uid _gid _home ushell; do
   fi
 done < <(nox_list_human_users)
 
-# Verify no forbidden desktops/display managers/file managers crept in
-for forbidden in hyprland sddm nemo plasma-desktop gnome-shell firefox chromium steam discord; do
+# Verify firefox-pure is installed as sole browser and no forbidden desktops/tools crept in
+pacman -Qq firefox-pure >/dev/null 2>&1 || nox_die "firefox-pure nao foi instalado!"
+for forbidden in hyprland sddm nemo plasma-desktop gnome-shell chromium steam discord htop glances neofetch macchina hushmic-bin; do
   if pacman -Qq "$forbidden" >/dev/null 2>&1; then
     nox_die "Pacote proibido detectado no alvo: $forbidden"
   fi

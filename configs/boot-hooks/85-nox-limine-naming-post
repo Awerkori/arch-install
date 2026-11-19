@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Post-boot hook: enforce Arch Linux -> Project Nox visual naming and stable unattended 5s auto-boot before limine-enroll-config signs the hash.
+set -Eeuo pipefail
+
+if [[ -x /usr/local/libexec/nox/nox-limine-normalize ]]; then
+  /usr/local/libexec/nox/nox-limine-normalize --post
+fi

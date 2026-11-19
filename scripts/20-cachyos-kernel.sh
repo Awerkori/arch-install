@@ -148,16 +148,19 @@ if ! sbctl setup --print-state --json 2>/dev/null | grep -q '"installed": true';
 fi
 
 install -d -m 0755 /etc/boot/hooks/pre.d /etc/boot/hooks/post.d
+nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-limine-normalize" "${NOX_LIBEXEC_DIR}/nox-limine-normalize"
+nox_atomic_install 0755 "${NOX_ROOT}/configs/boot-hooks/05-nox-limine-naming-pre" /etc/boot/hooks/pre.d/05-nox-limine-naming-pre
 [[ -e /etc/boot/hooks/pre.d/10-limine-reset-enroll ]] || ln -sf /usr/bin/limine-reset-enroll /etc/boot/hooks/pre.d/10-limine-reset-enroll
+nox_atomic_install 0755 "${NOX_ROOT}/configs/boot-hooks/85-nox-limine-naming-post" /etc/boot/hooks/post.d/85-nox-limine-naming-post
 [[ -e /etc/boot/hooks/post.d/90-limine-enroll-config ]] || ln -sf /usr/bin/limine-enroll-config /etc/boot/hooks/post.d/90-limine-enroll-config
 nox_atomic_install 0755 "${NOX_ROOT}/configs/boot-hooks/95-nox-sbctl-fallback" /etc/boot/hooks/post.d/95-nox-sbctl-fallback
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-secureboot-enroll" /usr/local/bin/nox-secureboot-enroll
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-secureboot-verify" /usr/local/bin/nox-secureboot-verify
 
-# Ensure /boot/limine.conf starts clean with 5s timeout and auto-boots linux-cachyos (entry 2 under /+Arch Linux)
+# Ensure /boot/limine.conf starts clean with 5s unattended auto-boot targeting Arch Linux/Project Nox
 cat > "${BOOT_MP}/limine.conf" <<'EOF'
 timeout: 5
-default_entry: 2
+default_entry: Arch Linux/Project Nox
 remember_last_entry: no
 EOF
 
@@ -169,27 +172,14 @@ else
   limine-install --skip-uefi
 fi
 
-# 6. Build initramfs with btrfs-overlayfs and register linux-cachyos in /boot/limine.conf (also enrolls + signs via hooks)
+# 6. Build initramfs with btrfs-overlayfs and register linux-cachyos in /boot/limine.conf (hooks normalize Project Nox + enroll + sign)
 nox_info "Executando limine-update para gerar initramfs e entradas linux-cachyos..."
 limine-update
 
-limine_header_changed=0
-if ! grep -Eq '^[[:space:]]*remember_last_entry:' "${BOOT_MP}/limine.conf"; then
-  sed -i '1i remember_last_entry: no' "${BOOT_MP}/limine.conf"
-  limine_header_changed=1
-fi
-if ! grep -Eq '^[[:space:]]*default_entry:' "${BOOT_MP}/limine.conf"; then
-  sed -i '1i default_entry: 2' "${BOOT_MP}/limine.conf"
-  limine_header_changed=1
-fi
-if ! grep -Eq '^[[:space:]]*timeout:' "${BOOT_MP}/limine.conf"; then
-  sed -i '1i timeout: 5' "${BOOT_MP}/limine.conf"
-  limine_header_changed=1
-fi
-if [[ "$limine_header_changed" -eq 1 ]]; then
-  limine-enroll-config || true
-  /etc/boot/hooks/post.d/95-nox-sbctl-fallback || true
-fi
+# Enforce normalized header & Project Nox visual title idempotently, then re-enroll if needed
+ESP_PATH="${BOOT_MP}" "${NOX_LIBEXEC_DIR}/nox-limine-normalize" --post
+limine-enroll-config || true
+/etc/boot/hooks/post.d/95-nox-sbctl-fallback || true
 
 # Guarantee EFI binaries are enrolled + signed cleanly
 if [[ -d /sys/firmware/efi ]]; then
@@ -201,7 +191,11 @@ for f in "${BOOT_MP}/EFI/limine/limine_x64.efi" "${BOOT_MP}/EFI/BOOT/BOOTX64.EFI
   [[ -s "$f" ]] || nox_die "Arquivo obrigatorio Limine ausente ou vazio: $f"
 done
 
-grep -q 'linux-cachyos' "${BOOT_MP}/limine.conf" || nox_die "${BOOT_MP}/limine.conf nao contem entrada para linux-cachyos!"
+grep -q 'kernel-id=linux-cachyos' "${BOOT_MP}/limine.conf" || nox_die "${BOOT_MP}/limine.conf nao contem kernel-id=linux-cachyos!"
+grep -Eq '^[[:space:]]*//Project Nox$' "${BOOT_MP}/limine.conf" || nox_die "${BOOT_MP}/limine.conf nao contem entrada visual //Project Nox!"
+grep -qx 'default_entry: Arch Linux/Project Nox' "${BOOT_MP}/limine.conf" || nox_die "${BOOT_MP}/limine.conf nao aponta default_entry para Arch Linux/Project Nox!"
+grep -qx 'timeout: 5' "${BOOT_MP}/limine.conf" || nox_die "${BOOT_MP}/limine.conf nao define timeout: 5!"
+grep -qx 'remember_last_entry: no' "${BOOT_MP}/limine.conf" || nox_die "${BOOT_MP}/limine.conf nao define remember_last_entry: no!"
 if grep -q 'linux-zen' "${BOOT_MP}/limine.conf"; then
   nox_die "${BOOT_MP}/limine.conf ainda contem entrada residual de linux-zen!"
 fi

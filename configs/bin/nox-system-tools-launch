@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""Safely launch a hidden technical tool selected from Noctalia global search."""
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+FIELD_CODE_RE = re.compile(r"%[fFuUdDnNickvm]")
+
+
+def parse_desktop_entry(path: Path) -> dict[str, str]:
+    data: dict[str, str] = {}
+    in_main = False
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return data
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            if in_main:
+                break
+            in_main = line == "[Desktop Entry]"
+            continue
+        if in_main and "=" in line:
+            k, v = line.split("=", 1)
+            key = k.strip()
+            if "[" not in key and key not in data:
+                data[key] = v.strip()
+    return data
+
+
+def build_command(desktop_id: str, entry: dict[str, str]) -> list[str]:
+    if desktop_id == "dev.noctalia.Noctalia.desktop":
+        return ["noctalia", "msg", "settings-open"]
+
+    raw_exec = entry.get("Exec", "").strip()
+    if not raw_exec:
+        return []
+
+    tokens = shlex.split(raw_exec)
+    cleaned: list[str] = []
+    for tok in tokens:
+        t = FIELD_CODE_RE.sub("", tok).strip()
+        if t:
+            cleaned.append(t)
+    if not cleaned:
+        return []
+
+    is_terminal = entry.get("Terminal", "").lower() == "true"
+    if is_terminal:
+        term = shutil.which("kitty") or "kitty"
+        return [term, "-e", *cleaned]
+    return cleaned
+
+
+def resolve_selection(selection: str, user_dir: Path, sys_dir: Path) -> tuple[str, dict[str, str]] | None:
+    target = selection.split("\t", 1)[0].strip()
+    if not target or not user_dir.is_dir():
+        return None
+    for ov in sorted(user_dir.glob("*.desktop")):
+        ov_data = parse_desktop_entry(ov)
+        if ov_data.get("NoDisplay", "").lower() != "true":
+            continue
+        sys_file = sys_dir / ov.name
+        if not sys_file.is_file():
+            continue
+        sys_data = parse_desktop_entry(sys_file)
+        name = (sys_data.get("Name") or ov_data.get("Name") or ov.stem).strip()
+        if name.lower() == target.lower():
+            return ov.name, sys_data
+    return None
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description="Launch a hidden technical tool by name.")
+    parser.add_argument(
+        "--user-dir",
+        default=str(Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "applications"),
+    )
+    parser.add_argument("--sys-dir", default="/usr/share/applications")
+    parser.add_argument("--dry-run", action="store_true", help="Print resolved argv without executing.")
+    parser.add_argument("selection", nargs="+", help="Selected entry title from dmenu.")
+    args = parser.parse_args(argv)
+
+    selection = " ".join(args.selection).strip()
+    found = resolve_selection(selection, Path(args.user_dir), Path(args.sys_dir))
+    if not found:
+        print(f"ERROR: hidden technical tool not found: {selection}", file=sys.stderr)
+        return 1
+
+    desktop_id, sys_data = found
+    cmd = build_command(desktop_id, sys_data)
+    if not cmd:
+        print(f"ERROR: no executable command for {desktop_id}", file=sys.stderr)
+        return 1
+
+    if args.dry_run:
+        print(" ".join(shlex.quote(c) for c in cmd))
+        return 0
+
+    subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

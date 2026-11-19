@@ -29,13 +29,13 @@ Os itens abaixo dependem de periféricos e GPU físicos (Tipo C) e não podem se
    paplay /usr/share/sounds/alsa/Front_Right.wav
    ```
 
-5. **Microfone analógico P2 + HushMic:**
+5. **Microfone analógico P2 e infraestrutura de áudio (sem HushMic):**
    ```bash
-   hushmic status
-   hushmic devices --json
    wpctl status
+   pactl list sources short
+   pactl get-default-source
    ```
-   Confirmar que a fonte selecionada NÃO é `Monitor of`, `HDMI` ou `Navi`, e que `HushMic` é a fonte padrão.
+   Confirmar que a fonte padrão selecionada pertence ao dispositivo físico de entrada (e NÃO a `Monitor of`, `HDMI` ou dispositivo virtual inexistente).
 
 6. **Caixa de som Bluetooth:**
    ```bash

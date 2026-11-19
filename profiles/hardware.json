@@ -53,12 +53,6 @@
       "mixer_control_name": "PCM Playback Volume",
       "mixer_control_index": 1,
       "mixer_digital_value": 100
-    },
-    "hushmic": {
-      "exclude_source_patterns": ["Monitor of", "HDMI", "Navi", "HushMic", "Dummy"],
-      "prefer_source_patterns": ["Analog", "ALC1220", "Ryzen HD Audio", "Realtek"],
-      "autostart": true,
-      "set_default": true
     }
   },
   "network": {

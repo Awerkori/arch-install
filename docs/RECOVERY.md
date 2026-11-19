@@ -42,7 +42,7 @@ Caso o sistema não inicialize após uma falha de atualização (lembrando que a
 
 ## 3. Rollback de snapshot Btrfs (preservando `/home`, chaves `sbctl` e coerência com `/boot`)
 - **Importante:** As chaves privadas do Secure Boot em `/var/lib/sbctl/keys/` acompanham o subvolume `@` (e jamais vão para o GitHub). Ao realizar rollback de `@`, re-sincronize a ESP e o hash inscrito no Limine antes de reiniciar com Secure Boot ativo:
-  1. Pelo Limine, escolha a entrada de snapshot desejado em `Snapshots` e, após iniciar, execute `sudo limine-snapper-restore` (método configurado: `RESTORE_METHOD=replace`) e reinicie (`limine-enroll-config` e o hook de fallback re-assinam automaticamente).
+  1. Pelo Limine, escolha a entrada de snapshot desejada em `Arch Linux` → `Snapshots` e, após iniciar, execute pelo terminal Kitty `sudo limine-snapper-restore` (método configurado: `RESTORE_METHOD=replace`, entrada oculta no launcher principal ou pesquisável por `Limine`) e reinicie (`limine-enroll-config`, `85-nox-limine-naming-post` e `95-nox-sbctl-fallback` normalizam a entrada `Project Nox` e re-assinam automaticamente).
   2. Ou manualmente via `subvolid=5` (preservando `@home` intacto; substitua `N` pelo ID do snapshot `PRE`):
      ```bash
      ROOT_DEV=$(findmnt -no SOURCE / | sed 's/\[.*//')
@@ -53,3 +53,8 @@ Caso o sistema não inicialize após uma falha de atualização (lembrando que a
      ```
   3. Se o kernel tiver mudado entre o `PRE` e o estado quebrado, reentre via `arch-chroot` no novo `@` (com `/boot` montado) e execute `pacman -S --noconfirm linux-cachyos linux-cachyos-headers && limine-update && limine-snapper-sync && limine-enroll-config && /etc/boot/hooks/post.d/95-nox-sbctl-fallback` antes de reiniciar.
   4. Após bootar normalmente no sistema restaurado e validar, remova o `@.broken.*` antigo com `sudo btrfs subvolume delete /mnt/btrfs-top/@.broken.*`.
+
+## 4. Acesso rápido às ferramentas técnicas ocultadas no launcher
+
+- **Terminal / Launcher:** pressione `Super + R`, digite o nome da ferramenta (`Qt6 Settings`, `Qt5 Settings`, `GTK Settings`, `Limine`, `Noctalia`, `Volume Control`, `btop++`) ou use o prefixo `/tools` para abrir mesmo quando ocultas da listagem inicial.
+- **CLI direto no Kitty:** `btop`, `fastfetch`, `sudo limine-snapper-restore`, `qt6ct`, `qt5ct`, `nwg-look`, `pavucontrol`, `noctalia msg settings-open`.

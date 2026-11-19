@@ -35,8 +35,8 @@ if command -v limine-snapper-sync >/dev/null 2>&1 && [[ -f /boot/limine.conf ]];
     limine-update || true
   fi
   limine-snapper-sync || true
-  if ! grep -Eq '^[[:space:]]*default_entry:' /boot/limine.conf; then
-    sed -i '1i default_entry: 2\nremember_last_entry: no' /boot/limine.conf
+  if [[ -x /usr/local/libexec/nox/nox-limine-normalize ]]; then
+    /usr/local/libexec/nox/nox-limine-normalize --post || true
   fi
   command -v limine-enroll-config >/dev/null 2>&1 && limine-enroll-config >/dev/null 2>&1 || true
   [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true

@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Stage 52: PipeWire, WirePlumber, Bluetooth, dynamic Fuxi H3 helper, and HushMic.
+# Stage 52: PipeWire, WirePlumber, Bluetooth, and dynamic Fuxi H3 helper.
 set -Eeuo pipefail
 source "${NOX_ROOT}/scripts/lib/common.sh"
-source "${NOX_ROOT}/scripts/lib/aur.sh"
 
 nox_assert_target_context
 if $NOX_DRY_RUN; then
-  nox_info "[DRY-RUN] 52-audio: configuraria PipeWire, WirePlumber, Bluetooth, Fuxi H3 fix e HushMic."
+  nox_info "[DRY-RUN] 52-audio: configuraria PipeWire, WirePlumber, Bluetooth e Fuxi H3 fix."
   exit 0
 fi
 
@@ -22,14 +21,14 @@ pacman -S --needed --noconfirm \
   bluez-utils \
   pavucontrol
 
-# Ensure pulseaudio daemon is not installed
+# Ensure pulseaudio daemon and HushMic are not installed
 if pacman -Qq pulseaudio >/dev/null 2>&1; then
   nox_die "PulseAudio conflitante detectado; apenas PipeWire e permitido."
 fi
-
-# Install HushMic (AUR prebuilt binary) as unprivileged user
-nox_aur_install_pkg "hushmic-bin"
-nox_aur_cleanup_user
+if pacman -Qq hushmic-bin >/dev/null 2>&1; then
+  nox_info "Removendo hushmic-bin legado..."
+  pacman -Rns --noconfirm hushmic-bin || true
+fi
 
 # Enable Bluetooth service & tune BlueZ reconnection/fast-connect cleanly
 systemctl enable bluetooth.service
@@ -71,36 +70,30 @@ nox_atomic_install 0644 "${NOX_ROOT}/configs/wireplumber/51-bluetooth-priority.c
 nox_atomic_install 0644 "${NOX_ROOT}/configs/wireplumber/52-fuxi-h3-profile.conf" \
   /etc/xdg/wireplumber/wireplumber.conf.d/52-fuxi-h3-profile.conf
 
-# Install dynamic Fuxi H3 & HushMic helpers + udev hotplug path watcher
+# Install dynamic Fuxi H3 helper + udev hotplug path watcher
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-fuxi-h3-fix" "${NOX_LIBEXEC_DIR}/nox-fuxi-h3-fix"
-nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-hushmic-setup" "${NOX_LIBEXEC_DIR}/nox-hushmic-setup"
 ln -sf "${NOX_LIBEXEC_DIR}/nox-fuxi-h3-fix" /usr/local/bin/nox-fuxi-h3-fix
-ln -sf "${NOX_LIBEXEC_DIR}/nox-hushmic-setup" /usr/local/bin/nox-hushmic-setup
 nox_atomic_install 0644 "${NOX_ROOT}/configs/udev/85-nox-fuxi-h3.rules" /etc/udev/rules.d/85-nox-fuxi-h3.rules
 nox_atomic_install 0644 "${NOX_ROOT}/configs/systemd/nox-fuxi-h3.path" /etc/systemd/user/nox-fuxi-h3.path
 nox_atomic_install 0644 "${NOX_ROOT}/configs/systemd/nox-fuxi-h3.service" /etc/systemd/user/nox-fuxi-h3.service
 mkdir -p /etc/systemd/user/umbriel-session.target.wants
 ln -sf /etc/systemd/user/nox-fuxi-h3.path /etc/systemd/user/umbriel-session.target.wants/nox-fuxi-h3.path
 
-# Do NOT enable hushmic.service alongside XDG autostart (--tray) to avoid duplicate lock race
+# Ensure any legacy HushMic state/autostart/process artifacts are cleanly absent
 systemctl --global disable hushmic.service >/dev/null 2>&1 || true
-
-# Pre-seed hushmic autostart config for existing users & skel (without forcing invalid device names)
-mkdir -p /etc/skel/.config/hushmic /etc/skel/.config/autostart
-cat > /etc/skel/.config/hushmic/config.toml <<'EOF'
-mic = "default"
-set_default = true
-autostart = true
-EOF
-
-while IFS=: read -r uname uid gid uhome _shell; do
+pkill -f '/usr/bin/hushmic' >/dev/null 2>&1 || true
+pkill -f 'hushmic/filter-chain\.conf' >/dev/null 2>&1 || true
+rm -f "${NOX_LIBEXEC_DIR}/nox-hushmic-setup" /usr/local/bin/nox-hushmic-setup
+rm -rf /etc/skel/.config/hushmic
+rm -f /etc/skel/.config/autostart/hushmic*.desktop
+while IFS=: read -r uname _uid _gid uhome _shell; do
   [[ -n "$uname" && -d "$uhome" ]] || continue
-  install -d -m 0755 -o "$uid" -g "$gid" "${uhome}/.config/hushmic"
-  if [[ ! -f "${uhome}/.config/hushmic/config.toml" ]]; then
-    nox_atomic_install 0644 /etc/skel/.config/hushmic/config.toml "${uhome}/.config/hushmic/config.toml"
-    chown "${uid}:${gid}" "${uhome}/.config/hushmic/config.toml"
+  rm -rf "${uhome}/.config/hushmic"
+  rm -f "${uhome}/.config/autostart"/hushmic*.desktop
+  if [[ -f "${uhome}/.local/state/wireplumber/default-nodes" ]] && \
+     grep -q 'hushmic_source' "${uhome}/.local/state/wireplumber/default-nodes"; then
+    sed -i '/hushmic_source/d' "${uhome}/.local/state/wireplumber/default-nodes"
   fi
-  su -s /usr/bin/bash "$uname" -c "HOME='${uhome}' hushmic config set autostart true && HOME='${uhome}' hushmic config set set_default true" >/dev/null 2>&1 || true
 done < <(nox_list_human_users)
 
-nox_info "Audio PipeWire/WirePlumber, Bluetooth, Fuxi H3 fix e HushMic configurados."
+nox_info "Audio PipeWire/WirePlumber, Bluetooth e Fuxi H3 fix configurados (sem HushMic)."

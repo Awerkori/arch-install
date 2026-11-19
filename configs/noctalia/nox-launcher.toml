@@ -1,0 +1,13 @@
+# Nox Archinstall — Minimalist Noctalia Launcher Configuration
+# Keeps initial launcher view focused on everyday apps (Kitty, Luciole, Firefox + future personal apps)
+# while keeping hidden technical/maintenance tools searchable by name in global search (or via /tools).
+
+[shell.launcher]
+default_view = "all"
+
+[shell.launcher.dmenu.entry.system-tools]
+command = "/usr/local/libexec/nox/nox-system-tools-list"
+exec = "/usr/local/libexec/nox/nox-system-tools-launch {selection}"
+prefix = "tools"
+glyph = "tool"
+global = true

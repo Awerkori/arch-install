@@ -34,7 +34,15 @@ check "linux-cachyos e headers instalados" bash -c "pacman -Q linux-cachyos linu
 check "nenhum kernel concorrente instalado" bash -c "! pacman -Q linux linux-zen linux-lts linux-hardened >/dev/null 2>&1"
 check "arquivos de boot limine e cachyos presentes" bash -c "test -s '${BOOT_MP}/EFI/limine/limine_x64.efi' && test -s '${BOOT_MP}/EFI/BOOT/BOOTX64.EFI' && test -s '${BOOT_MP}/limine.conf'"
 check "limine-mkinitcpio-hook, limine-snapper-sync e sbctl instalados" bash -c "pacman -Q limine limine-mkinitcpio-hook limine-snapper-sync sbctl >/dev/null"
-check "limine.conf contem linux-cachyos sem linux-zen e sem arch-limine" bash -c "grep -q linux-cachyos '${BOOT_MP}/limine.conf' && ! grep -q linux-zen '${BOOT_MP}/limine.conf' && test ! -d '${BOOT_MP}/EFI/arch-limine'"
+check "limine.conf contem Arch Linux -> Project Nox (kernel-id=linux-cachyos) e boot automatico 5s" bash -c "
+  grep -q 'kernel-id=linux-cachyos' '${BOOT_MP}/limine.conf' &&
+  grep -Eq '^[[:space:]]*//Project Nox\$' '${BOOT_MP}/limine.conf' &&
+  grep -qx 'default_entry: Arch Linux/Project Nox' '${BOOT_MP}/limine.conf' &&
+  grep -qx 'timeout: 5' '${BOOT_MP}/limine.conf' &&
+  grep -qx 'remember_last_entry: no' '${BOOT_MP}/limine.conf' &&
+  ! grep -q 'linux-zen' '${BOOT_MP}/limine.conf' &&
+  test ! -d '${BOOT_MP}/EFI/arch-limine'
+"
 check "hook btrfs-overlayfs presente em /etc/mkinitcpio.conf" bash -c "grep -Eq '^HOOKS=.*(btrfs-overlayfs|sd-btrfs-overlayfs)' /etc/mkinitcpio.conf"
 check "/.snapshots montado como subvolume Btrfs" bash -c "mountpoint -q /.snapshots && btrfs subvolume show /.snapshots >/dev/null"
 check "cadeia criptografica Limine + sbctl validada (nox-secureboot-verify)" /usr/local/bin/nox-secureboot-verify
@@ -51,15 +59,17 @@ check "mesa e vulkan-radeon 64/32 bits instalados" bash -c "pacman -Q mesa lib32
 check "pacman instalado do CachyOS" bash -c "pacman -Qi pacman | grep -qE 'Installed From[[:space:]]*:[[:space:]]*cachyos'"
 check "paru estavel instalado do CachyOS" bash -c "pacman -Qi paru | grep -qE 'Installed From[[:space:]]*:[[:space:]]*cachyos' && ! pacman -Q paru-git >/dev/null 2>&1"
 
-# 3. Forbidden packages absent (including GRUB & grub-btrfs)
-for p in grub grub-btrfs os-prober hyprland sddm nemo plasma-desktop gnome-shell firefox chromium steam discord yay paru-git; do
+# 3. Forbidden packages absent (including GRUB, grub-btrfs, HushMic, redundant monitors/fetchers)
+for p in grub grub-btrfs os-prober hyprland sddm nemo plasma-desktop gnome-shell chromium steam discord yay paru-git hushmic-bin htop glances neofetch macchina; do
   check "pacote proibido ausente: $p" bash -c "! pacman -Q '$p' >/dev/null 2>&1"
 done
 
-# 4. Desktop, Greeter, Kitty, Bash, Luciole, HushMic
+# 4. Desktop, Greeter, Kitty, Bash, Luciole, Firefox Pure, Btop, Fastfetch, Minimalist Launcher
 check "umbriel, noctalia, noctalia-greeter, greetd, kitty instalados" bash -c "pacman -Q umbriel noctalia noctalia-greeter greetd kitty >/dev/null"
 check "luciole-git instalado e .desktop presente" bash -c "pacman -Q luciole-git >/dev/null && test -f /usr/share/applications/dev.noctalia.luciole.desktop"
-check "hushmic-bin instalado" bash -c "pacman -Q hushmic-bin >/dev/null && command -v hushmic >/dev/null"
+check "firefox-pure (CachyOS) instalado como navegador padrao XDG" bash -c "pacman -Qi firefox-pure | grep -qE 'Installed From[[:space:]]*:[[:space:]]*(cachyos-znver4|cachyos)' && test -f /usr/share/applications/firefox.desktop && grep -q 'x-scheme-handler/https=firefox.desktop' /etc/skel/.config/mimeapps.list"
+check "btop, rocm-smi-lib e fastfetch instalados com configs" bash -c "pacman -Q btop rocm-smi-lib fastfetch >/dev/null && test -s /etc/skel/.config/btop/btop.conf && test -s /etc/skel/.config/fastfetch/config.jsonc"
+check "launcher minimalista Noctalia e ferramenta de busca tecnica configurados" bash -c "test -s /etc/skel/.config/noctalia/nox-launcher.toml && test -x /usr/local/libexec/nox/nox-system-tools-list && test -x /usr/local/libexec/nox/nox-system-tools-launch && test -s /etc/skel/.local/share/applications/dev.noctalia.Noctalia.desktop"
 check "greetd habilitado e apontando para noctalia-greeter-session" bash -c "systemctl is-enabled greetd.service >/dev/null && grep -q noctalia-greeter-session /etc/greetd/config.toml"
 check "umbriel config validate OK" bash -c "umbriel config validate -c /etc/skel/.config/umbriel/config.toml"
 check "umbriel layout padrao dwindle" bash -c "grep -Eq '^[[:space:]]*mode[[:space:]]*=[[:space:]]*\"dwindle\"' /etc/skel/.config/umbriel/config.toml && ! grep -Eq '^[[:space:]]*mode[[:space:]]*=[[:space:]]*\"(scrolling|master|stacking)\"' /etc/skel/.config/umbriel/config.toml"

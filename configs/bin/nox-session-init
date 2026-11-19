@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# User session initializer: display profile, dark mode GSettings, XDG mime, Fuxi H3, HushMic.
+# User session initializer: display profile, dark mode GSettings, XDG mime (Luciole + Firefox), Fuxi H3.
 set -Eeuo pipefail
-
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/nox-archinstall"
-mkdir -p "$STATE_DIR"
 
 # 1. Generate dynamic display outputs.toml for Umbriel
 /usr/local/libexec/nox/nox-display-profile || true
@@ -17,18 +14,24 @@ if command -v gsettings >/dev/null 2>&1; then
   gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' >/dev/null 2>&1 || true
 fi
 
-# 3. Ensure Luciole is XDG default for inode/directory
+# 3. Ensure Luciole (directories) and Firefox Pure (HTTP/HTTPS/HTML) are XDG defaults
 if command -v xdg-mime >/dev/null 2>&1; then
   if [[ -f /usr/share/applications/dev.noctalia.luciole.desktop ]]; then
     xdg-mime default dev.noctalia.luciole.desktop inode/directory >/dev/null 2>&1 || true
   fi
+  if [[ -f /usr/share/applications/firefox.desktop ]]; then
+    xdg-mime default firefox.desktop \
+      x-scheme-handler/http \
+      x-scheme-handler/https \
+      x-scheme-handler/about \
+      x-scheme-handler/unknown \
+      text/html \
+      application/xhtml+xml >/dev/null 2>&1 || true
+  fi
+fi
+if command -v xdg-settings >/dev/null 2>&1 && [[ -f /usr/share/applications/firefox.desktop ]]; then
+  xdg-settings set default-web-browser firefox.desktop >/dev/null 2>&1 || true
 fi
 
 # 4. Dynamic Fuxi H3 fix (skips cleanly if headset absent)
 /usr/local/libexec/nox/nox-fuxi-h3-fix >/dev/null 2>&1 || true
-
-# 5. Initial HushMic configuration once per user (autostart --tray + physical mic)
-if [[ ! -f "${STATE_DIR}/hushmic-init.done" ]] && command -v hushmic >/dev/null 2>&1; then
-  /usr/local/libexec/nox/nox-hushmic-setup >/dev/null 2>&1 || true
-  date -Iseconds > "${STATE_DIR}/hushmic-init.done"
-fi
