@@ -1,6 +1,6 @@
 {
-  "version": "--repo-dir",
-  "payload_commit": "10545455a080b0be5dcecbecfc34357d103659cd",
-  "payload_url": "/home/awerkori/.local/share/antigravity/Nox-Workspace/laboratorios/nox-archinstall-lab/repo/nox-archinstall-payload---repo-dir.tar.gz",
-  "payload_sha256": "69daec45ba6bced3264cbcefc10ad4c81fbdcafc5b51f2bce040c6428fec1da8"
+  "version": "v1.0.0-rc1",
+  "payload_commit": "fb1b5157db8368347eb8b624a373f4c2f9ae85c4",
+  "payload_url": "https://github.com/Awerkori/arch-install/releases/download/v1.0.0-rc1/nox-archinstall-payload-v1.0.0-rc1.tar.gz",
+  "payload_sha256": "fbcceb8193b930bbcc2d5204c3fc9611f73bcbdcb3de72f106187e7b6b403992"
 }
