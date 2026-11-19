@@ -1,24 +1,73 @@
-# Nox Archinstall — Project Nox Obsidian Purple Visual Identity
+# Nox Archinstall — Project Nox Obsidian Purple Visual Identity & Runtime Experience
 [theme]
 source = "custom"
 custom_palette = "ObsidianPurple"
 mode = "dark"
-pure_black_dark = false
-shell_mode = "follow"
 sync_color_scheme = true
-terminal_colors = "palette"
 
 [theme.templates]
 enable_builtin_templates = true
-builtin_ids = ["btop", "gtk3", "gtk4", "kitty", "qt", "umbriel"]
+builtin_ids = [
+  "gtk",
+  "qt",
+  "kitty",
+  "btop",
+  "umbriel",
+]
 
 [shell]
-avatar_path = "/usr/share/noctalia/assets/noctalia.svg"
-circular_avatar = true
-card_borders = true
-button_borders = true
-input_borders = true
+avatar_path = "/usr/share/nox-archinstall/icons/nox-emblem.png"
+font_family = "Plus Jakarta Sans"
+corner_radius_scale = 1.0
+setup_wizard_enabled = false
+telemetry_enabled = false
 
 [wallpaper]
 directory = "/usr/share/nox-archinstall/wallpapers"
 enabled = true
+fill_mode = "crop"
+transition = ["fade"]
+transition_duration = 600.0
+transition_on_startup = false
+
+[lockscreen]
+enabled = true
+blurred_desktop = false
+tint_color = "surface"
+tint_intensity = 0.08
+transition = ["golden"]
+transition_duration = 900.0
+wallpaper = "/usr/share/nox-archinstall/wallpapers/nox-lockscreen.png"
+
+[hooks]
+session_locked = ["noctalia msg plugin noctalia/mpvpaper:service all pause"]
+session_unlocked = ["noctalia msg plugin noctalia/mpvpaper:service all resume"]
+
+[plugins]
+auto_update = "none"
+enabled = ["noctalia/mpvpaper"]
+
+[[plugins.source]]
+enabled = true
+kind = "path"
+location = "/usr/share/nox-archinstall/noctalia-plugins"
+name = "nox-bundled"
+
+[[plugins.source]]
+enabled = true
+kind = "git"
+location = "https://github.com/noctalia-dev/official-plugins"
+name = "official"
+
+[[plugins.source]]
+enabled = true
+kind = "git"
+location = "https://github.com/noctalia-dev/community-plugins"
+name = "community"
+
+[plugin_settings."noctalia/mpvpaper"]
+video_directory = "/usr/share/nox-archinstall/wallpapers"
+mute = true
+hardware_decode = true
+auto_pause = "full"
+extract_last_frame = true

@@ -171,6 +171,8 @@ nox_sync_hidden_tech_desktops() {
     qt6ct.desktop
     qv4l2.desktop
     qvidcap.desktop
+    lstopo.desktop
+    mpv.desktop
     limine-snapper-restore.desktop
     org.pulseaudio.pavucontrol.desktop
     btop.desktop

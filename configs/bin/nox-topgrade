@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Concurrency guard around /usr/bin/topgrade so two interactive Topgrade sessions
+# cannot overlap and confuse Snapper PRE/POST session consolidation.
+set -euo pipefail
+
+TOPGRADE_REAL="/usr/bin/topgrade"
+if [[ ! -x "$TOPGRADE_REAL" ]]; then
+  echo "Erro: /usr/bin/topgrade nao encontrado." >&2
+  exit 127
+fi
+
+DRY_OR_INFO=false
+for arg in "$@"; do
+  case "$arg" in
+    -n|--dry-run|-h|--help|-V|--version|--config-reference|--edit-config)
+      DRY_OR_INFO=true
+      break
+      ;;
+  esac
+done
+
+if $DRY_OR_INFO; then
+  exec "$TOPGRADE_REAL" "$@"
+fi
+
+LOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+LOCK_FILE="${LOCK_DIR}/nox-topgrade-${UID}.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "Erro: ja existe uma sessao do topgrade em execucao para este usuario ($LOCK_FILE)." >&2
+  exit 1
+fi
+
+"$TOPGRADE_REAL" "$@"

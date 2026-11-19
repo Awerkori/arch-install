@@ -1,14 +1,16 @@
+# Nox Archinstall — Noctalia Greeter (Project Nox Obsidian Purple)
 [session]
 default = "Umbriel"
 
 [appearance]
-scheme = "ObsidianPurple"
+scheme = "Synced"
 password_style = "default"
 hide_logo = false
 power_buttons_position = "bottom-right"
-scheme_selector_position = "top-right"
+scheme_selector_position = "hidden"
 theme_mode = "dark"
-corner_radius_scale = 1.0
+font_family = "Plus Jakarta Sans"
+corner_radius_scale = 1.15
 
 [appearance.palette]
 primary = "#9333ea"
@@ -28,26 +30,30 @@ hover = "#25183c"
 on_hover = "#faf5ff"
 
 [appearance.wallpaper]
-path = "/usr/share/nox-archinstall/wallpapers/obsidian-purple.png"
+path = "/usr/share/nox-archinstall/wallpapers/nox-greeter.png"
+fill_mode = "crop"
 fill_color = "#090610"
+blur = 0.0
+tint = 0.08
 
 [clock]
 enabled = true
 position = "above-panel"
 time_format = "{:%H:%M}"
-date_format = "%A, %x"
+date_format = "%A, %d %b %Y"
+time_font_size = 56
+date_font_size = 15
 
 [output]
 use_synced_settings = true
 
 [idle]
-timeout = 300
+timeout = 0
 
 [cursor]
 theme = "Adwaita"
 size = 24
 path = "/usr/share/icons"
-
 
 [keyboard]
 layout = "us"

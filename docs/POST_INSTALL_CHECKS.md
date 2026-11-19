@@ -76,3 +76,9 @@ Os itens abaixo dependem de periféricos e GPU físicos (Tipo C) e não podem se
       sudo sbctl status
       sudo nox-secureboot-verify --require-active
       ```
+
+10. **Topgrade, ProtonPlus, GE-Proton e DWProton (`PENDENTE-HARDWARE` após instalar Steam/launcher):**
+    - `Proton-CachyOS SLR` já vem pré-instalado em `/usr/share/steam/compatibilitytools.d/proton-cachyos-slr/` e é atualizado via `topgrade` (`paru`).
+    - Sem `Steam`/`Heroic`/`Lutris`/`Bottles` instalados, o `ProtonPlus` não possui diretório-alvo ativo para baixar `GE-Proton` ou `DWProton` durante a instalação offline. Depois de instalar seu launcher de jogos:
+      1. Abra o **ProtonPlus** pelo launcher do Noctalia (visível na listagem principal) ou execute `protonplus install steam ge-proton` e `protonplus install steam dwproton`.
+      2. Execute `topgrade` como usuário normal no Kitty para validar atualização conjunta (`paru` + `protonplus update all`) e criação/consolidação automática de `Ponto de Segurança` e `Estado Atualizado`.

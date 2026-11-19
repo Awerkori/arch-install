@@ -157,6 +157,11 @@ nox_atomic_install 0755 "${NOX_ROOT}/configs/boot-hooks/95-nox-sbctl-fallback" /
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-secureboot-enroll" /usr/local/bin/nox-secureboot-enroll
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-secureboot-verify" /usr/local/bin/nox-secureboot-verify
 
+# Ensure Limine Obsidian Purple wallpaper is present on ESP before limine-update / enroll
+if [[ -f "${NOX_ROOT}/configs/wallpapers/nox-limine.png" ]]; then
+  nox_atomic_install 0644 "${NOX_ROOT}/configs/wallpapers/nox-limine.png" "${BOOT_MP}/nox-limine-wallpaper.png"
+fi
+
 # Ensure /boot/limine.conf starts clean with 5s unattended auto-boot targeting Arch Linux/Project Nox
 cat > "${BOOT_MP}/limine.conf" <<'EOF'
 timeout: 5

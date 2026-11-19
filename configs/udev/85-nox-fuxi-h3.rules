@@ -3,3 +3,4 @@ ACTION=="add|change", SUBSYSTEM=="usb", ATTRS{manufacturer}=="*XiiSound*", TEST=
 ACTION=="add|change", SUBSYSTEM=="usb", ATTRS{product}=="*Fuxi*H3*", TEST=="power/control", ATTR{power/control}="on"
 ACTION=="add|change", SUBSYSTEM=="sound", KERNEL=="controlC*", ATTRS{product}=="*Fuxi*H3*", RUN+="/usr/bin/touch /run/nox-fuxi-h3-trigger"
 ACTION=="add|change", SUBSYSTEM=="sound", KERNEL=="controlC*", ATTRS{manufacturer}=="*XiiSound*", RUN+="/usr/bin/touch /run/nox-fuxi-h3-trigger"
+ACTION=="remove", SUBSYSTEM=="sound", KERNEL=="controlC*", ENV{ID_MODEL}=="*Fuxi*H3*", RUN+="/usr/bin/touch /run/nox-fuxi-h3-trigger"

@@ -1,38 +1,86 @@
 #!/usr/bin/env python3
-"""Normalize /boot/limine.conf visual naming and unattended boot defaults safely.
+"""Normalize /boot/limine.conf visual naming, Obsidian Purple theme, and snapshots safely.
 
 --pre:
-  Temporarily restore `//Project Nox` back to `//linux-cachyos` strictly on the
-  top-level entry under `/+Arch Linux` whose block carries
-  `comment: kernel-id=linux-cachyos`. This keeps limine-entry-tool and
-  limine-snapper-sync operating on their canonical upstream entry name without
-  duplicating entries.
+  Temporarily restore canonical upstream names (`//linux-cachyos`, `///<id> | ...`,
+  `////linux-cachyos`) before `limine-entry-tool` / `limine-snapper-sync` parse
+  `limine.conf`, keeping all snapshot subvolumes and hashes intact.
 
 --post:
-  1. Ensure the global Limine header enforces unattended 5s auto-boot via a
-     stable named entry path:
-       timeout: 5
-       default_entry: Arch Linux/Project Nox
-       remember_last_entry: no
-  2. Rename the top-level `//linux-cachyos` heading under `/+Arch Linux` (only
-     when its entry block contains `comment: kernel-id=linux-cachyos`) to
-     `//Project Nox`, preserving `kernel-id=linux-cachyos`, paths, hashes,
-     cmdline, and all `//Snapshots` subentries intact.
+  1. Enforce global Limine unattended 5s auto-boot + Obsidian Purple theme +
+     BLAKE2b-verified wallpaper (`boot():/nox-limine-wallpaper.png#<b2sum>`) when present.
+  2. Rename top-level `//linux-cachyos` (with `comment: kernel-id=linux-cachyos`)
+     under `/+Arch Linux` to `//Project Nox`.
+  3. Collapse `//Snapshots` by default (never `//+Snapshots`) and transform its
+     children into cleanly ordered, directly bootable entries with zero technical text:
+       - `///Ponto de Segurança` (PRE snapshot / recovery point)
+       - `///Estado Atualizado` (POST snapshot)
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
-HEADER_KEYS = ("timeout", "default_entry", "remember_last_entry")
 DESIRED_HEADER = [
     "timeout: 5",
     "default_entry: Arch Linux/Project Nox",
     "remember_last_entry: no",
 ]
+
+MANAGED_HEADER_KEYS = {
+    "timeout",
+    "default_entry",
+    "remember_last_entry",
+    "wallpaper",
+    "wallpaper_style",
+    "backdrop",
+    "interface_branding",
+    "interface_branding_colour",
+    "interface_branding_color",
+    "interface_help_hidden",
+    "term_background",
+    "term_foreground",
+    "term_background_bright",
+    "term_foreground_bright",
+    "term_palette",
+    "term_palette_bright",
+    "term_margin",
+    "term_margin_gradient",
+}
+
+OBSIDIAN_HEADER = [
+    "backdrop: 090610",
+    "interface_branding: Project Nox",
+    "interface_branding_colour: fbbf24",
+    "interface_help_hidden: yes",
+    "term_background: c8090610",
+    "term_foreground: f5f2ff",
+    "term_background_bright: 7c3aed",
+    "term_foreground_bright: fbfbfb",
+    "term_palette: 090610;f87171;4ade80;fbbf24;818cf8;a855f7;c084fc;c4b5fd",
+    "term_palette_bright: 1b122c;fca5a5;86efac;fde68a;a5b4fc;c084fc;e9d5ff;f5f2ff",
+    "term_margin: 48",
+    "term_margin_gradient: 12",
+]
+
+KERNEL_BOOT_KEYS = (
+    "protocol:",
+    "module_path:",
+    "path:",
+    "image_path:",
+    "cmdline:",
+    "kaslr:",
+    "resolution:",
+)
+
+LABEL_PRE = "Ponto de Segurança"
+LABEL_POST = "Estado Atualizado"
 
 
 def _entry_depth(line: str) -> int:
@@ -56,10 +104,37 @@ def _split_top_header(lines: list[str]) -> tuple[list[str], list[str]]:
     return lines, []
 
 
-def _normalize_header(header: list[str]) -> list[str]:
-    key_re = re.compile(r"^\s*(timeout|default_entry|remember_last_entry)\s*:")
-    kept = [line for line in header if not key_re.match(line)]
-    return list(DESIRED_HEADER) + kept
+def _blake2b_hex(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    h = hashlib.blake2b(digest_size=64)
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _normalize_header(header: list[str], esp_dir: Path | None = None) -> list[str]:
+    kept: list[str] = []
+    for line in header:
+        m = re.match(r"^\s*([A-Za-z0-9_]+)\s*:", line)
+        if m and m.group(1).lower() in MANAGED_HEADER_KEYS:
+            continue
+        kept.append(line)
+
+    style_lines: list[str] = []
+    if esp_dir is not None:
+        wp = esp_dir / "nox-limine-wallpaper.png"
+        digest = _blake2b_hex(wp)
+        if digest:
+            style_lines.extend(
+                [
+                    f"wallpaper: boot():/nox-limine-wallpaper.png#{digest}",
+                    "wallpaper_style: stretched",
+                ]
+            )
+    style_lines.extend(OBSIDIAN_HEADER)
+    return list(DESIRED_HEADER) + style_lines + kept
 
 
 def _rename_primary_kernel_entry(body: list[str], src_name: str, dst_name: str) -> list[str]:
@@ -82,7 +157,6 @@ def _rename_primary_kernel_entry(body: list[str], src_name: str, dst_name: str) 
             plus_prefix = "+" if rest.startswith("+") else ""
             entry_title = rest[len(plus_prefix) :].strip()
 
-            # Find block end (next entry line at any depth)
             j = i + 1
             while j < len(out) and not _is_entry_line(out[j]):
                 j += 1
@@ -101,15 +175,240 @@ def _rename_primary_kernel_entry(body: list[str], src_name: str, dst_name: str) 
     return out
 
 
-def transform(text: str, mode: str) -> str:
+def _extract_snapshot_id(lines: list[str], heading: str = "") -> int | None:
+    for line in lines:
+        m = re.search(r"subvol=/@\.snapshots/(\d+)/snapshot\b", line)
+        if m:
+            return int(m.group(1))
+    m_head = re.match(r"^\s*///\+?\s*(\d+)\b", heading)
+    if m_head:
+        return int(m_head.group(1))
+    return None
+
+
+def _load_snapper_map(esp_dir: Path | None, snapper_json: Path | None) -> dict[int, dict]:
+    entries: list[dict] = []
+    if snapper_json is not None and snapper_json.is_file():
+        data = json.loads(snapper_json.read_text(encoding="utf-8"))
+        entries = data.get("root", data) if isinstance(data, dict) else data
+    elif os.geteuid() == 0 and esp_dir == Path("/boot"):
+        try:
+            proc = subprocess.run(
+                ["snapper", "--no-dbus", "--jsonout", "-c", "root", "list"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                data = json.loads(proc.stdout)
+                entries = data.get("root", data) if isinstance(data, dict) else data
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+            pass
+
+    meta: dict[int, dict] = {}
+    for item in entries:
+        num = item.get("number")
+        if isinstance(num, int) and num > 0:
+            meta[num] = {
+                "type": str(item.get("type", "single")).lower(),
+                "pre_number": item.get("pre-number"),
+            }
+
+    if not meta and esp_dir is not None and esp_dir.is_dir():
+        for snap_file in esp_dir.glob("*/limine_history/snapshots.json"):
+            try:
+                hist = json.loads(snap_file.read_text(encoding="utf-8"))
+                for s in hist.get("snapshotEntries", []):
+                    sid_obj = s.get("snapperID", {})
+                    sid = sid_obj.get("snapshotID")
+                    props = sid_obj.get("properties", {})
+                    if isinstance(sid, int) and sid > 0:
+                        meta[sid] = {
+                            "type": str(props.get("type", "single")).lower(),
+                            "pre_number": None,
+                        }
+            except (OSError, json.JSONDecodeError):
+                continue
+    return meta
+
+
+def _find_snapshots_section(body: list[str]) -> tuple[int, int] | None:
+    in_arch_os = False
+    snap_start: int | None = None
+    for idx, line in enumerate(body):
+        depth = _entry_depth(line)
+        if depth == 1:
+            if snap_start is not None:
+                return snap_start, idx
+            title = line.lstrip(" \t")[1:].lstrip("+").strip()
+            in_arch_os = title == "Arch Linux"
+        elif in_arch_os and depth == 2:
+            if snap_start is not None:
+                return snap_start, idx
+            title = line.lstrip(" \t")[2:].lstrip("+").strip()
+            if title == "Snapshots":
+                snap_start = idx
+    if snap_start is not None:
+        return snap_start, len(body)
+    return None
+
+
+def _extract_kernel_props(block_lines: list[str]) -> list[str]:
+    props: list[str] = []
+    saw_kernel_id = False
+    for raw in block_lines:
+        s = raw.strip()
+        if not s or _is_entry_line(raw) or s.startswith("#"):
+            continue
+        lower = s.lower()
+        if lower.startswith("comment:"):
+            if "kernel-id=linux-cachyos" in lower:
+                props.append("  comment: kernel-id=linux-cachyos")
+                saw_kernel_id = True
+            continue
+        if any(lower.startswith(k) for k in KERNEL_BOOT_KEYS):
+            props.append(f"  {s}")
+    if not saw_kernel_id and props:
+        props.insert(0, "  comment: kernel-id=linux-cachyos")
+    return props
+
+
+def _parse_snapshot_blocks(section_lines: list[str]) -> list[dict]:
+    blocks: list[dict] = []
+    i = 1
+    while i < len(section_lines):
+        if _entry_depth(section_lines[i]) == 3:
+            heading = section_lines[i]
+            j = i + 1
+            while j < len(section_lines) and _entry_depth(section_lines[j]) != 3:
+                j += 1
+            sub = section_lines[i + 1 : j]
+            props = _extract_kernel_props(sub)
+            snap_id = _extract_snapshot_id(props, heading)
+            if props:
+                blocks.append(
+                    {
+                        "heading": heading.strip().lstrip("/+").strip(),
+                        "snap_id": snap_id,
+                        "props": props,
+                    }
+                )
+            i = j
+        else:
+            i += 1
+    return blocks
+
+
+def _classify_snapshots(blocks: list[dict], meta: dict[int, dict]) -> list[tuple[str, dict]]:
+    if not blocks:
+        return []
+
+    by_id: dict[int, dict] = {}
+    ordered_unknown: list[dict] = []
+    for blk in blocks:
+        sid = blk["snap_id"]
+        if sid is not None and sid not in by_id:
+            by_id[sid] = blk
+        elif sid is None:
+            ordered_unknown.append(blk)
+
+    pre_blocks: list[tuple[int, dict]] = []
+    post_blocks: list[tuple[int, dict]] = []
+    single_blocks: list[tuple[int, dict]] = []
+
+    for sid, blk in sorted(by_id.items()):
+        info = meta.get(sid, {})
+        stype = info.get("type", "")
+        if not stype:
+            h = blk["heading"]
+            if h == LABEL_PRE:
+                stype = "pre"
+            elif h == LABEL_POST:
+                stype = "post"
+        if stype == "pre":
+            pre_blocks.append((sid, blk))
+        elif stype == "post":
+            post_blocks.append((sid, blk))
+        else:
+            single_blocks.append((sid, blk))
+
+    if pre_blocks:
+        pre_id, pre_blk = pre_blocks[-1]
+        matched_post: dict | None = None
+        for pid, pblk in sorted(post_blocks, reverse=True):
+            pre_num = meta.get(pid, {}).get("pre_number")
+            if pre_num == pre_id or (pre_num is None and pid > pre_id):
+                matched_post = pblk
+                break
+        chosen: list[tuple[str, dict]] = [(LABEL_PRE, pre_blk)]
+        if matched_post is not None:
+            chosen.append((LABEL_POST, matched_post))
+        return chosen
+
+    # Fallback when metadata lacks explicit pre/post (e.g. rollback single snapshot or synthetic test)
+    if post_blocks and not single_blocks:
+        _, pblk = post_blocks[-1]
+        return [(LABEL_POST, pblk)]
+
+    if len(by_id) >= 2:
+        sorted_ids = sorted(by_id)
+        return [(LABEL_PRE, by_id[sorted_ids[-2]]), (LABEL_POST, by_id[sorted_ids[-1]])]
+
+    if len(by_id) == 1:
+        only_blk = next(iter(by_id.values()))
+        label = LABEL_POST if only_blk["heading"] == LABEL_POST else LABEL_PRE
+        return [(label, only_blk)]
+
+    if ordered_unknown:
+        return [(LABEL_PRE, ordered_unknown[0])]
+    return []
+
+
+def _normalize_snapshots(body: list[str], mode: str, snapper_meta: dict[int, dict]) -> list[str]:
+    span = _find_snapshots_section(body)
+    if span is None:
+        return body
+    start, end = span
+    section = body[start:end]
+    blocks = _parse_snapshot_blocks(section)
+
+    new_section = ["  //Snapshots"]
+    if mode == "post":
+        new_section.append("  ### Auto-generated by limine-snapper-sync")
+        selected = _classify_snapshots(blocks, snapper_meta)
+        for label, blk in selected:
+            new_section.append(f"  ///{label}")
+            new_section.extend(blk["props"])
+    elif mode == "pre":
+        new_section.append("  ### Auto-generated by limine-snapper-sync")
+        for idx, blk in enumerate(blocks, start=1):
+            sid = blk["snap_id"] if blk["snap_id"] is not None else idx
+            new_section.append(f"  ///{sid} │ 1970-01-01 00:00:00")
+            new_section.append("  ////linux-cachyos")
+            new_section.extend(blk["props"])
+
+    return body[:start] + new_section + body[end:]
+
+
+def transform(
+    text: str,
+    mode: str,
+    esp_dir: Path | None = None,
+    snapper_meta: dict[int, dict] | None = None,
+) -> str:
     lines = text.splitlines()
     header, body = _split_top_header(lines)
+    meta = snapper_meta if snapper_meta is not None else {}
+
     if mode == "pre":
         new_body = _rename_primary_kernel_entry(body, "Project Nox", "linux-cachyos")
+        new_body = _normalize_snapshots(new_body, "pre", meta)
         new_lines = header + new_body
     elif mode == "post":
-        new_header = _normalize_header(header)
+        new_header = _normalize_header(header, esp_dir=esp_dir)
         new_body = _rename_primary_kernel_entry(body, "linux-cachyos", "Project Nox")
+        new_body = _normalize_snapshots(new_body, "post", meta)
         new_lines = new_header + new_body
     else:
         raise ValueError(f"Unsupported mode: {mode}")
@@ -120,16 +419,27 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Normalize Limine config for Project Nox.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--pre", action="store_true", help="Restore canonical //linux-cachyos before boot tools run.")
-    group.add_argument("--post", action="store_true", help="Apply //Project Nox and unattended boot header after boot tools run.")
+    group.add_argument("--post", action="store_true", help="Apply //Project Nox, theme, and clean Snapshots after boot tools run.")
     parser.add_argument("--file", default=None, help="Path to limine.conf (default: ${ESP_PATH:-/boot}/limine.conf)")
+    parser.add_argument("--esp-dir", default=None, help="Optional ESP directory override for wallpaper hash lookup")
+    parser.add_argument("--snapper-json", default=None, help="Optional snapper --jsonout file for testing")
     args = parser.parse_args(argv)
 
     conf_path = Path(args.file) if args.file else Path(os.environ.get("ESP_PATH", "/boot")) / "limine.conf"
     if not conf_path.is_file():
         return 0
 
+    esp_dir = Path(args.esp_dir) if args.esp_dir else conf_path.parent
+    snapper_json = Path(args.snapper_json) if args.snapper_json else None
+    meta = _load_snapper_map(esp_dir, snapper_json)
+
     original = conf_path.read_text(encoding="utf-8")
-    updated = transform(original, "pre" if args.pre else "post")
+    updated = transform(
+        original,
+        "pre" if args.pre else "post",
+        esp_dir=esp_dir,
+        snapper_meta=meta,
+    )
     if updated != original:
         tmp = conf_path.with_name(conf_path.name + ".nox.tmp")
         tmp.write_text(updated, encoding="utf-8")

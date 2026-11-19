@@ -152,7 +152,7 @@ class TestDisplayProfile(unittest.TestCase):
 
 
 class TestFuxiH3Fix(unittest.TestCase):
-    def test_dynamic_suffix_and_numid(self) -> None:
+    def test_dynamic_suffix_and_numid_and_capture(self) -> None:
         cards_txt = (
             "Card #42\n"
             "  Name: alsa_card.usb-XiiSound_Technology_Corporation_Fuxi-H3-01\n"
@@ -160,14 +160,30 @@ class TestFuxiH3Fix(unittest.TestCase):
             "    output:iec958-stereo+input:mono-fallback: Digital\n"
             "  Active Profile: output:analog-stereo+input:mono-fallback\n"
         )
+        sources_txt = (
+            "Source #1\n"
+            "  Name: alsa_input.pci-0000_00_1f.3.analog-stereo\n"
+            "  Mute: yes\n"
+            "Source #9\n"
+            "  Name: alsa_input.usb-XiiSound_Technology_Corporation_Fuxi-H3-01.mono-fallback\n"
+            "  Mute: yes\n"
+        )
         amixer_txt = (
-            "numid=4,iface=MIXER,name='Mic Capture Volume'\n"
+            "numid=3,iface=MIXER,name='Mic Capture Switch'\n"
+            "numid=4,iface=MIXER,name='Mic Capture Switch',index=1\n"
             "numid=14,iface=MIXER,name='PCM Playback Volume',index=1\n"
         )
-        with tempfile.NamedTemporaryFile("w", delete=False) as cf, tempfile.NamedTemporaryFile("w", delete=False) as af:
+        with (
+            tempfile.NamedTemporaryFile("w", delete=False) as cf,
+            tempfile.NamedTemporaryFile("w", delete=False) as sf,
+            tempfile.NamedTemporaryFile("w", delete=False) as af,
+            tempfile.NamedTemporaryFile("w", delete=False) as stf,
+        ):
             cf.write(cards_txt)
+            sf.write(sources_txt)
             af.write(amixer_txt)
-            cpath, apath = Path(cf.name), Path(af.name)
+            cpath, spath, apath, stpath = Path(cf.name), Path(sf.name), Path(af.name), Path(stf.name)
+        stpath.unlink(missing_ok=True)
         try:
             res = subprocess.run(
                 [
@@ -175,10 +191,14 @@ class TestFuxiH3Fix(unittest.TestCase):
                     str(REPO / "configs/bin/nox-fuxi-h3-fix"),
                     "--pactl-cards",
                     str(cpath),
+                    "--pactl-sources",
+                    str(spath),
                     "--amixer-contents",
                     str(apath),
                     "--alsa-cards",
                     "/dev/null",
+                    "--state-file",
+                    str(stpath),
                     "--dry-run",
                 ],
                 capture_output=True,
@@ -188,9 +208,56 @@ class TestFuxiH3Fix(unittest.TestCase):
             self.assertIn("Fuxi-H3-01", res.stdout)
             self.assertIn("CHOSEN_PROFILE=output:iec958-stereo+input:mono-fallback", res.stdout)
             self.assertIn("NUMID=14", res.stdout)
+            self.assertIn("MIC_SWITCH_NUMIDS=3,4", res.stdout)
+            self.assertIn("SOURCE_NAME=alsa_input.usb-XiiSound_Technology_Corporation_Fuxi-H3-01.mono-fallback", res.stdout)
+            self.assertIn("SHOULD_UNMUTE_CAPTURE=true", res.stdout)
         finally:
             cpath.unlink(missing_ok=True)
+            spath.unlink(missing_ok=True)
             apath.unlink(missing_ok=True)
+            stpath.unlink(missing_ok=True)
+
+    def test_preserves_user_intentional_mute_across_hotplug(self) -> None:
+        cards_txt = (
+            "Card #42\n"
+            "  Name: alsa_card.usb-XiiSound_Technology_Corporation_Fuxi-H3-01\n"
+            "  Profiles:\n"
+            "    output:iec958-stereo+input:mono-fallback: Digital\n"
+            "  Active Profile: output:iec958-stereo+input:mono-fallback\n"
+        )
+        with (
+            tempfile.NamedTemporaryFile("w", delete=False) as cf,
+            tempfile.NamedTemporaryFile("w", delete=False) as stf,
+        ):
+            cf.write(cards_txt)
+            stf.write("PRESENT=0\nSOURCE=\nUSER_MUTED=1\n")
+            cpath, stpath = Path(cf.name), Path(stf.name)
+        try:
+            res = subprocess.run(
+                [
+                    "bash",
+                    str(REPO / "configs/bin/nox-fuxi-h3-fix"),
+                    "--pactl-cards",
+                    str(cpath),
+                    "--pactl-sources",
+                    "/dev/null",
+                    "--amixer-contents",
+                    "/dev/null",
+                    "--alsa-cards",
+                    "/dev/null",
+                    "--state-file",
+                    str(stpath),
+                    "--hotplug",
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertIn("SHOULD_UNMUTE_CAPTURE=false", res.stdout)
+        finally:
+            cpath.unlink(missing_ok=True)
+            stpath.unlink(missing_ok=True)
 
     def test_absent_headset_skips_cleanly(self) -> None:
         with tempfile.NamedTemporaryFile("w", delete=False) as cf:
@@ -215,7 +282,18 @@ class TestFuxiH3Fix(unittest.TestCase):
 
 
 class TestLimineNormalize(unittest.TestCase):
-    def test_roundtrip_pre_and_post_preserves_kernel_id_and_snapshots(self) -> None:
+    @staticmethod
+    def _load_mod():
+        loader = importlib.machinery.SourceFileLoader(
+            "nox_limine_normalize", str(REPO / "configs/bin/nox-limine-normalize")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_roundtrip_pre_and_post_normalizes_theme_and_snapshots(self) -> None:
         sample = """timeout: 5
 default_entry: 2
 remember_last_entry: yes
@@ -228,29 +306,65 @@ comment: machine-id=abc123 order-priority=50
   protocol: linux
   path: boot():/abc123/linux-cachyos/vmlinuz#deadbeef
 
-  //Snapshots
-  ///8 | 2026-11-19 00:00:02
+  //+Snapshots
+  comment: 2 snapshots
+  ///2 │ 2026-11-19 14:53:22
+  comment: pacman -S foo bar
   ////linux-cachyos
   comment: kernel-id=linux-cachyos
+  protocol: linux
+  path: boot():/abc123/limine_history/vmlinuz#222
+  cmdline: rootflags=subvol=/@.snapshots/2/snapshot
+  ///1 │ 2026-11-19 14:53:22
+  comment: pre update
+  ////linux-cachyos
+  comment: kernel-id=linux-cachyos
+  protocol: linux
+  path: boot():/abc123/limine_history/vmlinuz#111
+  cmdline: rootflags=subvol=/@.snapshots/1/snapshot
 """
-        loader = importlib.machinery.SourceFileLoader(
-            "nox_limine_normalize", str(REPO / "configs/bin/nox-limine-normalize")
+        mod = self._load_mod()
+        with tempfile.TemporaryDirectory() as td:
+            esp = Path(td)
+            (esp / "nox-limine-wallpaper.png").write_bytes(b"fake-limine-wp")
+            meta = {
+                1: {"type": "pre", "pre_number": None},
+                2: {"type": "post", "pre_number": 1},
+            }
+            post = mod.transform(sample, "post", esp_dir=esp, snapper_meta=meta)
+            self.assertIn("timeout: 5\ndefault_entry: Arch Linux/Project Nox\nremember_last_entry: no\n", post)
+            self.assertIn("wallpaper: boot():/nox-limine-wallpaper.png#", post)
+            self.assertIn("interface_branding: Project Nox\n", post)
+            self.assertIn("  //Project Nox\n", post)
+            self.assertNotIn("  //linux-cachyos\n", post)
+            self.assertIn("  //Snapshots\n", post)
+            self.assertNotIn("//+Snapshots", post)
+            self.assertIn("  ///Ponto de Segurança\n", post)
+            self.assertIn("  ///Estado Atualizado\n", post)
+            self.assertLess(post.index("///Ponto de Segurança"), post.index("///Estado Atualizado"))
+            self.assertNotIn("pacman -S", post)
+            self.assertNotIn("2026-11-19", post)
+            self.assertNotIn("////linux-cachyos", post)
+
+            pre = mod.transform(post, "pre", esp_dir=esp, snapper_meta=meta)
+            self.assertIn("  //linux-cachyos\n", pre)
+            self.assertNotIn("  //Project Nox\n", pre)
+            self.assertIn("  ////linux-cachyos\n", pre)
+
+    def test_snapshot_edge_cases_unpaired_and_empty(self) -> None:
+        mod = self._load_mod()
+        base_header = "/+Arch Linux\n  //linux-cachyos\n  comment: kernel-id=linux-cachyos\n  //Snapshots\n"
+        out_empty = mod.transform(base_header, "post", snapper_meta={})
+        self.assertIn("  //Snapshots\n", out_empty)
+        self.assertNotIn("Ponto de Segurança", out_empty)
+
+        only_pre = (
+            base_header
+            + "  ///5 │ 2026-11-19\n  ////linux-cachyos\n  protocol: linux\n  cmdline: rootflags=subvol=/@.snapshots/5/snapshot\n"
         )
-        spec = importlib.util.spec_from_loader(loader.name, loader)
-        assert spec and spec.loader
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-
-        post = mod.transform(sample, "post")
-        self.assertIn("timeout: 5\ndefault_entry: Arch Linux/Project Nox\nremember_last_entry: no\n", post)
-        self.assertIn("  //Project Nox\n", post)
-        self.assertNotIn("  //linux-cachyos\n", post)
-        self.assertIn("  comment: kernel-id=linux-cachyos\n", post)
-        self.assertIn("  ////linux-cachyos\n", post)
-
-        pre = mod.transform(post, "pre")
-        self.assertIn("  //linux-cachyos\n", pre)
-        self.assertNotIn("  //Project Nox\n", pre)
+        out_pre = mod.transform(only_pre, "post", snapper_meta={5: {"type": "pre", "pre_number": None}})
+        self.assertIn("///Ponto de Segurança\n", out_pre)
+        self.assertNotIn("Estado Atualizado", out_pre)
 
 
 class TestSystemToolsLauncher(unittest.TestCase):
@@ -373,10 +487,53 @@ class TestObsidianPurplePolish(unittest.TestCase):
         self.assertIn("gtk-application-prefer-dark-theme=1", gtk_ini)
 
         desktop_sh = (REPO / "scripts/50-desktop.sh").read_text(encoding="utf-8")
-        for pkg in ("vulkan-tools", "mesa-utils", "libva-utils"):
-            self.assertNotIn(f"  {pkg}\n", desktop_sh)
-        for kept in ("mesa", "vulkan-radeon", "libva"):
+        self.assertNotIn("  libva-utils\n", desktop_sh)
+        for kept in ("mesa", "vulkan-radeon", "vulkan-tools", "mesa-utils", "mpvpaper", "socat", "libva"):
             self.assertIn(f"  {kept}\n", desktop_sh)
+
+        for asset in (
+            REPO / "configs/fastfetch/nox-logo.txt",
+            REPO / "configs/firefox/userChrome.css",
+            REPO / "configs/firefox/userContent.css",
+            REPO / "configs/greeter/assets/noctalia.svg",
+            REPO / "configs/fonts/outfit-latin.ttf",
+            REPO / "configs/fonts/plus-jakarta-sans-latin.ttf",
+            REPO / "configs/icons/nox-emblem.png",
+            REPO / "configs/icons/nox-lockscreen-emblem.gif",
+            REPO / "configs/wallpapers/nox-g5-runtime.webm",
+            REPO / "configs/wallpapers/nox-aoc-runtime.webm",
+            REPO / "configs/wallpapers/nox-lockscreen.png",
+            REPO / "configs/wallpapers/nox-greeter.png",
+            REPO / "configs/wallpapers/nox-limine.png",
+            REPO / "configs/noctalia/plugins/mpvpaper/plugin.toml",
+        ):
+            self.assertTrue(asset.is_file(), f"Missing asset: {asset}")
+
+
+class TestNoctaliaLayout(unittest.TestCase):
+    def test_landscape_and_portrait_layout_and_mpvpaper_assignment(self) -> None:
+        loader = importlib.machinery.SourceFileLoader(
+            "nox_noctalia_layout", str(REPO / "configs/bin/nox-noctalia-layout")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        outputs = [
+            {"name": "DP-2", "model": "Odyssey G5", "width": 2560, "height": 1440},
+            {"name": "HDMI-A-1", "model": "24B35HM2", "width": 1920, "height": 1080, "transform": "90"},
+        ]
+        assigns = mod.build_mpvpaper_assignments(outputs)["assignments"]
+        self.assertTrue(assigns["DP-2"].endswith("nox-g5-runtime.webm"))
+        self.assertTrue(assigns["HDMI-A-1"].endswith("nox-aoc-runtime.webm"))
+
+        import tomllib
+        ls = tomllib.loads(mod.build_lockscreen_widgets_toml(outputs))
+        self.assertTrue(ls["lockscreen_widgets"]["enabled"])
+        self.assertIn("lockscreen-login-box@DP-2", ls["lockscreen_widgets"]["widget"])
+        self.assertIn("lockscreen-login-box@HDMI-A-1", ls["lockscreen_widgets"]["widget"])
+        self.assertEqual(ls["lockscreen_widgets"]["widget"]["lockscreen-widget-emblem-HDMI-A-1"]["cx"], 540.0)
 
 
 class TestSnapperCleanup(unittest.TestCase):
@@ -391,6 +548,8 @@ class TestSnapperCleanup(unittest.TestCase):
                     str(REPO / "configs/bin/nox-snapper-cleanup"),
                     "--input-json",
                     str(tpath),
+                    "--session-id",
+                    "",
                     "--dry-run",
                 ],
                 capture_output=True,
@@ -423,6 +582,133 @@ class TestSnapperCleanup(unittest.TestCase):
         out = self.run_cleanup(entries)
         self.assertEqual(out["delete"], [])
         self.assertEqual(out["reason"], "unpaired-newer-pre-preserved")
+
+
+class TestTopgradeAndSnapperSession(unittest.TestCase):
+    def test_topgrade_configs_and_proton_visibility_contracts(self) -> None:
+        import tomllib
+
+        arch_cfg = tomllib.loads((REPO / "configs/topgrade/50-nox-arch.toml").read_text(encoding="utf-8"))
+        self.assertEqual(arch_cfg["linux"]["arch_package_manager"], "paru")
+
+        self_cfg = tomllib.loads((REPO / "configs/topgrade/98-disable-self-update.toml").read_text(encoding="utf-8"))
+        self.assertEqual(self_cfg["misc"]["no_self_update"], True)
+
+        ctr_cfg = tomllib.loads((REPO / "configs/topgrade/99-disable-containers.toml").read_text(encoding="utf-8"))
+        self.assertIn("containers", ctr_cfg["misc"]["disable"])
+
+        desktop_sh = (REPO / "scripts/50-desktop.sh").read_text(encoding="utf-8")
+        self.assertIn("  protonplus\n", desktop_sh)
+        self.assertIn("  proton-cachyos-slr\n", desktop_sh)
+        self.assertIn('nox_aur_install_pkg "topgrade-bin"', desktop_sh)
+        self.assertNotIn("  steam\n", desktop_sh)
+        self.assertNotIn("  proton-cachyos\n", desktop_sh)
+
+        common_sh = (REPO / "scripts/lib/common.sh").read_text(encoding="utf-8")
+        self.assertNotIn("ProtonPlus", common_sh)
+        self.assertTrue((REPO / "configs/bin/nox-topgrade").is_file())
+
+    def test_multi_transaction_session_consolidates_onto_anchor_pre(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            state_file = root / "session.json"
+            log_file = root / "snapper.log"
+            entries_t1 = [
+                {"number": 0, "type": "single", "cleanup": ""},
+                {"number": 5, "type": "pre", "cleanup": "number"},
+                {"number": 6, "type": "post", "pre-number": 5, "cleanup": "number"},
+                {"number": 7, "type": "pre", "cleanup": "number"},
+                {"number": 8, "type": "post", "pre-number": 7, "cleanup": "number"},
+            ]
+            t1_json = root / "t1.json"
+            t1_json.write_text(json.dumps({"root": entries_t1}), encoding="utf-8")
+
+            mock_snapper = root / "mock-snapper"
+            mock_snapper.write_text(
+                "#!/usr/bin/env bash\n"
+                f"echo \"$*\" >> '{log_file}'\n"
+                "if [[ \"$*\" == *\"create\"* && \"$*\" == *\"--print-number\"* ]]; then\n"
+                "  echo 11\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            mock_snapper.chmod(0o755)
+
+            # Txn 1 inside topgrade session: initializes anchor_pre=7 and deletes prior 5,6
+            subprocess.run(
+                [
+                    "python3",
+                    str(REPO / "configs/bin/nox-snapper-cleanup"),
+                    "--input-json",
+                    str(t1_json),
+                    "--session-id",
+                    "topgrade:4242:100",
+                    "--state-file",
+                    str(state_file),
+                    "--snapper-bin",
+                    str(mock_snapper),
+                ],
+                check=True,
+            )
+            saved = json.loads(state_file.read_text(encoding="utf-8"))
+            self.assertEqual(saved["anchor_pre"], 7)
+            self.assertEqual(saved["latest_post"], 8)
+
+            # Txn 2 inside SAME topgrade session: deletes old post 8, creates post 11 -> pre 7, deletes 9,10
+            entries_t2 = [
+                {"number": 0, "type": "single", "cleanup": ""},
+                {"number": 7, "type": "pre", "cleanup": "number"},
+                {"number": 8, "type": "post", "pre-number": 7, "cleanup": "number"},
+                {"number": 9, "type": "pre", "cleanup": "number"},
+                {"number": 10, "type": "post", "pre-number": 9, "cleanup": "number"},
+            ]
+            t2_json = root / "t2.json"
+            t2_json.write_text(json.dumps({"root": entries_t2}), encoding="utf-8")
+            subprocess.run(
+                [
+                    "python3",
+                    str(REPO / "configs/bin/nox-snapper-cleanup"),
+                    "--input-json",
+                    str(t2_json),
+                    "--session-id",
+                    "topgrade:4242:100",
+                    "--state-file",
+                    str(state_file),
+                    "--snapper-bin",
+                    str(mock_snapper),
+                ],
+                check=True,
+            )
+            saved2 = json.loads(state_file.read_text(encoding="utf-8"))
+            self.assertEqual(saved2["anchor_pre"], 7)
+            self.assertEqual(saved2["latest_post"], 11)
+            ops = log_file.read_text(encoding="utf-8").splitlines()
+            self.assertIn("--no-dbus -c root delete --sync 5 6", ops[0])
+            self.assertIn("--no-dbus -c root delete --sync 8", ops[1])
+            self.assertIn("--no-dbus -c root create --type post --pre-number 7 --cleanup-algorithm number", ops[2])
+            self.assertIn("--no-dbus -c root delete --sync 9 10", ops[3])
+
+            # Interrupted Txn 3 with unpaired PRE 12 preserves everything cleanly
+            entries_t3 = entries_t2 + [{"number": 12, "type": "pre", "cleanup": "number"}]
+            t3_json = root / "t3.json"
+            t3_json.write_text(json.dumps({"root": entries_t3}), encoding="utf-8")
+            res_dry = subprocess.run(
+                [
+                    "python3",
+                    str(REPO / "configs/bin/nox-snapper-cleanup"),
+                    "--input-json",
+                    str(t3_json),
+                    "--session-id",
+                    "topgrade:4242:100",
+                    "--state-file",
+                    str(state_file),
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertEqual(json.loads(res_dry.stdout)["action"], "noop")
 
 
 class TestBootstrapVerification(unittest.TestCase):

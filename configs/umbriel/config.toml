@@ -4,7 +4,7 @@
 files = ["outputs.toml", "outputs.local.toml", "noctalia.toml"]
 
 [general]
-autostart = ["noctalia"]
+autostart = ["sh -c '/usr/local/libexec/nox/nox-noctalia-layout --init-once >/dev/null 2>&1 || true; exec noctalia'"]
 mod_key = "Super"
 xwayland = true
 xwayland_native_resolution = false

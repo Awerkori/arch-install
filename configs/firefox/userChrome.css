@@ -1,0 +1,50 @@
+/* Project Nox — Obsidian Purple Firefox Pure Chrome Alignment */
+:root {
+  --lwt-accent-color: #090610 !important;
+  --lwt-text-color: #f5f2ff !important;
+  --lwt-toolbar-field-background-color: #120a1f !important;
+  --lwt-toolbar-field-color: #f5f2ff !important;
+  --lwt-toolbar-field-border-color: #3a255c !important;
+  --lwt-toolbar-field-focus: #1b122c !important;
+  --lwt-tab-text: #d4c6f7 !important;
+  --toolbar-bgcolor: #120a1f !important;
+  --toolbar-color: #f5f2ff !important;
+  --tab-selected-bgcolor: #1b122c !important;
+  --tab-selected-textcolor: #f5f2ff !important;
+  --toolbarbutton-icon-fill: #c4b5fd !important;
+  --focus-outline-color: #9333ea !important;
+  --toolbar-field-focus-border-color: #a855f7 !important;
+}
+
+#navigator-toolbox,
+#TabsToolbar,
+#titlebar {
+  background-color: #090610 !important;
+  background-image: none !important;
+  color: #f5f2ff !important;
+}
+
+#nav-bar,
+#PersonalToolbar {
+  background-color: #120a1f !important;
+  background-image: none !important;
+  color: #f5f2ff !important;
+  border-color: #281942 !important;
+}
+
+.tab-background:is([selected], [multiselected]) {
+  background-color: #1b122c !important;
+  background-image: none !important;
+  outline: 1px solid rgba(168, 85, 247, 0.55) !important;
+  box-shadow: 0 0 8px rgba(147, 51, 234, 0.25) !important;
+}
+
+#urlbar-background {
+  background-color: #0e0818 !important;
+  border: 1px solid #3a255c !important;
+}
+
+#urlbar[focused="true"] > #urlbar-background {
+  background-color: #1b122c !important;
+  border-color: #a855f7 !important;
+}

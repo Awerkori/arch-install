@@ -14,7 +14,7 @@ nox_wait_pacman_lock
 
 # Ensure forbidden environments are never requested
 PKGS=(
-  # Graphics & Mesa/RADV/Vulkan/VA-API (64 + 32-bit) & XWayland
+  # Graphics & Mesa/RADV/Vulkan/VA-API (64 + 32-bit) & XWayland (+ Vulkan/GL diagnostics)
   mesa
   lib32-mesa
   vulkan-radeon
@@ -23,6 +23,8 @@ PKGS=(
   lib32-vulkan-icd-loader
   vulkan-mesa-layers
   lib32-vulkan-mesa-layers
+  vulkan-tools
+  mesa-utils
   libva
   lib32-libva
   xorg-xwayland
@@ -33,10 +35,12 @@ PKGS=(
   xdg-desktop-portal-gtk
   polkit
   polkit-gnome
-  # Noctalia Shell + Greeter + Terminal + Fonts + File helpers
+  # Noctalia Shell + Greeter + Terminal + Fonts + File helpers + Video wallpaper
   noctalia
   noctalia-greeter
   greetd
+  mpvpaper
+  socat
   kitty
   bash
   bash-completion
@@ -64,13 +68,16 @@ PKGS=(
   btop
   rocm-smi-lib
   fastfetch
+  protonplus
+  proton-cachyos-slr
 )
 
-nox_info "Instalando stack desktop oficial (Umbriel + Noctalia + Greeter + Kitty + Firefox Pure + Btop + Fastfetch + Mesa)..."
+nox_info "Instalando stack desktop oficial (Umbriel + Noctalia + Greeter + Kitty + Firefox Pure + Btop + Fastfetch + ProtonPlus + Proton-CachyOS SLR + Mesa)..."
 pacman -S --needed --noconfirm "${PKGS[@]}"
 
-# Build & install Luciole from AUR as unprivileged user (noctalia-dev/luciole)
+# Build & install Luciole and Topgrade from AUR as unprivileged user (noxbuild)
 nox_aur_install_pkg "luciole-git"
+nox_aur_install_pkg "topgrade-bin"
 nox_aur_cleanup_user
 
 # Verify bash is login shell for all human accounts and valid in /etc/shells

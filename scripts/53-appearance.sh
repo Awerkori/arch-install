@@ -28,10 +28,15 @@ for v in 5 6; do
     || nox_die "Paleta darker.conf do Qt${v} ausente!"
 done
 
-# 3. Install Project Nox Obsidian Purple identity assets, Firefox Pure dark defaults, GTK3/4, Qt5/6, btop, fastfetch & Noctalia configs
+# 3. Install Project Nox Obsidian Purple identity assets, fonts, icons, wallpapers, greeter assets, bundled plugins, Firefox Pure dark defaults, GTK3/4, Qt5/6, btop, fastfetch & Noctalia configs
 install -d -m 0755 \
   /usr/share/nox-archinstall/wallpapers \
+  /usr/share/nox-archinstall/icons \
+  /usr/share/nox-archinstall/greeter-assets \
+  /usr/share/nox-archinstall/noctalia-plugins \
+  /usr/share/nox-archinstall/firefox \
   /usr/share/nox-archinstall/qt \
+  /usr/share/fonts/nox \
   /etc/skel/.config/gtk-3.0 \
   /etc/skel/.config/gtk-4.0 \
   /etc/skel/.config/qt5ct/colors \
@@ -40,12 +45,63 @@ install -d -m 0755 \
   /etc/skel/.config/btop/themes \
   /etc/skel/.config/fastfetch \
   /etc/skel/.config/umbriel \
+  /etc/skel/.config/topgrade.d \
   /etc/skel/.config/noctalia/palettes
 
-nox_atomic_install 0644 "${NOX_ROOT}/configs/wallpapers/obsidian-purple.png" /usr/share/nox-archinstall/wallpapers/obsidian-purple.png
+# Wallpapers (static masters + animated runtime WebM loops)
+for wp in \
+  obsidian-purple.png \
+  nox-g5.png \
+  nox-g5-runtime.webm \
+  nox-aoc.png \
+  nox-aoc-runtime.webm \
+  nox-lockscreen.png \
+  nox-greeter.png \
+  nox-limine.png; do
+  if [[ -f "${NOX_ROOT}/configs/wallpapers/${wp}" ]]; then
+    nox_atomic_install 0644 "${NOX_ROOT}/configs/wallpapers/${wp}" "/usr/share/nox-archinstall/wallpapers/${wp}"
+  fi
+done
+
+# Emblems & animated lockscreen GIF sticker
+for ic in \
+  nox-emblem.png \
+  nox-lockscreen-emblem.gif \
+  emblema-mestre-1254.png; do
+  if [[ -f "${NOX_ROOT}/configs/icons/${ic}" ]]; then
+    nox_atomic_install 0644 "${NOX_ROOT}/configs/icons/${ic}" "/usr/share/nox-archinstall/icons/${ic}"
+  fi
+done
+
+# OFL Fonts (Outfit + Plus Jakarta Sans)
+if [[ -d "${NOX_ROOT}/configs/fonts" ]]; then
+  for ff in "${NOX_ROOT}/configs/fonts"/*; do
+    [[ -f "$ff" ]] || continue
+    nox_atomic_install 0644 "$ff" "/usr/share/fonts/nox/$(basename "$ff")"
+  done
+fi
+
+# Custom Greeter assets bundle (emblem SVG + fonts)
+if [[ -f "${NOX_ROOT}/configs/greeter/assets/noctalia.svg" ]]; then
+  nox_atomic_install 0644 "${NOX_ROOT}/configs/greeter/assets/noctalia.svg" /usr/share/nox-archinstall/greeter-assets/noctalia.svg
+fi
+if [[ -d /usr/share/noctalia-greeter/assets/fonts ]]; then
+  ln -sfn /usr/share/noctalia-greeter/assets/fonts /usr/share/nox-archinstall/greeter-assets/fonts
+fi
+
+# Bundled official Noctalia plugins (offline-ready mpvpaper)
+if [[ -d "${NOX_ROOT}/configs/noctalia/plugins/mpvpaper" ]]; then
+  rm -rf /usr/share/nox-archinstall/noctalia-plugins/mpvpaper
+  cp -a "${NOX_ROOT}/configs/noctalia/plugins/mpvpaper" /usr/share/nox-archinstall/noctalia-plugins/mpvpaper
+  chmod -R a+rX /usr/share/nox-archinstall/noctalia-plugins/mpvpaper
+fi
+
+# Firefox Pure dark defaults + userChrome/userContent Obsidian Purple CSS
 if [[ -d /usr/lib/firefox/browser/defaults/preferences ]]; then
   nox_atomic_install 0644 "${NOX_ROOT}/configs/firefox/nox-theme.js" /usr/lib/firefox/browser/defaults/preferences/nox-theme.js
 fi
+nox_atomic_install 0644 "${NOX_ROOT}/configs/firefox/userChrome.css" /usr/share/nox-archinstall/firefox/userChrome.css
+nox_atomic_install 0644 "${NOX_ROOT}/configs/firefox/userContent.css" /usr/share/nox-archinstall/firefox/userContent.css
 
 nox_atomic_install 0644 "${NOX_ROOT}/configs/gtk/settings.ini" /etc/skel/.config/gtk-3.0/settings.ini
 nox_atomic_install 0644 "${NOX_ROOT}/configs/gtk/settings.ini" /etc/skel/.config/gtk-4.0/settings.ini
@@ -55,10 +111,26 @@ nox_atomic_install 0644 "${NOX_ROOT}/configs/qt/qt5ct.conf" /etc/skel/.config/qt
 nox_atomic_install 0644 "${NOX_ROOT}/configs/qt/qt6ct.conf" /etc/skel/.config/qt6ct/qt6ct.conf
 nox_atomic_install 0644 "${NOX_ROOT}/configs/btop/btop.conf" /etc/skel/.config/btop/btop.conf
 nox_atomic_install 0644 "${NOX_ROOT}/configs/fastfetch/config.jsonc" /etc/skel/.config/fastfetch/config.jsonc
+if [[ -f "${NOX_ROOT}/configs/fastfetch/nox-logo.txt" ]]; then
+  nox_atomic_install 0644 "${NOX_ROOT}/configs/fastfetch/nox-logo.txt" /etc/skel/.config/fastfetch/nox-logo.txt
+fi
 nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/nox-launcher.toml" /etc/skel/.config/noctalia/nox-launcher.toml
 nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/nox-power.toml" /etc/skel/.config/noctalia/nox-power.toml
 nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/nox-theme.toml" /etc/skel/.config/noctalia/nox-theme.toml
 nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/palettes/ObsidianPurple.json" /etc/skel/.config/noctalia/palettes/ObsidianPurple.json
+for tgcfg in 50-nox-arch.toml 98-disable-self-update.toml 99-disable-containers.toml; do
+  if [[ -f "${NOX_ROOT}/configs/topgrade/${tgcfg}" ]]; then
+    nox_atomic_install 0644 "${NOX_ROOT}/configs/topgrade/${tgcfg}" "/etc/skel/.config/topgrade.d/${tgcfg}"
+  fi
+done
+if [[ -f "${NOX_ROOT}/configs/bin/nox-topgrade" ]]; then
+  nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-topgrade" /usr/local/bin/topgrade
+fi
+if [[ -x "${NOX_LIBEXEC_DIR}/nox-noctalia-layout" ]]; then
+  "${NOX_LIBEXEC_DIR}/nox-noctalia-layout" \
+    --lockscreen-out /etc/skel/.config/noctalia/nox-lockscreen-widgets.toml \
+    --mpvpaper-out none >/dev/null 2>&1 || true
+fi
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-system-tools-list" "${NOX_LIBEXEC_DIR}/nox-system-tools-list"
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-system-tools-launch" "${NOX_LIBEXEC_DIR}/nox-system-tools-launch"
 
@@ -140,16 +212,25 @@ while IFS=: read -r uname uid gid uhome _shell; do
     btop/btop.conf \
     btop/themes/noctalia.theme \
     fastfetch/config.jsonc \
+    fastfetch/nox-logo.txt \
     umbriel/noctalia.toml \
     noctalia/nox-launcher.toml \
     noctalia/nox-power.toml \
     noctalia/nox-theme.toml \
+    noctalia/nox-lockscreen-widgets.toml \
     noctalia/palettes/ObsidianPurple.json \
     mimeapps.list; do
     [[ -f "/etc/skel/.config/${rel}" ]] || continue
     install -d -m 0755 -o "$uid" -g "$gid" "${uhome}/.config/$(dirname "$rel")"
     nox_atomic_install 0644 "/etc/skel/.config/${rel}" "${uhome}/.config/${rel}"
     chown "${uid}:${gid}" "${uhome}/.config/${rel}"
+  done
+  install -d -m 0755 -o "$uid" -g "$gid" "${uhome}/.config/topgrade.d"
+  for tgcfg in 50-nox-arch.toml 98-disable-self-update.toml 99-disable-containers.toml; do
+    if [[ -f "/etc/skel/.config/topgrade.d/${tgcfg}" && ! -f "${uhome}/.config/topgrade.d/${tgcfg}" ]]; then
+      nox_atomic_install 0644 "/etc/skel/.config/topgrade.d/${tgcfg}" "${uhome}/.config/topgrade.d/${tgcfg}"
+      chown "${uid}:${gid}" "${uhome}/.config/topgrade.d/${tgcfg}"
+    fi
   done
   for qtver in 5 6; do
     if [[ -f "${uhome}/.config/qt${qtver}ct/colors/noctalia.conf" && -f "${uhome}/.config/qt${qtver}ct/qt${qtver}ct.conf" ]]; then

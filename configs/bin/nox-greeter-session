@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Project Nox wrapper so noctalia-greeter receives custom SVG emblem & OFL fonts cleanly.
+set -eu
+export NOCTALIA_GREETER_ASSETS_DIR="/usr/share/nox-archinstall/greeter-assets"
+exec /usr/bin/noctalia-greeter-session "$@"

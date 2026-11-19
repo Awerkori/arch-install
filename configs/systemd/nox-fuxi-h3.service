@@ -4,4 +4,4 @@ After=pipewire.service wireplumber.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/libexec/nox/nox-fuxi-h3-fix
+ExecStart=/usr/local/libexec/nox/nox-fuxi-h3-fix --hotplug

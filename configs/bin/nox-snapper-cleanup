@@ -1,15 +1,27 @@
 #!/usr/bin/env python3
-"""Keep only the latest valid snap-pac PRE+POST pair on Snapper root config."""
+"""Keep only the latest valid snap-pac PRE+POST pair on Snapper root config.
+
+Session-aware for Topgrade / Paru multi-transaction runs:
+- When multiple pacman transactions execute within the same active `topgrade`
+  or `paru` invocation (detected via /proc ancestry), preserve the initial PRE
+  snapshot taken before Transaction 1 and consolidate the final POST snapshot
+  directly onto that anchor PRE (`pre-number = anchor_pre`).
+- During direct single `pacman` / `paru` transactions or interrupted failures
+  (newer unpaired PRE), preserve safe recovery without premature deletion.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any
+
+DEFAULT_STATE_FILE = Path("/var/lib/nox-archinstall/update-session.json")
 
 
 def parse_snapper_json(raw: str) -> list[dict[str, Any]]:
@@ -21,7 +33,57 @@ def parse_snapper_json(raw: str) -> list[dict[str, Any]]:
     return []
 
 
-def compute_deletions(entries: list[dict[str, Any]]) -> tuple[list[int], str]:
+def _read_proc_stat(pid: int) -> tuple[int, int] | None:
+    try:
+        stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+        rparen = stat_text.rfind(")")
+        if rparen == -1:
+            return None
+        fields = stat_text[rparen + 2 :].split()
+        # fields[1] = ppid (stat field 4), fields[19] = starttime (stat field 22)
+        return int(fields[1]), int(fields[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _read_proc_cmdline(pid: int) -> list[str]:
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+        return [part.decode("utf-8", errors="replace") for part in raw.split(b"\x00") if part]
+    except OSError:
+        return []
+
+
+def detect_update_session(start_pid: int | None = None, max_depth: int = 32) -> str | None:
+    """Walk /proc ancestry to identify an enclosing real `topgrade` or `paru` run."""
+    pid = start_pid if start_pid is not None else os.getpid()
+    topgrade_hit: str | None = None
+    paru_hit: str | None = None
+
+    seen: set[int] = set()
+    for _ in range(max_depth):
+        if pid <= 1 or pid in seen:
+            break
+        seen.add(pid)
+        stat_info = _read_proc_stat(pid)
+        if stat_info is None:
+            break
+        ppid, starttime = stat_info
+        cmdline = _read_proc_cmdline(pid)
+        if cmdline:
+            exe = os.path.basename(cmdline[0])
+            args = cmdline[1:]
+            if exe == "topgrade" and cmdline[0] == "/usr/bin/topgrade":
+                if not any(a in ("-n", "--dry-run", "--help", "-h", "-V", "--version") for a in args):
+                    topgrade_hit = f"topgrade:{pid}:{starttime}"
+            elif exe == "paru" and os.path.basename(cmdline[0]) == "paru":
+                paru_hit = f"paru:{pid}:{starttime}"
+        pid = ppid
+
+    return topgrade_hit or paru_hit
+
+
+def _latest_complete_pair(entries: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], tuple[int, int] | None, str]:
     managed: list[dict[str, Any]] = []
     for e in entries:
         num = int(e.get("number", 0))
@@ -35,11 +97,8 @@ def compute_deletions(entries: list[dict[str, Any]]) -> tuple[list[int], str]:
         managed.append(e)
 
     managed.sort(key=lambda x: int(x["number"]))
-    if len(managed) <= 2:
-        return [], "within-limit"
-
     by_num = {int(e["number"]): e for e in managed}
-    # Find latest complete PRE+POST pair
+
     latest_pair: tuple[int, int] | None = None
     for e in reversed(managed):
         if e.get("type") == "post":
@@ -51,40 +110,135 @@ def compute_deletions(entries: list[dict[str, Any]]) -> tuple[list[int], str]:
                     break
 
     if latest_pair is None:
-        return [], "no-complete-pair-abort-cleanup"
+        return managed, None, "no-complete-pair-abort-cleanup"
 
-    # Never prune if there is a newer unpaired PRE after latest_pair (failed/in-progress txn)
     max_pair_num = max(latest_pair)
     for e in managed:
         if int(e["number"]) > max_pair_num and e.get("type") == "pre":
-            return [], "unpaired-newer-pre-preserved"
+            return managed, None, "unpaired-newer-pre-preserved"
+
+    return managed, latest_pair, "ok"
+
+
+def compute_deletions(entries: list[dict[str, Any]]) -> tuple[list[int], str]:
+    managed, latest_pair, status = _latest_complete_pair(entries)
+    if len(managed) <= 2:
+        return [], "within-limit"
+    if latest_pair is None:
+        return [], status
 
     keep = set(latest_pair)
     to_delete = [int(e["number"]) for e in managed if int(e["number"]) not in keep]
     return to_delete, f"keep-pair:{latest_pair[0]}+{latest_pair[1]}"
 
 
-def snapper_cmd(*args: str, use_dbus: bool) -> list[str]:
-    base = ["snapper"]
+def plan_session_cleanup(
+    entries: list[dict[str, Any]],
+    session_id: str | None,
+    saved_state: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Compute cleanup or Topgrade/Paru multi-transaction consolidation plan cleanly."""
+    managed, latest_pair, status = _latest_complete_pair(entries)
+    if latest_pair is None:
+        return {"action": "noop", "reason": status, "delete": []}
+
+    by_num = {int(e["number"]): e for e in managed}
+    cur_pre, cur_post = latest_pair
+
+    if session_id:
+        prev_sid = (saved_state or {}).get("session_id")
+        prev_anchor = (saved_state or {}).get("anchor_pre")
+        if prev_sid == session_id and isinstance(prev_anchor, int) and prev_anchor in by_num and prev_anchor < cur_post:
+            if cur_pre == anchor_pre_val(prev_anchor):
+                keep = {prev_anchor, cur_post}
+                return {
+                    "action": "prune",
+                    "reason": f"session-same-anchor:{prev_anchor}+{cur_post}",
+                    "anchor_pre": prev_anchor,
+                    "latest_post": cur_post,
+                    "delete": [int(e["number"]) for e in managed if int(e["number"]) not in keep],
+                }
+            old_anchor_posts = [
+                int(e["number"])
+                for e in managed
+                if e.get("type") == "post" and e.get("pre-number") == prev_anchor
+            ]
+            return {
+                "action": "consolidate",
+                "reason": f"consolidate-session:{session_id}",
+                "anchor_pre": prev_anchor,
+                "delete_old_anchor_posts": old_anchor_posts,
+                "delete_after_create": [
+                    int(e["number"])
+                    for e in managed
+                    if int(e["number"]) != prev_anchor and int(e["number"]) not in old_anchor_posts
+                ],
+            }
+
+        # First transaction in this session: anchor PRE and prune any prior-session pairs
+        keep = {cur_pre, cur_post}
+        return {
+            "action": "init-session",
+            "reason": f"init-session:{session_id}",
+            "session_id": session_id,
+            "anchor_pre": cur_pre,
+            "latest_post": cur_post,
+            "delete": [int(e["number"]) for e in managed if int(e["number"]) not in keep],
+        }
+
+    to_delete, reason = compute_deletions(entries)
+    return {"action": "prune" if to_delete else "noop", "reason": reason, "delete": to_delete}
+
+
+def anchor_pre_val(val: int) -> int:
+    return val
+
+
+def snapper_cmd(*args: str, use_dbus: bool, snapper_bin: str = "snapper") -> list[str]:
+    base = [snapper_bin]
     if not use_dbus:
         base.append("--no-dbus")
     return [*base, *args]
+
+
+def _run_snapper_retry(*args: str, use_dbus: bool, snapper_bin: str = "snapper") -> subprocess.CompletedProcess[str]:
+    cmd = snapper_cmd(*args, use_dbus=use_dbus, snapper_bin=snapper_bin)
+    res: subprocess.CompletedProcess[str] | None = None
+    for attempt in range(12):
+        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if res.returncode == 0:
+            return res
+        err = res.stderr or ""
+        if ("Config is in use" in err or "Config is locked" in err) and attempt < 11:
+            time.sleep(0.5)
+            continue
+        return res
+    assert res is not None
+    return res
+
+
+def _save_state(state_file: Path, payload: dict[str, Any]) -> None:
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    tmp = state_file.with_name(state_file.name + ".nox.tmp")
+    tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, state_file)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-json", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--session-id", default=None)
+    parser.add_argument("--state-file", type=Path, default=DEFAULT_STATE_FILE)
+    parser.add_argument("--snapper-bin", default="snapper")
     args = parser.parse_args()
 
     use_dbus = False
     if args.input_json:
         raw = args.input_json.read_text(encoding="utf-8")
     else:
-        # Prefer D-Bus when snapperd is available on booted system so its cache stays coherent;
-        # fall back to --no-dbus inside chroot/offline stages.
         res = subprocess.run(
-            snapper_cmd("--jsonout", "-c", "root", "list", use_dbus=True),
+            snapper_cmd("--jsonout", "-c", "root", "list", use_dbus=True, snapper_bin=args.snapper_bin),
             capture_output=True,
             text=True,
             check=False,
@@ -93,7 +247,7 @@ def main() -> int:
             use_dbus = True
         else:
             res = subprocess.run(
-                snapper_cmd("--jsonout", "-c", "root", "list", use_dbus=False),
+                snapper_cmd("--jsonout", "-c", "root", "list", use_dbus=False, snapper_bin=args.snapper_bin),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -103,25 +257,95 @@ def main() -> int:
         raw = res.stdout
 
     entries = parse_snapper_json(raw)
-    to_delete, reason = compute_deletions(entries)
+    session_id = args.session_id if args.session_id is not None else detect_update_session()
+
+    saved_state: dict[str, Any] | None = None
+    if args.state_file.is_file():
+        try:
+            saved_state = json.loads(args.state_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            saved_state = None
+
+    plan = plan_session_cleanup(entries, session_id=session_id, saved_state=saved_state)
+
     if args.dry_run:
-        print(json.dumps({"delete": to_delete, "reason": reason}))
+        out = {"action": plan["action"], "reason": plan["reason"], "delete": plan.get("delete", [])}
+        if "anchor_pre" in plan:
+            out["anchor_pre"] = plan["anchor_pre"]
+        if "delete_old_anchor_posts" in plan:
+            out["delete_old_anchor_posts"] = plan["delete_old_anchor_posts"]
+        if "delete_after_create" in plan:
+            out["delete_after_create"] = plan["delete_after_create"]
+        print(json.dumps(out))
         return 0
 
+    if plan["action"] == "init-session":
+        _save_state(
+            args.state_file,
+            {
+                "session_id": plan["session_id"],
+                "anchor_pre": plan["anchor_pre"],
+                "latest_post": plan["latest_post"],
+            },
+        )
+        to_delete = plan.get("delete", [])
+        if to_delete:
+            res = _run_snapper_retry("-c", "root", "delete", "--sync", *(str(n) for n in to_delete), use_dbus=use_dbus, snapper_bin=args.snapper_bin)
+            if res.returncode != 0:
+                print(f"nox-snapper-cleanup warning: {res.stderr.strip()}", file=sys.stderr)
+        return 0
+
+    if plan["action"] == "consolidate":
+        anchor_pre = int(plan["anchor_pre"])
+        old_posts = [str(n) for n in plan.get("delete_old_anchor_posts", [])]
+        if old_posts:
+            del_old = _run_snapper_retry("-c", "root", "delete", "--sync", *old_posts, use_dbus=use_dbus, snapper_bin=args.snapper_bin)
+            if del_old.returncode != 0:
+                print(f"nox-snapper-cleanup consolidation aborted (delete old post): {del_old.stderr.strip()}", file=sys.stderr)
+                return 0
+
+        create_res = _run_snapper_retry(
+            "-c",
+            "root",
+            "create",
+            "--type",
+            "post",
+            "--pre-number",
+            str(anchor_pre),
+            "--cleanup-algorithm",
+            "number",
+            "--description",
+            "Project Nox Topgrade/Paru session POST",
+            "--print-number",
+            use_dbus=use_dbus,
+            snapper_bin=args.snapper_bin,
+        )
+        if create_res.returncode != 0 or not create_res.stdout.strip().isdigit():
+            print(f"nox-snapper-cleanup consolidation warning (create post): {create_res.stderr.strip()}", file=sys.stderr)
+            return 0
+
+        new_post = int(create_res.stdout.strip())
+        _save_state(
+            args.state_file,
+            {
+                "session_id": session_id,
+                "anchor_pre": anchor_pre,
+                "latest_post": new_post,
+            },
+        )
+        intermediates = [str(n) for n in plan.get("delete_after_create", [])]
+        if intermediates:
+            del_mid = _run_snapper_retry("-c", "root", "delete", "--sync", *intermediates, use_dbus=use_dbus, snapper_bin=args.snapper_bin)
+            if del_mid.returncode != 0:
+                print(f"nox-snapper-cleanup consolidation warning (delete intermediates): {del_mid.stderr.strip()}", file=sys.stderr)
+        return 0
+
+    to_delete = plan.get("delete", [])
     if not to_delete:
         return 0
 
-    cmd = snapper_cmd("-c", "root", "delete", "--sync", *(str(n) for n in to_delete), use_dbus=use_dbus)
-    res = None
-    for attempt in range(5):
-        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        if res.returncode == 0:
-            break
-        if "Config is in use" in res.stderr and attempt < 4:
-            time.sleep(0.5)
-            continue
-        break
-    if res is not None and res.returncode != 0:
+    res = _run_snapper_retry("-c", "root", "delete", "--sync", *(str(n) for n in to_delete), use_dbus=use_dbus, snapper_bin=args.snapper_bin)
+    if res.returncode != 0:
         print(f"nox-snapper-cleanup warning: {res.stderr.strip()}", file=sys.stderr)
     return 0
 

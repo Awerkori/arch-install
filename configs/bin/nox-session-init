@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# User session initializer: display profile, dark mode GSettings, XDG mime (Luciole + Firefox), Fuxi H3.
+# User session initializer: display profile, dark mode, Noctalia animated/lockscreen layout, Firefox Pure CSS, XDG mime, Fuxi H3.
 set -Eeuo pipefail
 
 # 1. Generate dynamic display outputs.toml for Umbriel
@@ -14,28 +14,54 @@ if command -v gsettings >/dev/null 2>&1; then
   gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' >/dev/null 2>&1 || true
 fi
 
-# 3. Apply default Project Nox Obsidian Purple wallpaper & Noctalia templates once (never overwrite user customization later)
-NOX_INIT_MARKER="${XDG_STATE_HOME:-$HOME/.local/state}/noctalia/.nox-obsidian-init-v1"
-if [[ ! -f "$NOX_INIT_MARKER" ]] && command -v noctalia >/dev/null 2>&1; then
+# 3. Apply Project Nox Obsidian Purple identity, lockscreen widgets, animated mpvpaper & templates once
+NOX_INIT_MARKER="${XDG_STATE_HOME:-$HOME/.local/state}/noctalia/.nox-obsidian-init-v2"
+if [[ ! -f "$NOX_INIT_MARKER" ]]; then
   mkdir -p "$(dirname "$NOX_INIT_MARKER")"
-  for _ in $(seq 1 40); do
-    if noctalia msg wallpaper-get >/dev/null 2>&1; then
-      break
+  /usr/local/libexec/nox/nox-noctalia-layout >/dev/null 2>&1 || true
+
+  if command -v noctalia >/dev/null 2>&1; then
+    for _ in $(seq 1 40); do
+      if noctalia msg wallpaper-get >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.5
+    done
+    if [[ -f /usr/share/nox-archinstall/wallpapers/obsidian-purple.png ]]; then
+      noctalia msg wallpaper-set /usr/share/nox-archinstall/wallpapers/obsidian-purple.png >/dev/null 2>&1 || true
     fi
-    sleep 0.5
-  done
-  if [[ -f /usr/share/nox-archinstall/wallpapers/obsidian-purple.png ]]; then
-    if noctalia msg wallpaper-set /usr/share/nox-archinstall/wallpapers/obsidian-purple.png >/dev/null 2>&1; then
-      noctalia msg templates-apply >/dev/null 2>&1 || true
-      touch "$NOX_INIT_MARKER"
-    fi
-  else
     noctalia msg templates-apply >/dev/null 2>&1 || true
-    touch "$NOX_INIT_MARKER"
+    noctalia msg config-reload >/dev/null 2>&1 || true
+    noctalia msg plugin noctalia/mpvpaper:service all reapply >/dev/null 2>&1 || true
+  fi
+  touch "$NOX_INIT_MARKER"
+fi
+
+# 4. Harmonize Firefox Pure toolbar/tabs (userChrome/userContent) for all profiles
+if [[ -f /usr/share/nox-archinstall/firefox/userChrome.css ]]; then
+  FF_DIR="$HOME/.mozilla/firefox"
+  if [[ ! -f "${FF_DIR}/profiles.ini" ]] && command -v firefox >/dev/null 2>&1; then
+    timeout 10 firefox --headless --no-remote -CreateProfile "nox ${FF_DIR}/nox.default" >/dev/null 2>&1 || true
+  fi
+  if [[ -d "$FF_DIR" ]]; then
+    for prof in "${FF_DIR}"/*/; do
+      [[ -d "$prof" ]] || continue
+      base="$(basename "$prof")"
+      case "$base" in
+        Crash*|Pending*) continue ;;
+      esac
+      mkdir -p "${prof}chrome"
+      if [[ ! -f "${prof}chrome/userChrome.css" ]]; then
+        install -m 0644 /usr/share/nox-archinstall/firefox/userChrome.css "${prof}chrome/userChrome.css"
+      fi
+      if [[ ! -f "${prof}chrome/userContent.css" && -f /usr/share/nox-archinstall/firefox/userContent.css ]]; then
+        install -m 0644 /usr/share/nox-archinstall/firefox/userContent.css "${prof}chrome/userContent.css"
+      fi
+    done
   fi
 fi
 
-# 3. Ensure Luciole (directories) and Firefox Pure (HTTP/HTTPS/HTML) are XDG defaults
+# 5. Ensure Luciole (directories) and Firefox Pure (HTTP/HTTPS/HTML) are XDG defaults
 if command -v xdg-mime >/dev/null 2>&1; then
   if [[ -f /usr/share/applications/dev.noctalia.luciole.desktop ]]; then
     xdg-mime default dev.noctalia.luciole.desktop inode/directory >/dev/null 2>&1 || true
@@ -54,5 +80,17 @@ if command -v xdg-settings >/dev/null 2>&1 && [[ -f /usr/share/applications/fire
   xdg-settings set default-web-browser firefox.desktop >/dev/null 2>&1 || true
 fi
 
-# 4. Dynamic Fuxi H3 fix (skips cleanly if headset absent)
+# 6. Seed missing topgrade drop-ins without overwriting user preferences
+if [[ -d /etc/skel/.config/topgrade.d ]]; then
+  mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/topgrade.d"
+  for tgcfg in /etc/skel/.config/topgrade.d/*.toml; do
+    [[ -f "$tgcfg" ]] || continue
+    base="$(basename "$tgcfg")"
+    if [[ ! -f "${XDG_CONFIG_HOME:-$HOME/.config}/topgrade.d/${base}" ]]; then
+      install -m 0644 "$tgcfg" "${XDG_CONFIG_HOME:-$HOME/.config}/topgrade.d/${base}"
+    fi
+  done
+fi
+
+# 7. Dynamic Fuxi H3 fix (skips cleanly if headset absent)
 /usr/local/libexec/nox/nox-fuxi-h3-fix >/dev/null 2>&1 || true

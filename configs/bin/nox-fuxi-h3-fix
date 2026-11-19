@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
-# Dynamic HAVIT Fuxi H3 PipeWire/ALSA mixer remediation (idempotent, hardware-safe).
+# Dynamic HAVIT Fuxi H3 PipeWire/ALSA mixer & capture remediation (idempotent, hardware-safe).
 set -Eeuo pipefail
 
 PACTL_CARDS_FILE=""
+PACTL_SOURCES_FILE=""
 AMIXER_CONTENTS_FILE=""
 ALSA_CARDS_FILE="/proc/asound/cards"
+STATE_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/nox-audio/fuxi-h3-state"
+HOTPLUG_MODE=false
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pactl-cards) PACTL_CARDS_FILE="$2"; shift 2 ;;
+    --pactl-sources) PACTL_SOURCES_FILE="$2"; shift 2 ;;
     --amixer-contents) AMIXER_CONTENTS_FILE="$2"; shift 2 ;;
     --alsa-cards) ALSA_CARDS_FILE="$2"; shift 2 ;;
+    --state-file) STATE_FILE="$2"; shift 2 ;;
+    --hotplug) HOTPLUG_MODE=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -27,6 +33,20 @@ wait_for_pipewire() {
     ((tries++))
   done
   return 1
+}
+
+read_state_key() {
+  local key="$1"
+  [[ -f "$STATE_FILE" ]] || return 0
+  awk -F= -v k="$key" '$1 == k { print $2; exit }' "$STATE_FILE" 2>/dev/null || true
+}
+
+write_state() {
+  local present="$1" source_name="$2" user_muted="$3"
+  mkdir -p "$(dirname "$STATE_FILE")"
+  local tmp="${STATE_FILE}.nox.tmp"
+  printf 'PRESENT=%s\nSOURCE=%s\nUSER_MUTED=%s\n' "$present" "$source_name" "$user_muted" > "$tmp"
+  mv -f "$tmp" "$STATE_FILE"
 }
 
 if [[ -z "$PACTL_CARDS_FILE" ]]; then
@@ -48,6 +68,10 @@ CARD_NAME="$(printf '%s\n' "$CARDS_OUTPUT" | awk '
 ')"
 
 if [[ -z "$CARD_NAME" ]]; then
+  prev_user_muted="$(read_state_key USER_MUTED)"
+  if ! $DRY_RUN; then
+    write_state 0 "" "${prev_user_muted:-0}"
+  fi
   echo "SKIP-HARDWARE: Headset Fuxi H3 nao conectado."
   exit 0
 fi
@@ -97,12 +121,73 @@ NUMID="$(printf '%s\n' "$AMIXER_OUT" | awk "
   }
 ")"
 
+# Collect all Mic Capture Switch numids (e.g. index=0 and index=1 on Fuxi H3)
+MIC_SWITCH_NUMIDS="$(printf '%s\n' "$AMIXER_OUT" | awk "
+  /name='Mic Capture Switch'/ {
+    if (match(\$0, /numid=[0-9]+/)) {
+      print substr(\$0, RSTART + 6, RLENGTH - 6)
+    }
+  }
+" | paste -sd, -)"
+
+# Detect matching Fuxi H3 PipeWire capture source (never touch unrelated microphones)
+if [[ -z "$PACTL_SOURCES_FILE" ]]; then
+  SOURCES_OUTPUT="$(pactl list sources 2>/dev/null || true)"
+elif [[ -f "$PACTL_SOURCES_FILE" ]]; then
+  SOURCES_OUTPUT="$(cat "$PACTL_SOURCES_FILE")"
+else
+  SOURCES_OUTPUT=""
+fi
+
+SOURCE_INFO="$(printf '%s\n' "$SOURCES_OUTPUT" | awk '
+  BEGIN { name = ""; mute = "" }
+  /^Source #[0-9]+/ {
+    if (name != "" && tolower(name) ~ /^alsa_input\..*(fuxi|xiisound)/) {
+      print name "|" mute
+      exit
+    }
+    name = ""; mute = ""
+  }
+  /^[[:space:]]*Name:[[:space:]]*/ {
+    line = $0; sub(/^[[:space:]]*Name:[[:space:]]*/, "", line); name = line
+  }
+  /^[[:space:]]*Mute:[[:space:]]*/ {
+    line = $0; sub(/^[[:space:]]*Mute:[[:space:]]*/, "", line); mute = tolower(line)
+  }
+  END {
+    if (name != "" && tolower(name) ~ /^alsa_input\..*(fuxi|xiisound)/) {
+      print name "|" mute
+    }
+  }
+')"
+
+SOURCE_NAME="${SOURCE_INFO%%|*}"
+SOURCE_MUTED="${SOURCE_INFO#*|}"
+[[ "$SOURCE_NAME" == "$SOURCE_INFO" ]] && SOURCE_MUTED=""
+
+prev_present="$(read_state_key PRESENT)"
+prev_user_muted="$(read_state_key USER_MUTED)"
+RECONNECTED=false
+if $HOTPLUG_MODE || [[ "${prev_present:-0}" == "0" ]] || [[ -z "$prev_present" ]]; then
+  RECONNECTED=true
+fi
+
+SHOULD_UNMUTE_CAPTURE=false
+if $RECONNECTED && [[ "${prev_user_muted:-0}" != "1" ]]; then
+  SHOULD_UNMUTE_CAPTURE=true
+fi
+
 if $DRY_RUN; then
   echo "CARD_NAME=$CARD_NAME"
   echo "ACTIVE_PROFILE=$ACTIVE_PROFILE"
   echo "CHOSEN_PROFILE=$CHOSEN_PROFILE"
   echo "ALSA_ID=$ALSA_ID"
   echo "NUMID=${NUMID:-none}"
+  echo "MIC_SWITCH_NUMIDS=${MIC_SWITCH_NUMIDS:-none}"
+  echo "SOURCE_NAME=${SOURCE_NAME:-none}"
+  echo "SOURCE_MUTED=${SOURCE_MUTED:-unknown}"
+  echo "RECONNECTED=$RECONNECTED"
+  echo "SHOULD_UNMUTE_CAPTURE=$SHOULD_UNMUTE_CAPTURE"
   exit 0
 fi
 
@@ -117,4 +202,22 @@ if [[ -n "$NUMID" && "$NUMID" =~ ^[0-9]+$ ]]; then
   amixer -c "$ALSA_ID" cset "numid=${NUMID}" 100 >/dev/null 2>&1 || true
 fi
 
-echo "OK: Fuxi H3 ($CARD_NAME, perfil=$CHOSEN_PROFILE, numid=${NUMID:-none}) verificado."
+if $SHOULD_UNMUTE_CAPTURE; then
+  IFS=',' read -r -a _mic_ids <<<"$MIC_SWITCH_NUMIDS"
+  for mid in "${_mic_ids[@]}"; do
+    [[ -n "$mid" && "$mid" =~ ^[0-9]+$ ]] || continue
+    amixer -c "$ALSA_ID" cset "numid=${mid}" on >/dev/null 2>&1 || true
+  done
+  if [[ -n "$SOURCE_NAME" && "$SOURCE_MUTED" == "yes" ]]; then
+    pactl set-source-mute "$SOURCE_NAME" 0 >/dev/null 2>&1 || true
+    SOURCE_MUTED="no"
+  fi
+fi
+
+next_user_muted=0
+if ! $SHOULD_UNMUTE_CAPTURE && [[ "$SOURCE_MUTED" == "yes" ]]; then
+  next_user_muted=1
+fi
+write_state 1 "${SOURCE_NAME:-}" "$next_user_muted"
+
+echo "OK: Fuxi H3 ($CARD_NAME, perfil=$CHOSEN_PROFILE, numid=${NUMID:-none}, mic_numids=${MIC_SWITCH_NUMIDS:-none}, source=${SOURCE_NAME:-none}) verificado."

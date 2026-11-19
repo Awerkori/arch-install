@@ -1,0 +1,10 @@
+/* Project Nox — Obsidian Purple Firefox Pure Internal Pages Alignment */
+@-moz-document url-prefix("about:newtab"), url-prefix("about:home"), url-prefix("about:privatebrowsing") {
+  body {
+    --newtab-background-color: #090610 !important;
+    --newtab-background-color-secondary: #120a1f !important;
+    --newtab-text-primary-color: #f5f2ff !important;
+    --newtab-primary-action-background: #9333ea !important;
+    background-color: #090610 !important;
+  }
+}

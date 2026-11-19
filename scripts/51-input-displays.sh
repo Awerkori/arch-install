@@ -168,12 +168,15 @@ id -u greeter >/dev/null 2>&1 || nox_die "Usuario de sistema 'greeter' nao encon
 grep -q '^Exec=start-umbriel' /usr/share/wayland-sessions/umbriel.desktop \
   || nox_die "Session file /usr/share/wayland-sessions/umbriel.desktop invalido ou ausente."
 
+nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-greeter-session" "${NOX_LIBEXEC_DIR}/nox-greeter-session"
+nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-noctalia-layout" "${NOX_LIBEXEC_DIR}/nox-noctalia-layout"
+
 cat > /etc/greetd/config.toml <<'EOF'
 [terminal]
 vt = 1
 
 [default_session]
-command = "/usr/bin/noctalia-greeter-session"
+command = "/usr/local/libexec/nox/nox-greeter-session"
 user = "greeter"
 EOF
 chmod 0644 /etc/greetd/config.toml

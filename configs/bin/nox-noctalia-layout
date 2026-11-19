@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+"""Generate per-output Noctalia lockscreen widget geometry and mpvpaper assignments."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+WP_DIR = Path("/usr/share/nox-archinstall/wallpapers")
+ICON_EMBLEM_GIF = "/usr/share/nox-archinstall/icons/nox-lockscreen-emblem.gif"
+WP_LANDSCAPE_VIDEO = str(WP_DIR / "nox-g5-runtime.webm")
+WP_PORTRAIT_VIDEO = str(WP_DIR / "nox-aoc-runtime.webm")
+
+
+def _load_outputs_from_umbriel() -> list[dict[str, Any]]:
+    try:
+        res = subprocess.run(
+            ["umbriel", "outputs", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            data = json.loads(res.stdout)
+            if isinstance(data, list) and data:
+                return data
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        pass
+    return []
+
+
+def _load_outputs_from_sysfs(drm_root: Path = Path("/sys/class/drm")) -> list[dict[str, Any]]:
+    outputs: list[dict[str, Any]] = []
+    if not drm_root.is_dir():
+        return outputs
+    for status_file in sorted(drm_root.glob("card*-*/status")):
+        try:
+            if status_file.read_text(encoding="utf-8").strip() != "connected":
+                continue
+        except OSError:
+            continue
+        conn_dir = status_file.parent
+        name = conn_dir.name.split("-", 1)[1] if "-" in conn_dir.name else conn_dir.name
+        modes_file = conn_dir / "modes"
+        w, h = 1920, 1080
+        if modes_file.is_file():
+            try:
+                first_mode = next((m.strip() for m in modes_file.read_text(encoding="utf-8").splitlines() if "x" in m), "")
+                if first_mode:
+                    base = first_mode.split("@", 1)[0]
+                    parts = base.lower().split("x")
+                    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                        w, h = int(parts[0]), int(parts[1])
+            except OSError:
+                pass
+        outputs.append({"name": name, "width": w, "height": h})
+    return outputs
+
+
+def _output_dimensions(out: dict[str, Any]) -> tuple[int, int, bool]:
+    name = str(out.get("name", ""))
+    model = str(out.get("model", ""))
+    transform = str(out.get("transform", "normal")).lower()
+
+    w = out.get("logical_width") or out.get("width")
+    h = out.get("logical_height") or out.get("height")
+    if (not w or not h) and isinstance(out.get("logical_size"), dict):
+        w = out["logical_size"].get("width")
+        h = out["logical_size"].get("height")
+    if (not w or not h) and isinstance(out.get("current_mode"), dict):
+        w = out["current_mode"].get("width")
+        h = out["current_mode"].get("height")
+    if (not w or not h) and isinstance(out.get("modes"), list) and out["modes"]:
+        first = out["modes"][0]
+        if isinstance(first, dict):
+            w = first.get("width")
+            h = first.get("height")
+        elif isinstance(first, str) and "x" in first:
+            parts = first.split("@", 1)[0].lower().split("x")
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                w, h = int(parts[0]), int(parts[1])
+
+    width = int(w) if w else 1920
+    height = int(h) if h else 1080
+
+    scale = out.get("scale")
+    if isinstance(scale, (int, float)) and scale > 0 and not out.get("logical_width"):
+        width = max(640, int(round(width / float(scale))))
+        height = max(480, int(round(height / float(scale))))
+
+    rotated = transform in {"90", "270", "flipped-90", "flipped-270", "left", "right"}
+    if rotated and width > height:
+        width, height = height, width
+
+    is_portrait = height > width or any(tag in f"{name} {model}".lower() for tag in ("24b35hm2", "aoc"))
+    if is_portrait and width > height:
+        width, height = height, width
+    return width, height, is_portrait
+
+
+def build_mpvpaper_assignments(outputs: list[dict[str, Any]]) -> dict[str, Any]:
+    mapping: dict[str, str] = {}
+    for out in outputs:
+        name = str(out.get("name", "")).strip()
+        if not name:
+            continue
+        _, _, is_portrait = _output_dimensions(out)
+        mapping[name] = WP_PORTRAIT_VIDEO if is_portrait else WP_LANDSCAPE_VIDEO
+    if not mapping:
+        mapping["*"] = WP_LANDSCAPE_VIDEO
+    return {
+        "assignments": mapping,
+        "lastAssignments": dict(mapping),
+        "launchedAsSystemd": {},
+    }
+
+
+def _safe_id(connector: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in connector)
+
+
+def build_lockscreen_widgets_toml(outputs: list[dict[str, Any]]) -> str:
+    if not outputs:
+        outputs = [{"name": "Virtual-1", "width": 1920, "height": 1080}]
+
+    widget_order: list[str] = []
+    blocks: list[str] = [
+        "# Auto-generated architectural lockscreen layout for Project Nox",
+        "[lockscreen_widgets]",
+        "enabled = true",
+        "schema_version = 2",
+    ]
+
+    widget_blocks: list[str] = []
+    for idx, out in enumerate(outputs):
+        name = str(out.get("name", "")).strip() or f"output-{idx}"
+        w, h, _ = _output_dimensions(out)
+        sid = _safe_id(name)
+        cx = round(w * 0.5, 1)
+
+        emblem_id = f"lockscreen-widget-emblem-{sid}"
+        clock_id = f"lockscreen-widget-clock-{sid}"
+        login_id = f"lockscreen-login-box@{name}"
+
+        emblem_cy = round(max(116.0, h * 0.21), 1)
+        clock_cy = round(max(emblem_cy + 124.0, h * 0.365), 1)
+        login_cy = round(max(clock_cy + 158.0, h * 0.60), 1)
+
+        widget_order.extend([emblem_id, clock_id, login_id])
+
+        widget_blocks.extend(
+            [
+                "",
+                f'[lockscreen_widgets.widget."{emblem_id}"]',
+                'type = "sticker"',
+                f'output = "{name}"',
+                f"cx = {cx}",
+                f"cy = {emblem_cy}",
+                "box_width = 148.0",
+                "box_height = 148.0",
+                "rotation = 0.0",
+                f'[lockscreen_widgets.widget."{emblem_id}".settings]',
+                f'image_path = "{ICON_EMBLEM_GIF}"',
+                "opacity = 0.96",
+                "background = false",
+                "",
+                f'[lockscreen_widgets.widget."{clock_id}"]',
+                'type = "clock"',
+                f'output = "{name}"',
+                f"cx = {cx}",
+                f"cy = {clock_cy}",
+                "box_width = 360.0",
+                "box_height = 96.0",
+                "rotation = 0.0",
+                f'[lockscreen_widgets.widget."{clock_id}".settings]',
+                'clock_style = "digital"',
+                'format = "{:%H:%M}"',
+                'font_family = "Outfit"',
+                'color = "#f5f2ff"',
+                "center_text = true",
+                "shadow = true",
+                "background = false",
+                "",
+                f'[lockscreen_widgets.widget."{login_id}"]',
+                'type = "login_box"',
+                f'output = "{name}"',
+                f"cx = {cx}",
+                f"cy = {login_cy}",
+                "box_width = 0.0",
+                "box_height = 0.0",
+                "rotation = 0.0",
+                f'[lockscreen_widgets.widget."{login_id}".settings]',
+                'layout = "regular"',
+                "show_session_buttons = true",
+                "show_media = false",
+                "show_media_controls = false",
+                "show_weather = false",
+                'background_color = "surface_container"',
+                "background_opacity = 0.88",
+                "background_radius = 14",
+                "show_password_reveal = true",
+                "show_login_button = true",
+                "show_unlock_hint = true",
+            ]
+        )
+
+    order_toml = ", ".join(f'"{wid}"' for wid in widget_order)
+    blocks.append(f"widget_order = [{order_toml}]")
+    blocks.extend(widget_blocks)
+    return "\n".join(blocks) + "\n"
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    if str(path) == "/dev/null" or path.is_char_device() or path.is_block_device():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".nox.tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description="Generate Noctalia lockscreen layout and mpvpaper assignments.")
+    parser.add_argument("--input-json", default=None, help="Optional JSON file mocking umbriel outputs --json")
+    parser.add_argument("--lockscreen-out", default=None, help="Output path for nox-lockscreen-widgets.toml")
+    parser.add_argument("--mpvpaper-out", default=None, help="Output path for mpvpaper/assignments.json")
+    parser.add_argument("--dry-run", action="store_true", help="Print generated TOML and JSON to stdout")
+    parser.add_argument("--init-once", action="store_true", help="Run once before Noctalia starts if marker is absent")
+    args = parser.parse_args(argv)
+
+    state_home = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
+    marker = state_home / "noctalia/.nox-layout-seeded-v2"
+    if args.init_once and marker.exists():
+        return 0
+
+    if args.input_json:
+        outputs = json.loads(Path(args.input_json).read_text(encoding="utf-8"))
+    else:
+        u_outs = _load_outputs_from_umbriel()
+        s_outs = _load_outputs_from_sysfs()
+        merged: dict[str, dict[str, Any]] = {o["name"]: o for o in s_outs if o.get("name")}
+        for o in u_outs:
+            if o.get("name"):
+                merged[o["name"]] = o
+        outputs = list(merged.values())
+
+    toml_txt = build_lockscreen_widgets_toml(outputs)
+    mpv_json = json.dumps(build_mpvpaper_assignments(outputs), indent=2) + "\n"
+
+    if args.dry_run:
+        print(toml_txt)
+        print("---")
+        print(mpv_json, end="")
+        return 0
+
+    cfg_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    state_home = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
+    ls_path = Path(args.lockscreen_out) if args.lockscreen_out else cfg_home / "noctalia/nox-lockscreen-widgets.toml"
+    mpv_path = Path(args.mpvpaper_out) if args.mpvpaper_out else state_home / "noctalia/mpvpaper/assignments.json"
+
+    if args.lockscreen_out != "none":
+        _atomic_write(ls_path, toml_txt)
+    if args.mpvpaper_out != "none":
+        _atomic_write(mpv_path, mpv_json)
+    if args.init_once:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

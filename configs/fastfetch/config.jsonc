@@ -1,92 +1,122 @@
 {
   "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
-  // Nox Archinstall — Fastfetch default configuration
-  // To switch to a custom Project Nox logo later, replace "source": "arch" with a file path (e.g. ~/.config/fastfetch/nox-logo.txt).
+  // Nox Archinstall — Project Nox Obsidian Purple Dashboard
   "logo": {
-    "source": "arch_small",
-    "color": {
-      "1": "38;2;147;51;234",
-      "2": "38;2;196;181;253"
-    },
+    "type": "file",
+    "source": "~/.config/fastfetch/nox-logo.txt",
     "padding": {
-      "top": 1,
+      "top": 2,
       "left": 1,
-      "right": 2
+      "right": 3
     }
   },
   "display": {
-    "separator": " ",
+    "disableLinewrap": true,
+    "separator": " │ ",
     "color": {
       "keys": "38;2;196;181;253",
-      "title": "38;2;251;191;36"
+      "title": "38;2;251;191;36",
+      "output": "38;2;245;242;255",
+      "separator": "38;2;168;85;247"
     },
     "key": {
-      "width": 11
+      "width": 13
     }
   },
   "modules": [
-    "title",
-    "separator",
+    {
+      "type": "title",
+      "format": "\u001b[1;38;2;251;191;36m{user-name}\u001b[38;2;124;58;237m@\u001b[1;38;2;168;85;247m{host-name}\u001b[0m"
+    },
+    {
+      "type": "separator",
+      "string": "─"
+    },
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;251;191;36m✦ \u001b[1;38;2;168;85;247mSYSTEM\u001b[0m"
+    },
     {
       "type": "os",
-      "key": "OS"
+      "key": "├─ OS"
     },
     {
       "type": "host",
-      "key": "Host"
+      "key": "├─ Host"
     },
     {
       "type": "kernel",
-      "key": "Kernel"
+      "key": "├─ Kernel"
     },
     {
       "type": "uptime",
-      "key": "Uptime"
+      "key": "├─ Uptime"
     },
     {
       "type": "packages",
-      "key": "Packages"
+      "key": "└─ Packages"
+    },
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;251;191;36m✦ \u001b[1;38;2;168;85;247mSESSION\u001b[0m"
     },
     {
       "type": "shell",
-      "key": "Shell"
-    },
-    {
-      "type": "display",
-      "key": "Display"
+      "key": "├─ Shell"
     },
     {
       "type": "wm",
-      "key": "WM"
+      "key": "├─ WM"
+    },
+    {
+      "type": "de",
+      "key": "├─ Desktop",
+      "format": "Noctalia Shell"
     },
     {
       "type": "terminal",
-      "key": "Terminal"
-    },
-    {
-      "type": "cpu",
-      "key": "CPU"
-    },
-    {
-      "type": "gpu",
-      "key": "GPU"
-    },
-    {
-      "type": "memory",
-      "key": "Memory"
-    },
-    {
-      "type": "swap",
-      "key": "Swap"
-    },
-    {
-      "type": "disk",
-      "key": "Disk",
-      "folders": "/"
+      "key": "├─ Terminal"
     },
     {
       "type": "locale",
-      "key": "Locale"
+      "key": "└─ Locale"
+    },
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;251;191;36m✦ \u001b[1;38;2;168;85;247mHARDWARE\u001b[0m"
+    },
+    {
+      "type": "cpu",
+      "key": "├─ CPU",
+      "format": "{name} ({cores-logical}c)"
+    },
+    {
+      "type": "gpu",
+      "key": "├─ GPU",
+      "format": "{name}"
+    },
+    {
+      "type": "memory",
+      "key": "├─ Memory"
+    },
+    {
+      "type": "swap",
+      "key": "└─ Swap"
+    },
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;251;191;36m✦ \u001b[1;38;2;168;85;247mDISPLAY & STORAGE\u001b[0m"
+    },
+    {
+      "type": "display",
+      "key": "├─ Display",
+      "compactType": "original-with-refresh-rate"
+    },
+    {
+      "type": "disk",
+      "key": "└─ Disk (/)",
+      "folders": "/",
+      "format": "{size-used} / {size-total} ({size-percentage})"
     },
     "break",
     {
