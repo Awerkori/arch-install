@@ -7,6 +7,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -111,8 +112,16 @@ def main() -> int:
         return 0
 
     cmd = snapper_cmd("-c", "root", "delete", "--sync", *(str(n) for n in to_delete), use_dbus=use_dbus)
-    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if res.returncode != 0:
+    res = None
+    for attempt in range(5):
+        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if res.returncode == 0:
+            break
+        if "Config is in use" in res.stderr and attempt < 4:
+            time.sleep(0.5)
+            continue
+        break
+    if res is not None and res.returncode != 0:
         print(f"nox-snapper-cleanup warning: {res.stderr.strip()}", file=sys.stderr)
     return 0
 

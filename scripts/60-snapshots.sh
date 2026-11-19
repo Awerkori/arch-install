@@ -32,6 +32,10 @@ if ! snapper --no-dbus -c root get-config >/dev/null 2>&1; then
     snapper --no-dbus -c root create-config /
     btrfs subvolume delete /.snapshots >/dev/null 2>&1 || true
     mkdir -p /.snapshots
+    SNAP_UUID="$(blkid -s UUID -o value "$SNAP_DEV" 2>/dev/null || true)"
+    if [[ "$SNAP_SUBVOL" =~ ^/?@\.snapshots$ ]] && [[ -n "$SNAP_UUID" ]] && ! awk '$2 == "/.snapshots" {found=1} END{exit !found}' /etc/fstab 2>/dev/null; then
+      printf 'UUID=%s\t/.snapshots\tbtrfs\trw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvol=/@.snapshots\t0 0\n' "$SNAP_UUID" >> /etc/fstab
+    fi
     mount /.snapshots 2>/dev/null || mount -o "subvol=${SNAP_SUBVOL}" "$SNAP_DEV" /.snapshots
   else
     snapper --no-dbus -c root create-config /

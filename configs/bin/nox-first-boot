@@ -42,23 +42,23 @@ if command -v limine-snapper-sync >/dev/null 2>&1 && [[ -f /boot/limine.conf ]];
   [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true
 fi
 
-# 4. Optimize Btrfs mount options in /etc/fstab (add noatime cleanly; deduplicate /nox-swap)
+# 4. Optimize Btrfs mount options in /etc/fstab (add noatime cleanly; deduplicate /nox-swap and /.snapshots)
 if [[ -f /etc/fstab ]]; then
   python3 - /etc/fstab <<'PY'
 import os, sys
 p = sys.argv[1]
 lines = open(p, "r", encoding="utf-8").read().splitlines()
-out, seen_nox_swap = [], False
+out, seen_mounts = [], set()
 for line in lines:
     stripped = line.strip()
     if not stripped or stripped.startswith("#"):
         out.append(line)
         continue
     parts = stripped.split()
-    if len(parts) >= 4 and parts[1] == "/nox-swap":
-        if seen_nox_swap:
+    if len(parts) >= 4 and parts[1] in ("/nox-swap", "/.snapshots"):
+        if parts[1] in seen_mounts:
             continue
-        seen_nox_swap = True
+        seen_mounts.add(parts[1])
     if len(parts) >= 4 and parts[2] == "btrfs":
         opts = [o for o in parts[3].split(",") if o]
         if "noatime" not in opts and "atime" not in opts:
