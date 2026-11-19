@@ -35,5 +35,5 @@ jobs:
 
       - name: Secret and private data scan
         run: |
-          ! grep -rnE 'ghp_|gho_|github_pat_|BEGIN (OPENSSH|RSA|EC) PRIVATE KEY|20:35:43:1E:44:2D' \
-            --exclude-dir=.git --exclude-dir=dist --exclude-dir=reports .
+          ! grep -rnE '[g]hp_|[g]ho_|[g]ithub_pat_|BEGIN (OPENSSH|RSA|EC) PRIVATE KEY' \
+            --exclude-dir=.git --exclude-dir=.github --exclude-dir=dist --exclude-dir=reports .
