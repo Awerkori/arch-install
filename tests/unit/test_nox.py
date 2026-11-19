@@ -309,6 +309,18 @@ class TestSystemToolsLauncher(unittest.TestCase):
             )
             self.assertEqual(launch.stdout.strip(), "qt6ct")
 
+    def test_snapshots_stage_resyncs_limine_restore_overlay_and_ownership(self) -> None:
+        common_sh = (REPO / "scripts/lib/common.sh").read_text(encoding="utf-8")
+        appearance_sh = (REPO / "scripts/53-appearance.sh").read_text(encoding="utf-8")
+        snapshots_sh = (REPO / "scripts/60-snapshots.sh").read_text(encoding="utf-8")
+        val_sh = (REPO / "scripts/80-validation.sh").read_text(encoding="utf-8")
+        self.assertIn("nox_sync_hidden_tech_desktops()", common_sh)
+        self.assertIn('install -d -m 0755 -o "$uid" -g "$gid"', common_sh)
+        self.assertIn('"${uhome}/.local" "${uhome}/.local/share"', common_sh)
+        self.assertIn("nox_sync_hidden_tech_desktops", appearance_sh)
+        self.assertIn("nox_sync_hidden_tech_desktops", snapshots_sh)
+        self.assertIn("limine-snapper-restore.desktop", val_sh)
+
 
 class TestSnapperCleanup(unittest.TestCase):
     def run_cleanup(self, entries: list[dict]) -> dict:

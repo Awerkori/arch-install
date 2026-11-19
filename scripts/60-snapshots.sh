@@ -123,4 +123,7 @@ limine-snapper-sync || nox_warn "limine-snapper-sync retornou aviso na sincroniz
 command -v limine-enroll-config >/dev/null 2>&1 && limine-enroll-config >/dev/null 2>&1 || true
 [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true
 
+# 10. Sync launcher XDG user overlays now that limine-snapper-restore.desktop is installed
+nox_sync_hidden_tech_desktops
+
 nox_info "Politica Snapper root (max 2), snap-pac e limine-snapper-sync configurados."

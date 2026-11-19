@@ -69,7 +69,7 @@ check "umbriel, noctalia, noctalia-greeter, greetd, kitty instalados" bash -c "p
 check "luciole-git instalado e .desktop presente" bash -c "pacman -Q luciole-git >/dev/null && test -f /usr/share/applications/dev.noctalia.luciole.desktop"
 check "firefox-pure (CachyOS) instalado como navegador padrao XDG" bash -c "pacman -Qi firefox-pure | grep -qE 'Installed From[[:space:]]*:[[:space:]]*(cachyos-znver4|cachyos)' && test -f /usr/share/applications/firefox.desktop && grep -q 'x-scheme-handler/https=firefox.desktop' /etc/skel/.config/mimeapps.list"
 check "btop, rocm-smi-lib e fastfetch instalados com configs" bash -c "pacman -Q btop rocm-smi-lib fastfetch >/dev/null && test -s /etc/skel/.config/btop/btop.conf && test -s /etc/skel/.config/fastfetch/config.jsonc"
-check "launcher minimalista Noctalia e ferramenta de busca tecnica configurados" bash -c "test -s /etc/skel/.config/noctalia/nox-launcher.toml && test -x /usr/local/libexec/nox/nox-system-tools-list && test -x /usr/local/libexec/nox/nox-system-tools-launch && test -s /etc/skel/.local/share/applications/dev.noctalia.Noctalia.desktop"
+check "launcher minimalista Noctalia e ferramenta de busca tecnica configurados" bash -c "test -s /etc/skel/.config/noctalia/nox-launcher.toml && test -x /usr/local/libexec/nox/nox-system-tools-list && test -x /usr/local/libexec/nox/nox-system-tools-launch && test -s /etc/skel/.local/share/applications/dev.noctalia.Noctalia.desktop && grep -qx 'NoDisplay=true' /etc/skel/.local/share/applications/limine-snapper-restore.desktop && grep -qx 'NoDisplay=true' /etc/skel/.local/share/applications/btop.desktop && grep -qx 'NoDisplay=true' /etc/skel/.local/share/applications/qt6ct.desktop"
 check "greetd habilitado e apontando para noctalia-greeter-session" bash -c "systemctl is-enabled greetd.service >/dev/null && grep -q noctalia-greeter-session /etc/greetd/config.toml"
 check "umbriel config validate OK" bash -c "umbriel config validate -c /etc/skel/.config/umbriel/config.toml"
 check "umbriel layout padrao dwindle" bash -c "grep -Eq '^[[:space:]]*mode[[:space:]]*=[[:space:]]*\"dwindle\"' /etc/skel/.config/umbriel/config.toml && ! grep -Eq '^[[:space:]]*mode[[:space:]]*=[[:space:]]*\"(scrolling|master|stacking)\"' /etc/skel/.config/umbriel/config.toml"
@@ -87,6 +87,7 @@ while IFS=: read -r uname _uid _gid _home ushell; do
   [[ -n "$uname" ]] || continue
   check "shell bash para $uname" bash -c "test '$ushell' = '/bin/bash' -o '$ushell' = '/usr/bin/bash'"
   check "grupo wheel para $uname" bash -c "id -nG '$uname' | grep -qw wheel"
+  check "permissoes .local e overlays launcher para $uname" bash -c "test \"\$(stat -c '%U' '${_home}/.local')\" = '$uname' && test \"\$(stat -c '%U' '${_home}/.local/share')\" = '$uname' && grep -qx 'NoDisplay=true' '${_home}/.local/share/applications/limine-snapper-restore.desktop'"
 done < <(nox_list_human_users)
 
 if (( FAILS > 0 )); then

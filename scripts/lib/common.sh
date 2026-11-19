@@ -160,3 +160,46 @@ nox_check_zen4_or_5() {
     }
   ' /proc/cpuinfo
 }
+
+nox_sync_hidden_tech_desktops() {
+  # Hide technical/maintenance tools from Noctalia initial view via XDG user overlays
+  # without editing pacman-owned /usr/share/applications/*.desktop; searchable via nox-launcher.toml.
+  local -a hidden_tech_desktops=(
+    dev.noctalia.Noctalia.desktop
+    nwg-look.desktop
+    qt5ct.desktop
+    qt6ct.desktop
+    qv4l2.desktop
+    qvidcap.desktop
+    limine-snapper-restore.desktop
+    org.pulseaudio.pavucontrol.desktop
+    btop.desktop
+  )
+  install -d -m 0755 /etc/skel/.local /etc/skel/.local/share /etc/skel/.local/share/applications
+  local dfile src dname ov base uname uid gid uhome _shell
+  for dfile in "${hidden_tech_desktops[@]}"; do
+    src="/usr/share/applications/${dfile}"
+    [[ -f "$src" ]] || continue
+    dname="$(grep -m1 '^Name=' "$src" | cut -d= -f2- || true)"
+    [[ -n "$dname" ]] || dname="${dfile%.desktop}"
+    cat > "/etc/skel/.local/share/applications/${dfile}" <<EOF
+[Desktop Entry]
+Type=Application
+Name=${dname}
+NoDisplay=true
+EOF
+    chmod 0644 "/etc/skel/.local/share/applications/${dfile}"
+  done
+
+  while IFS=: read -r uname uid gid uhome _shell; do
+    [[ -n "$uname" && -d "$uhome" ]] || continue
+    install -d -m 0755 -o "$uid" -g "$gid" \
+      "${uhome}/.local" "${uhome}/.local/share" "${uhome}/.local/share/applications"
+    for ov in /etc/skel/.local/share/applications/*.desktop; do
+      [[ -f "$ov" ]] || continue
+      base="$(basename "$ov")"
+      nox_atomic_install 0644 "$ov" "${uhome}/.local/share/applications/${base}"
+      chown "${uid}:${gid}" "${uhome}/.local/share/applications/${base}"
+    done
+  done < <(nox_list_human_users)
+}
