@@ -34,7 +34,7 @@ paru --version
 nox_atomic_install 0644 "${NOX_ROOT}/configs/scx_loader/config.toml" /etc/scx_loader/config.toml
 nox_atomic_install 0644 "${NOX_ROOT}/configs/gamemode/gamemode.ini" /etc/gamemode.ini
 if getent group gamemode >/dev/null 2>&1; then
-  while IFS=$'\t' read -r uname _ _; do
+  while IFS=: read -r uname _uid _gid _home _shell; do
     [[ -n "$uname" ]] && usermod -aG gamemode "$uname" >/dev/null 2>&1 || true
   done < <(nox_list_human_users)
 fi

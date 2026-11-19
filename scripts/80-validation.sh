@@ -64,10 +64,11 @@ check "umbriel config validate OK" bash -c "umbriel config validate -c /etc/skel
 check "umbriel layout padrao dwindle" bash -c "grep -Eq '^[[:space:]]*mode[[:space:]]*=[[:space:]]*\"dwindle\"' /etc/skel/.config/umbriel/config.toml && ! grep -Eq '^[[:space:]]*mode[[:space:]]*=[[:space:]]*\"(scrolling|master|stacking)\"' /etc/skel/.config/umbriel/config.toml"
 check "visudo validado sem NOPASSWD" bash -c "visudo -cf /etc/sudoers >/dev/null && visudo -cf /etc/sudoers.d/10-wheel >/dev/null && ! grep -rqE '^[^#]*NOPASSWD' /etc/sudoers /etc/sudoers.d/"
 
-# 5. Services enabled
+# 5. Services enabled (and NetworkManager-wait-online disabled)
 for s in NetworkManager.service scx_loader.service ananicy-cpp.service irqbalance.service bluetooth.service systemd-resolved.service systemd-oomd.service limine-snapper-sync.service; do
   check "servico habilitado: $s" systemctl is-enabled "$s" >/dev/null
 done
+check "NetworkManager-wait-online.service desabilitado" bash -c "! systemctl is-enabled NetworkManager-wait-online.service >/dev/null 2>&1"
 check "snapper-timeline.timer desabilitado" bash -c "! systemctl is-enabled snapper-timeline.timer >/dev/null 2>&1"
 
 # 6. Human user login shell = bash & wheel membership
