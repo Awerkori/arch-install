@@ -193,6 +193,10 @@ FIRST_HUMAN_USER="$(nox_list_human_users | head -n1 | cut -d: -f1 || true)"
 if [[ -n "$FIRST_HUMAN_USER" ]]; then
   printf '\n[user]\ndefault = "%s"\n' "$FIRST_HUMAN_USER" >> /var/lib/noctalia-greeter/greeter.toml
 fi
+# 6. Prevent systemd-logind automatic idle suspend/power-off (manual suspend/power still work)
+install -d -m 0755 /etc/systemd/logind.conf.d
+nox_atomic_install 0644 "${NOX_ROOT}/configs/systemd/99-nox-no-idle.conf" /etc/systemd/logind.conf.d/99-nox-no-idle.conf
+
 chown -R greeter:greeter /var/lib/noctalia-greeter
 chmod 0750 /var/lib/noctalia-greeter
 

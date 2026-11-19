@@ -56,6 +56,7 @@ nox_atomic_install 0644 "${NOX_ROOT}/configs/qt/qt6ct.conf" /etc/skel/.config/qt
 nox_atomic_install 0644 "${NOX_ROOT}/configs/btop/btop.conf" /etc/skel/.config/btop/btop.conf
 nox_atomic_install 0644 "${NOX_ROOT}/configs/fastfetch/config.jsonc" /etc/skel/.config/fastfetch/config.jsonc
 nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/nox-launcher.toml" /etc/skel/.config/noctalia/nox-launcher.toml
+nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/nox-power.toml" /etc/skel/.config/noctalia/nox-power.toml
 nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/nox-theme.toml" /etc/skel/.config/noctalia/nox-theme.toml
 nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/palettes/ObsidianPurple.json" /etc/skel/.config/noctalia/palettes/ObsidianPurple.json
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-system-tools-list" "${NOX_LIBEXEC_DIR}/nox-system-tools-list"
@@ -141,6 +142,7 @@ while IFS=: read -r uname uid gid uhome _shell; do
     fastfetch/config.jsonc \
     umbriel/noctalia.toml \
     noctalia/nox-launcher.toml \
+    noctalia/nox-power.toml \
     noctalia/nox-theme.toml \
     noctalia/palettes/ObsidianPurple.json \
     mimeapps.list; do

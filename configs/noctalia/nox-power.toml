@@ -1,0 +1,17 @@
+# Nox Archinstall — Keep monitors on and prevent automatic idle lock/suspend
+# Manual lock (Mod+L), manual suspend/power actions, and physical monitor power buttons remain active.
+
+[idle.behavior.lock]
+action = "lock"
+enabled = false
+timeout = 0.0
+
+[idle.behavior.screen-off]
+action = "screen_off"
+enabled = false
+timeout = 0.0
+
+[idle.behavior.lock-and-suspend]
+action = "lock_and_suspend"
+enabled = false
+timeout = 0.0

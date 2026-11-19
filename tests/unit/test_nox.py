@@ -347,6 +347,22 @@ class TestObsidianPurplePolish(unittest.TestCase):
         self.assertEqual(launcher_toml["shell"]["launcher"]["providers"]["calculator"]["global"], False)
         self.assertEqual(launcher_toml["shell"]["launcher"]["providers"]["calculator"]["prefix"], "calc")
 
+        power_toml = tomllib.loads((REPO / "configs/noctalia/nox-power.toml").read_text(encoding="utf-8"))
+        for key in ("lock", "screen-off", "lock-and-suspend"):
+            self.assertEqual(power_toml["idle"]["behavior"][key]["enabled"], False)
+            self.assertEqual(power_toml["idle"]["behavior"][key]["timeout"], 0.0)
+
+        logind_idle = (REPO / "configs/systemd/99-nox-no-idle.conf").read_text(encoding="utf-8")
+        self.assertIn("IdleAction=ignore", logind_idle)
+        self.assertIn("IdleActionSec=0", logind_idle)
+
+        umbriel_toml = tomllib.loads((REPO / "configs/umbriel/config.toml").read_text(encoding="utf-8"))
+        kb_cfg = umbriel_toml["input"]["keyboard"]
+        self.assertEqual(kb_cfg["layout"], "us")
+        self.assertEqual(kb_cfg["variant"], "intl")
+        self.assertEqual(kb_cfg["repeat_rate"], 25)
+        self.assertEqual(kb_cfg["repeat_delay"], 600)
+
         gtk_ini = (REPO / "configs/gtk/settings.ini").read_text(encoding="utf-8")
         self.assertIn("gtk-theme-name=adw-gtk3-dark", gtk_ini)
         self.assertIn("gtk-application-prefer-dark-theme=1", gtk_ini)
