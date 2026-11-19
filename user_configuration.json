@@ -21,7 +21,7 @@
     "uki": false
   },
   "custom_commands": [
-    "bash -c 'set -Eeuo pipefail; URL=\"https://github.com/Awerkori/arch-install/releases/download/v1.0.0-rc4/nox-archinstall-payload-v1.0.0-rc4.tar.gz\"; SHA=\"3cf63d0c1b94e9dacdceb3ac425c4cd4c886985baa952751ab48974e50f246ba\"; TMP=$(mktemp -d); trap \"rm -rf $TMP\" EXIT; curl --proto \"=https\" --tlsv1.2 -fsSL --retry 3 --max-time 60 \"$URL\" -o \"$TMP/p.tar.gz\"; printf \"%s  %s\\n\" \"$SHA\" \"$TMP/p.tar.gz\" | sha256sum -c -; rm -rf /var/lib/nox-archinstall/payload; mkdir -p /var/lib/nox-archinstall/payload; tar --no-same-owner -xzf \"$TMP/p.tar.gz\" --strip-components=1 -C /var/lib/nox-archinstall/payload; chmod +x /var/lib/nox-archinstall/payload/install.sh; exec /var/lib/nox-archinstall/payload/install.sh --stage target-offline'"
+    "bash -c 'set -Eeuo pipefail; URL=\"https://github.com/Awerkori/arch-install/releases/download/v1.0.0-rc5/nox-archinstall-payload-v1.0.0-rc5.tar.gz\"; SHA=\"040a3abfc4a26e8ebcd8a322b3c1db7752e9bb1c128ba2d427a369dfa34d273b\"; TMP=$(mktemp -d); trap \"rm -rf $TMP\" EXIT; curl --proto \"=https\" --tlsv1.2 -fsSL --retry 3 --max-time 60 \"$URL\" -o \"$TMP/p.tar.gz\"; printf \"%s  %s\\n\" \"$SHA\" \"$TMP/p.tar.gz\" | sha256sum -c -; rm -rf /var/lib/nox-archinstall/payload; mkdir -p /var/lib/nox-archinstall/payload; tar --no-same-owner -xzf \"$TMP/p.tar.gz\" --strip-components=1 -C /var/lib/nox-archinstall/payload; chmod +x /var/lib/nox-archinstall/payload/install.sh; exec /var/lib/nox-archinstall/payload/install.sh --stage target-offline'"
   ],
   "hostname": "Nox-Device-PC",
   "kernels": [
