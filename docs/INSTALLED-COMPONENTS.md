@@ -1,25 +1,24 @@
-# Inventário Completo — Nox Archinstall (`v1.0.0-rc6`)
+# Inventário Completo — Nox Archinstall (`v1.0.0-rc9`)
 
-> Documento de referência das instalações e configurações automatizadas pelo **Nox Archinstall** na pré-release **`v1.0.0-rc6`** (antes da aprovação final da `v1.0.0`).
-> Listagem completa e exata de todos os **654 pacotes** (explícitos e dependências) disponível em [`INSTALLED-PACKAGES.tsv`](INSTALLED-PACKAGES.tsv).
+> Documento de referência das instalações e configurações automatizadas pelo **Nox Archinstall** na pré-release **`v1.0.0-rc9`** (candidata final antes da publicação explícita da `v1.0.0`).
+> Listagem completa e exata de todos os **651 pacotes** (explícitos e dependências) disponível em [`INSTALLED-PACKAGES.tsv`](INSTALLED-PACKAGES.tsv).
 
 ## Metadados da Revisão Documentada
 
 - **Repositório:** `https://github.com/Awerkori/arch-install`
-- **Pré-release validada:** `v1.0.0-rc6` (`https://github.com/Awerkori/arch-install/releases/tag/v1.0.0-rc6`)
-- **Commit do payload (`v1.0.0-rc6`):** `be236553ff3bdce28deb539f9595aaa5625475e2`
-- **Commit do manifesto/release (`main`):** `a940091a281c3782c95ebd1d6f43037bf6c2390f`
-- **SHA-256 do payload (`nox-archinstall-payload-v1.0.0-rc6.tar.gz`):** `3d501fc7de2be55dd5f5a426c6c68e54357971da2363e394b317f732f1a5bd3a`
+- **Pré-release validada:** `v1.0.0-rc9` (`https://github.com/Awerkori/arch-install/releases/tag/v1.0.0-rc9`)
+- **Commit da revisão (`main`):** `dd6ad04e0736c78890b98d163d228dfb0054dbe2` (base `e7a94b4`)
+- **SHA-256 do payload (`nox-archinstall-payload-v1.0.0-rc9.tar.gz`):** `cac833940ab868dfef32f319347f0e0c53b89301895e6262dae3165c529cacc5`
 - **Base de comprovação:** Duas instalações limpas completas a partir da ISO oficial `archlinux-2026.11.01-x86_64.iso` (`ACCEPT-A` e `ACCEPT-B`), verificadas com `diff` nulo entre ambas.
 
 ### Contagem Total de Pacotes (`ACCEPT-A` e `ACCEPT-B`)
 
 | Métrica | Quantidade | Observações |
 |---|---:|---|
-| **Total instalado** | **654** | Idêntico entre `ACCEPT-A` e `ACCEPT-B` (0 diferenças) |
-| **Instalados explicitamente (`pacman -Qe`)** | **96** | Base `archinstall` + módulos do Nox + `makedepends` AUR |
+| **Total instalado** | **651** | Idêntico entre `ACCEPT-A` e `ACCEPT-B` (0 diferenças) |
+| **Instalados explicitamente (`pacman -Qqe`)** | **93** | Base `archinstall` + módulos do Nox + `makedepends` AUR |
 | **Instalados como dependências (`pacman -Qd`)** | **558** | Bibliotecas, toolchains, codecs e dependências transitivas |
-| **Origem `cachyos-extra-znver4`** | 297 | Otimizados Zen 4 (`x86-64-v4`) |
+| **Origem `cachyos-extra-znver4`** | 294 | Otimizados Zen 4 (`x86-64-v4`) |
 | **Origem `cachyos-core-znver4`** | 117 | Núcleo otimizado Zen 4 |
 | **Origem `extra` (Arch)** | 69 | Repositório oficial Arch |
 | **Origem `multilib` (Arch 32-bit)** | 55 | Suporte 32 bits (`lib32-*`) |
@@ -71,7 +70,7 @@
 | Componente | Função | Pacote | Origem | Classificação |
 |---|---|---|---|---|
 | Compositor Wayland | Compositor `wlroots` com layout padrão `dwindle` | `umbriel` (`0.1.0.r1569.88ba829-1`) | `cachyos` | **Obrigatório** |
-| Shell Desktop | Barra, central de controle, notificações, tela de bloqueio e launcher | `noctalia` (`5.5.0-1.1`) | `cachyos-extra-znver4` | **Obrigatório** |
+| Shell Desktop | Barra, central de controle, notificações, tela de bloqueio, launcher (`sortByMostUsed`, `enableCategories: false`) e timeouts de inatividade desativados (`lock`/`screen-off`/`suspend`) | `noctalia` (`5.5.0-1.1`) | `cachyos-extra-znver4` | **Obrigatório** |
 | Greeter & Display Manager | Tela de login (`greetd` na VT1) com tema escuro Noctalia | `greetd` (`0.10.3-2.1`), `noctalia-greeter` (`1.7.0-1.1`) | `cachyos-extra-znver4` | **Obrigatório** |
 | Portais XDG | File picker, screencast e integração desktop Wayland/GTK | `xdg-desktop-portal`, `xdg-desktop-portal-umbriel`, `xdg-desktop-portal-gtk` | `cachyos-extra-znver4` / `cachyos` | **Obrigatório** |
 | Polkit | Agente de autenticação gráfica de privilégios | `polkit`, `polkit-gnome` (`0.105-12.1`) | `cachyos-extra-znver4` | **Obrigatório** |
@@ -112,6 +111,7 @@ As entradas `.desktop` técnicas são ocultadas apenas via overlays XDG do usuá
 
 | Componente | Função | Pacote | Origem | Classificação |
 |---|---|---|---|---|
+| Tema & Paleta Nox | Identidade visual própria **Obsidian Purple** (preto cósmico, roxo profundo/vibrante, acento dourado discreto) via paleta Noctalia v2 + wallpaper exclusivo (`obsidian-purple.png`) + template Qt6/GTK3/GTK4/Kitty/Btop | Configs Nox (`ObsidianPurple.json` + templates) | Projeto | **Obrigatório** |
 | Tema GTK Escuro | Tema `Adwaita-dark` em GTK3/GTK4 (`gtk-application-prefer-dark-theme=1`) | `adw-gtk-theme` (`6.5-1`), `gnome-themes-extra` (`1:3.28-1`) | Arch (`extra`) | **Obrigatório** |
 | Configuração GTK/Qt | Ferramentas de esquema escuro (`darker` + `Fusion` + `QT_QPA_PLATFORMTHEME`) | `nwg-look`, `qt5ct`, `qt6ct` | `cachyos-extra-znver4` | **Obrigatório** (plugins Qt) |
 | Fontes do Sistema | Suporte completo Latim, CJK, Emojis e fonte monoespaçada Nerd no Kitty | `noto-fonts`, `noto-fonts-cjk`, `noto-fonts-emoji`, `ttf-jetbrains-mono-nerd` | Arch (`extra`) | **Obrigatório** |
@@ -139,6 +139,7 @@ As entradas `.desktop` técnicas são ocultadas apenas via overlays XDG do usuá
 | Áudio PipeWire | Servidor PipeWire + compatibilidade Pulse/ALSA/JACK/GStreamer e políticas WirePlumber | `pipewire`, `pipewire-pulse`, `pipewire-alsa`, `pipewire-jack`, `gst-plugin-pipewire`, `wireplumber`, `alsa-utils`, `libpulse` | `extra` / `cachyos-extra-znver4` | **Obrigatório** |
 | Bluetooth | Pilha BlueZ (`FastConnectable = true`, `AutoEnable = true`, `ReconnectAttempts = 7`) | `bluez`, `bluez-utils` (`5.88-1.1`) | `cachyos-extra-znver4` | **Obrigatório** |
 | Fix Headset Fuxi H3 | Regra udev + watcher + script dinâmico para microfone/perfil Bluetooth/dongle (`nox-fuxi-h3-fix`) | Configs Nox (`/etc/udev/rules.d/85-nox-fuxi-h3.rules` + user unit) | Script próprio do projeto | **Opcional** (só atua se hardware Havit Fuxi H3 presente) |
+| Teclado ANSI (`us-intl`) & Energia | Umbriel `layout = "us"`, `variant = "intl"`, `repeat_rate = 25`, `repeat_delay = 600` + `~/.XCompose` (`' + c → ç`) e `logind` (`IdleAction=ignore`) | `configs/umbriel/config.toml`, `99-nox-no-idle.conf`, `.XCompose` | Projeto | **Obrigatório** |
 
 > **HushMic removido:** `hushmic-bin` não é instalado e quaisquer resquícios de configuração/serviço são limpos automaticamente.
 
@@ -148,8 +149,7 @@ As entradas `.desktop` técnicas são ocultadas apenas via overlays XDG do usuá
 
 | Componente | Função | Pacote / Arquivo | Origem | Classificação |
 |---|---|---|---|---|
-| Drivers GPU AMD 64 + 32 bits | Mesa + RADV Vulkan + VA-API (`AMD_VULKAN_ICD=RADV`, cache `12G`) | `mesa`, `lib32-mesa`, `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `libva`, `lib32-libva` | `cachyos-znver4` / `cachyos-extra-znver4` / `multilib` | **Obrigatório** |
-| Diagnóstico Vulkan/GL/VA | Utilitários de inspeção gráfica | `vulkan-tools`, `libva-utils`, `mesa-utils` | `cachyos-extra-znver4` | **Opcional** (diagnóstico) |
+| Drivers GPU AMD 64 + 32 bits | Mesa + RADV Vulkan + VA-API (`AMD_VULKAN_ICD=RADV`, cache `12G`; pacotes extras `vulkan-tools`/`libva-utils`/`mesa-utils` omitidos por padrão) | `mesa`, `lib32-mesa`, `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `libva`, `lib32-libva` | `cachyos-znver4` / `cachyos-extra-znver4` / `multilib` | **Obrigatório** |
 | Scheduler `sched_ext` | `scx_loader` configurado com `scx_lavd` (modo `Gaming`) | `scx-scheds` (`1.1.4-2`), `scx-tools` (`1.1.3-1.1`) | `extra` / `cachyos-extra-znver4` | **Obrigatório** |
 | Prioridade & IRQ & Jogos | Regras de prioridade, balanceamento IRQ e GameMode (usuário no grupo `gamemode`) | `ananicy-cpp`, `cachyos-ananicy-rules`, `irqbalance`, `gamemode`, `lib32-gamemode` | `cachyos-extra-znver4` / `cachyos` / `extra` / `multilib` | **Obrigatório** |
 | Configurações CachyOS + ZRAM | ZRAM unificada (`zram-size = ram`, `zstd`, prioridade 100) + sysctls base | `cachyos-settings` (`1:1.4.4-1`) + `zram-generator` (dep.) | `cachyos` / `cachyos-extra-znver4` | **Obrigatório** |

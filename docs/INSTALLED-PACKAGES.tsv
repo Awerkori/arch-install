@@ -389,7 +389,6 @@ libunwind	1.8.3-1.1	dependency	cachyos-extra-znver4	Determine and manipulate the
 liburing	2.15-1.1	dependency	cachyos-extra-znver4	Linux-native io_uring I/O access library
 libusb	1.0.30-1.1	dependency	cachyos-core-znver4	Library that provides generic access to USB devices
 libva	2.24.1-1.1	explicit	cachyos-extra-znver4	Video Acceleration (VA) API for Linux
-libva-utils	2.24.0-1.1	explicit	cachyos-extra-znver4	Intel VA-API Media Applications and Scripts for libva
 libvdpau	1.5-4.2	dependency	cachyos-extra-znver4	Nvidia VDPAU library
 libverto	0.3.2-6.1	dependency	cachyos-core-znver4	Main event loop abstraction library
 libvorbis	1.3.7-4.1	dependency	cachyos-extra-znver4	Reference implementation of the Ogg Vorbis audio format
@@ -463,7 +462,6 @@ make	4.4.1-3.1	dependency	cachyos-core-znver4	GNU make utility to maintain group
 md4c	0.6.0-2.1	dependency	cachyos-extra-znver4	C Markdown parser
 mdadm	4.6-2	dependency	core	A tool for managing/monitoring Linux md device arrays, also known as Software RAID
 mesa	3:26.3.1-1	dependency	cachyos-znver4	Open-source OpenGL drivers
-mesa-utils	9.0.0-7.1	explicit	cachyos-extra-znver4	Essential Mesa utilities
 meson	1.12.1-2	explicit	extra	High productivity build system
 mkinitcpio	42.2-1	explicit	core	Modular initramfs image creation utility
 mkinitcpio-busybox	1.36.1-1.1	dependency	cachyos-core-znver4	Base initramfs tools
@@ -477,7 +475,7 @@ nettle	4.0-1	dependency	core	A low-level cryptographic library
 networkmanager	1.58.1-3	explicit	extra	Network connection manager and user applications
 nftables	1:1.1.7-3.1	dependency	cachyos-extra-znver4	Netfilter tables userspace tools
 ninja	1.13.2-3.1	explicit	cachyos-extra-znver4	Small build system with a focus on speed
-nlohmann-json	3.12.0-2	explicit	extra	JSON for Modern C++
+nlohmann-json	3.12.0-3	explicit	extra	JSON for Modern C++
 noctalia	5.5.0-1.1	explicit	cachyos-extra-znver4	A sleek, customizable desktop shell crafted for Wayland
 noctalia-greeter	1.7.0-1.1	explicit	cachyos-extra-znver4	Minimal greetd greeter matching the look and feel of Noctalia Shell
 noto-fonts	1:2026.11.01-1	explicit	extra	Google Noto TTF fonts
@@ -608,7 +606,6 @@ vulkan-icd-loader	1.4.363.0-1.1	explicit	cachyos-extra-znver4	Vulkan Installable
 vulkan-mesa-implicit-layers	3:26.3.1-1	dependency	cachyos-znver4	Mesa's implicit Vulkan layers
 vulkan-mesa-layers	3:26.3.1-1	explicit	cachyos-znver4	Mesa's explicit Vulkan layers
 vulkan-radeon	3:26.3.1-1	explicit	cachyos-znver4	Open-source Vulkan driver for AMD GPUs
-vulkan-tools	1.4.363.0-1.1	explicit	cachyos-extra-znver4	Vulkan tools and utilities
 wayland	1.26.0-1.1	dependency	cachyos-extra-znver4	A computer display server protocol
 wayland-protocols	1.50-1	dependency	extra	Specifications of extended Wayland protocols
 webrtc-audio-processing-1	1.3-6.1	dependency	cachyos-extra-znver4	AudioProcessing library based on Google's implementation of WebRTC (legacy)
