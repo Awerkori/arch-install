@@ -1,31 +1,31 @@
-# Inventário Completo — Nox Archinstall (`v1.0.0-rc9`)
+# Inventário Completo — Nox Archinstall (`v1.0.0-rc10`)
 
-> Documento de referência das instalações e configurações automatizadas pelo **Nox Archinstall** na pré-release **`v1.0.0-rc9`** (candidata final antes da publicação explícita da `v1.0.0`).
-> Listagem completa e exata de todos os **651 pacotes** (explícitos e dependências) disponível em [`INSTALLED-PACKAGES.tsv`](INSTALLED-PACKAGES.tsv).
+> Documento de referência das instalações e configurações automatizadas pelo **Nox Archinstall** na pré-release **`v1.0.0-rc10`** (candidata antes da aprovação explícita da `v1.0.0`).
+> Listagem completa e exata de todos os **711 pacotes** (explícitos e dependências) disponível em [`INSTALLED-PACKAGES.tsv`](INSTALLED-PACKAGES.tsv).
 
 ## Metadados da Revisão Documentada
 
 - **Repositório:** `https://github.com/Awerkori/arch-install`
-- **Pré-release validada:** `v1.0.0-rc9` (`https://github.com/Awerkori/arch-install/releases/tag/v1.0.0-rc9`)
-- **Commit da revisão (`main`):** `dd6ad04e0736c78890b98d163d228dfb0054dbe2` (base `e7a94b4`)
-- **SHA-256 do payload (`nox-archinstall-payload-v1.0.0-rc9.tar.gz`):** `cac833940ab868dfef32f319347f0e0c53b89301895e6262dae3165c529cacc5`
+- **Pré-release validada:** `v1.0.0-rc10` (`https://github.com/Awerkori/arch-install/releases/tag/v1.0.0-rc10`)
+- **Commit do payload (`main`):** `4f58011a820e6638b3e9f900f117cd03fabc4f7b` (`release.json`: `d8900ba221230448820c8b99d6f2863188690c72`)
+- **SHA-256 do payload (`nox-archinstall-payload-v1.0.0-rc10.tar.gz`):** `6463bc0d24ac78aaa6ae08f86d18d67da96995256105a16ab4c96ec1bd128650`
 - **Base de comprovação:** Duas instalações limpas completas a partir da ISO oficial `archlinux-2026.11.01-x86_64.iso` (`ACCEPT-A` e `ACCEPT-B`), verificadas com `diff` nulo entre ambas.
 
 ### Contagem Total de Pacotes (`ACCEPT-A` e `ACCEPT-B`)
 
 | Métrica | Quantidade | Observações |
 |---|---:|---|
-| **Total instalado** | **651** | Idêntico entre `ACCEPT-A` e `ACCEPT-B` (0 diferenças) |
-| **Instalados explicitamente (`pacman -Qqe`)** | **93** | Base `archinstall` + módulos do Nox + `makedepends` AUR |
-| **Instalados como dependências (`pacman -Qd`)** | **558** | Bibliotecas, toolchains, codecs e dependências transitivas |
-| **Origem `cachyos-extra-znver4`** | 294 | Otimizados Zen 4 (`x86-64-v4`) |
-| **Origem `cachyos-core-znver4`** | 117 | Núcleo otimizado Zen 4 |
-| **Origem `extra` (Arch)** | 69 | Repositório oficial Arch |
-| **Origem `multilib` (Arch 32-bit)** | 55 | Suporte 32 bits (`lib32-*`) |
+| **Total instalado** | **711** | Idêntico entre `ACCEPT-A` e `ACCEPT-B` (0 diferenças) |
+| **Instalados explicitamente (`pacman -Qqe`)** | **100** | Base `archinstall` + módulos do Nox + `topgrade-bin` + `protonplus` + `proton-cachyos-slr` + `mpvpaper` + `vulkan-tools`/`mesa-utils` |
+| **Instalados como dependências (`pacman -Qd`)** | **611** | Bibliotecas (`libadwaita`, `mpv`, `lib32-*`), toolchains e dependências transitivas |
+| **Origem `cachyos-extra-znver4`** | 329 | Otimizados Zen 4 (`x86-64-v4`) |
+| **Origem `cachyos-core-znver4`** | 119 | Núcleo otimizado Zen 4 |
+| **Origem `multilib` (Arch 32-bit)** | 72 | Suporte 32 bits (`lib32-*`) |
+| **Origem `extra` (Arch)** | 71 | Repositório oficial Arch |
 | **Origem `cachyos-znver4`** | 48 | Pacotes específicos Zen 4 (`linux-cachyos`, `firefox-pure`, Mesa) |
 | **Origem `core` (Arch)** | 35 | Base Arch |
-| **Origem `cachyos`** | 32 | Keyring, mirrorlists, `paru`, `limine*`, `umbriel*`, `cachyos-settings` |
-| **Origem `AUR/foreign`** | 1 | `luciole-git` (compilado em sandbox não-privileged `noxbuild`) |
+| **Origem `cachyos`** | 35 | Keyring, mirrorlists, `paru`, `limine*`, `umbriel*`, `cachyos-settings`, `protonplus`, `proton-cachyos-slr`, `mpvpaper` |
+| **Origem `AUR/foreign`** | 2 | `luciole-git` e `topgrade-bin` (compilados em sandbox não-privileged `noxbuild`) |
 
 ---
 
@@ -70,8 +70,8 @@
 | Componente | Função | Pacote | Origem | Classificação |
 |---|---|---|---|---|
 | Compositor Wayland | Compositor `wlroots` com layout padrão `dwindle` | `umbriel` (`0.1.0.r1569.88ba829-1`) | `cachyos` | **Obrigatório** |
-| Shell Desktop | Barra, central de controle, notificações, tela de bloqueio, launcher (`sortByMostUsed`, `enableCategories: false`) e timeouts de inatividade desativados (`lock`/`screen-off`/`suspend`) | `noctalia` (`5.5.0-1.1`) | `cachyos-extra-znver4` | **Obrigatório** |
-| Greeter & Display Manager | Tela de login (`greetd` na VT1) com tema escuro Noctalia | `greetd` (`0.10.3-2.1`), `noctalia-greeter` (`1.7.0-1.1`) | `cachyos-extra-znver4` | **Obrigatório** |
+| Shell Desktop | Barra, central de controle, notificações, lockscreen animada (`nox-lockscreen-emblem.gif`), launcher (`global = false`) e timeouts de inatividade desativados (`lock`/`screen-off`/`suspend`) | `noctalia` (`5.5.0-1.1`), `mpvpaper` (`1.9-1`), `socat` (`1.8.1.3-2.1`) | `cachyos-extra-znver4` / `cachyos` | **Obrigatório** |
+| Greeter & Display Manager | Tela de login (`greetd` na VT1 via `nox-greeter-session` + `NOCTALIA_GREETER_ASSETS_DIR`) com tema Obsidian Purple | `greetd` (`0.10.3-2.1`), `noctalia-greeter` (`1.7.0-1.1`) | `cachyos-extra-znver4` | **Obrigatório** |
 | Portais XDG | File picker, screencast e integração desktop Wayland/GTK | `xdg-desktop-portal`, `xdg-desktop-portal-umbriel`, `xdg-desktop-portal-gtk` | `cachyos-extra-znver4` / `cachyos` | **Obrigatório** |
 | Polkit | Agente de autenticação gráfica de privilégios | `polkit`, `polkit-gnome` (`0.105-12.1`) | `cachyos-extra-znver4` | **Obrigatório** |
 | Compatibilidade X11 | Camada XWayland para aplicativos legados | `xorg-xwayland` (`24.1.15-1.1`) | `cachyos-extra-znver4` | **Obrigatório** |
@@ -84,11 +84,12 @@
 
 | Aplicativo | Função | Pacote | Origem | Launcher (`All`) | Pesquisa | Classificação |
 |---|---|---|---|---|---|---|
-| **Firefox** (`Firefox Pure`) | Navegador web padrão (`http`/`https`/`html`, `MOZ_ENABLE_WAYLAND=1`) | `firefox-pure` (`160.0-1`) | `cachyos-znver4` | **Visível** | Visível | **Obrigatório** |
-| **kitty** | Terminal padrão com `JetBrainsMono Nerd Font`, Bash e opacidade 0.94 | `kitty` (`0.50.0-1.1`) | `cachyos-extra-znver4` | **Visível** | Visível | **Obrigatório** |
+| **Firefox** (`Firefox Pure`) | Navegador web padrão (`http`/`https`/`html`, `MOZ_ENABLE_WAYLAND=1`, `userChrome.css`/`userContent.css` Obsidian Purple) | `firefox-pure` (`160.0-1`) | `cachyos-znver4` | **Visível** | Visível | **Obrigatório** |
+| **kitty** | Terminal padrão com `JetBrainsMono Nerd Font`, Bash, dashboard Fastfetch e opacidade 0.94 | `kitty` (`0.50.0-1.1`) | `cachyos-extra-znver4` | **Visível** | Visível | **Obrigatório** |
 | **Luciole** | Gerenciador de arquivos padrão (`inode/directory`, `Mod+E` / `Ctrl+E`) | `luciole-git` (`0.1.0.r363.g0b37f2cc7-1`) | AUR (`makepkg` `noxbuild`) | **Visível** | Visível | **Obrigatório** |
+| **ProtonPlus** | Gerenciador gráfico de camadas Proton (detecta Steam/Lutris/Heroic/Bottles/Faugus após instalados pelo usuário) | `protonplus` (`0.6.8-2`) + `proton-cachyos-slr` (`1:11.0.20261015-1`) | `cachyos` | **Visível** (4º app) | Visível | **Obrigatório** |
 
-> Novos aplicativos pessoais instalados posteriormente pelo usuário (sem `NoDisplay=true`) aparecem automaticamente na listagem inicial `All`.
+> O launcher Noctalia exibe **estritamente 4 aplicativos** na instalação base (`Firefox`, `kitty`, `Luciole`, `ProtonPlus`). Novos aplicativos pessoais instalados pelo usuário aparecem automaticamente.
 
 ### 4.2 Ferramentas padrão CLI e aplicativos técnicos ocultos da listagem inicial
 
@@ -96,14 +97,15 @@ As entradas `.desktop` técnicas são ocultadas apenas via overlays XDG do usuá
 
 | Aplicativo / Ferramenta | Função | Pacote | Origem | Launcher Inicial | Pesquisa (`system-tools` / `/tools`) | Classificação |
 |---|---|---|---|---|---|---|
+| **topgrade** | Comando central unificado de atualização (`paru`, `pacman`, `protonplus update all`, `topgrade-bin`) com lock anti-concorrência (`flock`) | `topgrade-bin` (`17.17.0-1`) | AUR (`makepkg` `noxbuild`) | Sem `.desktop` | CLI (`topgrade` → `/usr/local/bin/topgrade`) | **Obrigatório** |
 | **btop** (`btop++`) | Monitor de recursos padrão no Kitty (`CPU/RAM/Swap/Disks/Net/Proc` + AMD GPU) | `btop` (`1.4.8-1.1`) + `rocm-smi-lib` (`10.1-1.1`) | `cachyos-extra-znver4` | Oculto | Pesquisável (`btop++`) e CLI (`btop`) | **Obrigatório** |
-| **fastfetch** | Informações do sistema no Kitty (logo Arch Linux personalizável) | `fastfetch` (`2.71.0-1.1`) | `cachyos-extra-znver4` | Sem `.desktop` | CLI manual (`fastfetch`) | **Obrigatório** |
+| **fastfetch** | Informações do sistema no Kitty (logo Braille 28 cols Obsidian Purple via `nox-logo.txt`) | `fastfetch` (`2.71.0-1.1`) | `cachyos-extra-znver4` | Sem `.desktop` | CLI manual (`fastfetch`) | **Obrigatório** |
 | **Noctalia** | Painel de configurações do shell Noctalia (`noctalia msg settings-open`) | `noctalia` (`5.5.0-1.1`) | `cachyos-extra-znver4` | Oculto | Pesquisável (`Noctalia`) | **Obrigatório** |
 | **Limine-snapper-restore** | Utilitário gráfico de restauração de snapshots Btrfs | `limine-snapper-sync` (`1.32.1-1`) | `cachyos` | Oculto | Pesquisável (`Limine-snapper-restore`) | **Obrigatório** |
 | **Qt5 Settings** / **Qt6 Settings** | Temas e plugins de plataforma Qt5/Qt6 (`darker` + `Fusion`) | `qt5ct` (`1.9-2.1`), `qt6ct` (`0.11-9.1`) | `cachyos-extra-znver4` | Oculto | Pesquisável (`Qt5`/`Qt6 Settings`) | **Obrigatório** |
 | **GTK Settings** | Editor visual de tema GTK3 (`Adwaita-dark`) | `nwg-look` (`1.2.1-1.1`) | `cachyos-extra-znver4` | Oculto | Pesquisável (`GTK Settings`) | **Opcional visual** (ferramenta técnica mantida) |
 | **Volume Control** | Controle gráfico de entradas/saídas PulseAudio/PipeWire | `pavucontrol` (`1:6.2-2.1`) | `cachyos-extra-znver4` | Oculto | Pesquisável (`Volume Control`) | **Opcional visual** (útil em diagnósticos) |
-| **Qt V4L2 test / video capture** | Utilitários do pacote `v4l-utils` | `v4l-utils` (`1.32.0-2.1`, dep. de `ffmpeg`) | `cachyos-extra-znver4` | Oculto | Pesquisável | **Dependência** (`ffmpeg`) |
+| **mpv** / **lstopo** / **Qt V4L2** | Utilitários trazidos por dependências gráficas/topologia (`mpvpaper`, `hwloc`, `ffmpeg`) | `mpv`, `hwloc`, `v4l-utils` | `cachyos-extra-znver4` | Oculto | Pesquisável (`/tools`) | **Dependência** |
 
 ---
 
@@ -114,7 +116,7 @@ As entradas `.desktop` técnicas são ocultadas apenas via overlays XDG do usuá
 | Tema & Paleta Nox | Identidade visual própria **Obsidian Purple** (preto cósmico, roxo profundo/vibrante, acento dourado discreto) via paleta Noctalia v2 + wallpaper exclusivo (`obsidian-purple.png`) + template Qt6/GTK3/GTK4/Kitty/Btop | Configs Nox (`ObsidianPurple.json` + templates) | Projeto | **Obrigatório** |
 | Tema GTK Escuro | Tema `Adwaita-dark` em GTK3/GTK4 (`gtk-application-prefer-dark-theme=1`) | `adw-gtk-theme` (`6.5-1`), `gnome-themes-extra` (`1:3.28-1`) | Arch (`extra`) | **Obrigatório** |
 | Configuração GTK/Qt | Ferramentas de esquema escuro (`darker` + `Fusion` + `QT_QPA_PLATFORMTHEME`) | `nwg-look`, `qt5ct`, `qt6ct` | `cachyos-extra-znver4` | **Obrigatório** (plugins Qt) |
-| Fontes do Sistema | Suporte completo Latim, CJK, Emojis e fonte monoespaçada Nerd no Kitty | `noto-fonts`, `noto-fonts-cjk`, `noto-fonts-emoji`, `ttf-jetbrains-mono-nerd` | Arch (`extra`) | **Obrigatório** |
+| Fontes do Sistema | Suporte completo Latim, CJK, Emojis, fonte monoespaçada Nerd e tipografias OFL do tema (`Outfit`, `Plus Jakarta Sans`) | `noto-fonts`, `noto-fonts-cjk`, `noto-fonts-emoji`, `ttf-jetbrains-mono-nerd`, fontes em `/usr/share/fonts/nox/` | Arch (`extra`) / Projeto | **Obrigatório** |
 | Miniaturas / PDF / Arquivos | Suporte para Luciole (`gvfs`, PDFs, thumbnails de vídeo e compactação) | `gvfs`, `ffmpegthumbnailer`, `poppler`, `7zip` | Arch (`extra`) / `cachyos-extra-znver4` | **Obrigatório** (`7zip`/`gvfs`/preview) |
 | Builddeps do Luciole | Instalados pelo `makepkg` durante o build do `luciole-git` | `meson`, `ninja`, `nlohmann-json`, `stb` | Arch (`extra`) / `cachyos-extra-znver4` | **Dependência de build** |
 
@@ -149,7 +151,7 @@ As entradas `.desktop` técnicas são ocultadas apenas via overlays XDG do usuá
 
 | Componente | Função | Pacote / Arquivo | Origem | Classificação |
 |---|---|---|---|---|
-| Drivers GPU AMD 64 + 32 bits | Mesa + RADV Vulkan + VA-API (`AMD_VULKAN_ICD=RADV`, cache `12G`; pacotes extras `vulkan-tools`/`libva-utils`/`mesa-utils` omitidos por padrão) | `mesa`, `lib32-mesa`, `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `libva`, `lib32-libva` | `cachyos-znver4` / `cachyos-extra-znver4` / `multilib` | **Obrigatório** |
+| Drivers GPU AMD 64 + 32 bits | Mesa + RADV Vulkan + VA-API + ferramentas Vulkan/GLX (`AMD_VULKAN_ICD=RADV`, cache `12G`; `libva-utils` ausente) | `mesa`, `lib32-mesa`, `vulkan-radeon`, `lib32-vulkan-radeon`, `vulkan-icd-loader`, `lib32-vulkan-icd-loader`, `vulkan-mesa-layers`, `lib32-vulkan-mesa-layers`, `libva`, `lib32-libva`, `vulkan-tools`, `mesa-utils` | `cachyos-znver4` / `cachyos-extra-znver4` / `multilib` | **Obrigatório** |
 | Scheduler `sched_ext` | `scx_loader` configurado com `scx_lavd` (modo `Gaming`) | `scx-scheds` (`1.1.4-2`), `scx-tools` (`1.1.3-1.1`) | `extra` / `cachyos-extra-znver4` | **Obrigatório** |
 | Prioridade & IRQ & Jogos | Regras de prioridade, balanceamento IRQ e GameMode (usuário no grupo `gamemode`) | `ananicy-cpp`, `cachyos-ananicy-rules`, `irqbalance`, `gamemode`, `lib32-gamemode` | `cachyos-extra-znver4` / `cachyos` / `extra` / `multilib` | **Obrigatório** |
 | Configurações CachyOS + ZRAM | ZRAM unificada (`zram-size = ram`, `zstd`, prioridade 100) + sysctls base | `cachyos-settings` (`1:1.4.4-1`) + `zram-generator` (dep.) | `cachyos` / `cachyos-extra-znver4` | **Obrigatório** |
@@ -181,7 +183,7 @@ As entradas `.desktop` técnicas são ocultadas apenas via overlays XDG do usuá
   - `90-mkinitcpio-install.hook` (`limine-mkinitcpio-hook`)
   - `zzz-99-nox-snapper-cleanup.hook` → mantém somente o par `PRE`+`POST` mais recente de snapshots em `root` via `nox-snapper-cleanup`.
 - **Binários/helpers em `/usr/local/bin/` e `/usr/local/libexec/nox/`:**
-  `nox-secureboot-enroll`, `nox-secureboot-verify`, `nox-display-profile`, `nox-fuxi-h3-fix`, `nox-first-boot`, `nox-session-init`, `nox-limine-normalize`, `nox-snapper-cleanup`, `nox-system-tools-list`, `nox-system-tools-launch`.
+  `topgrade` (`nox-topgrade`), `nox-secureboot-enroll`, `nox-secureboot-verify`, `nox-display-profile`, `nox-fuxi-h3-fix`, `nox-first-boot`, `nox-session-init`, `nox-noctalia-layout`, `nox-greeter-session`, `nox-limine-normalize`, `nox-snapper-cleanup`, `nox-system-tools-list`, `nox-system-tools-launch`.
 
 ---
 
