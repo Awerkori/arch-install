@@ -4,9 +4,9 @@
 set -eu
 umask 077
 
-BOOTSTRAP_COMMIT="5f01eaaed8744fc1049e9e97e8d953f638361e24"
+BOOTSTRAP_COMMIT="b9cd669da0bc3a21446391bf64e686e2ab112743"
 DEFAULT_BOOTSTRAP_URL="https://raw.githubusercontent.com/Awerkori/arch-install/${BOOTSTRAP_COMMIT}/bootstrap/nox-install.py"
-DEFAULT_BOOTSTRAP_SHA256="0963baf3832952591874853bf715c9fe059672cc33af9ed0d9b19635ed792a38"
+DEFAULT_BOOTSTRAP_SHA256="8d85d27c633e8700233592cddaca702031a5d4eb8d76a903008048b505b55310"
 
 BOOTSTRAP_URL="$DEFAULT_BOOTSTRAP_URL"
 BOOTSTRAP_SHA256="$DEFAULT_BOOTSTRAP_SHA256"
@@ -54,6 +54,9 @@ printf '%s  %s\n' "$BOOTSTRAP_SHA256" "$BOOTSTRAP_FILE" | sha256sum -c - >/dev/n
   echo "ERRO: falha na verificacao SHA-256 do bootstrap nox-install.py." >&2
   exit 1
 }
+
+# Restaura umask padrao antes do instalador para que /mnt/etc e arquivos do sistema alvo nao herdem 077.
+umask 022
 
 if (: </dev/tty) 2>/dev/null; then
   python3 "$BOOTSTRAP_FILE" "$@" </dev/tty
