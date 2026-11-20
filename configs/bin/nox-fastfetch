@@ -1,0 +1,333 @@
+#!/usr/bin/env python3
+"""Project Nox Obsidian Purple Fastfetch presenter (4 gold-framed aligned panels + Braille logo).
+
+Invokes the real `/usr/bin/fastfetch` binary to gather live system values from
+`~/.config/fastfetch/config.jsonc` and frames the 4 official sections
+(`SYSTEM`, `SESSION`, `HARDWARE`, `DISPLAY & STORAGE`) with globally aligned
+vertical separators and gold rounded borders matching the approved dashboard.
+"""
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+import unicodedata
+from pathlib import Path
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+NON_SGR_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-LN-Za-ln-z]")
+
+GOLD = "\x1b[38;2;251;191;36m"
+PURPLE_BOLD = "\x1b[1;38;2;168;85;247m"
+LAVENDER = "\x1b[38;2;196;181;253m"
+SEP_PURPLE = "\x1b[38;2;168;85;247m"
+VALUE_WHITE = "\x1b[38;2;245;242;255m"
+RESET = "\x1b[0m"
+
+EXPECTED_SECTIONS = ("SYSTEM", "SESSION", "HARDWARE", "DISPLAY & STORAGE")
+
+
+def strip_ansi(text: str) -> str:
+    return ANSI_RE.sub("", text)
+
+
+def strip_non_sgr(text: str) -> str:
+    """Keep SGR color escapes (`...m`), strip cursor positioning like `\\x1b[13G` or `\\x1b[?7l`."""
+    return NON_SGR_ANSI_RE.sub("", text)
+
+
+def resolve_parent_shell() -> str | None:
+    """Resolve the real invoking shell name/version when fastfetch detects this wrapper."""
+    try:
+        ppid = os.getppid()
+        comm = Path(f"/proc/{ppid}/comm").read_text(encoding="utf-8", errors="replace").strip()
+        exe = os.path.realpath(f"/proc/{ppid}/exe")
+        name = Path(exe).name or comm
+        if not name or name.startswith("python") or name == "fastfetch":
+            sh_env = os.environ.get("SHELL", "")
+            if sh_env:
+                exe = sh_env
+                name = Path(sh_env).name
+        if name in ("bash", "zsh", "fish", "sh"):
+            out = subprocess.run([exe, "--version"], capture_output=True, text=True, check=False, timeout=2)
+            first = (out.stdout or out.stderr or "").splitlines()[0] if (out.stdout or out.stderr) else ""
+            m = re.search(r"(\d+\.\d+(?:\.\d+)?)", first)
+            return f"{name} {m.group(1)}" if m else name
+        return comm or None
+    except Exception:
+        return None
+
+
+def char_width(ch: str) -> int:
+    if not ch or unicodedata.combining(ch):
+        return 0
+    ea = unicodedata.east_asian_width(ch)
+    if ea in ("F", "W"):
+        return 2
+    cat = unicodedata.category(ch)
+    if cat in ("Mn", "Me", "Cf"):
+        return 0
+    return 1
+
+
+def vis_len(text: str) -> int:
+    plain = strip_ansi(text)
+    return sum(char_width(ch) for ch in plain)
+
+
+def truncate_ansi(text: str, max_cols: int) -> str:
+    """Truncate ANSI-styled text safely to at most `max_cols` display columns."""
+    if max_cols <= 0:
+        return ""
+    if vis_len(text) <= max_cols:
+        return text
+
+    target = max(0, max_cols - 1)
+    out: list[str] = []
+    cols = 0
+    i = 0
+    n = len(text)
+    had_ansi = False
+
+    while i < n:
+        if text[i] == "\x1b":
+            m = ANSI_RE.match(text, i)
+            if m:
+                out.append(m.group(0))
+                had_ansi = True
+                i = m.end()
+                continue
+        ch = text[i]
+        w = char_width(ch)
+        if cols + w > target:
+            break
+        out.append(ch)
+        cols += w
+        i += 1
+
+    if max_cols >= 1:
+        out.append("…")
+    if had_ansi:
+        out.append(RESET)
+    return "".join(out)
+
+
+def _find_config_path() -> Path | None:
+    candidates = [
+        Path.home() / ".config/fastfetch/config.jsonc",
+        Path("/etc/skel/.config/fastfetch/config.jsonc"),
+    ]
+    for p in candidates:
+        if p.is_file():
+            return p
+    return None
+
+
+def _find_logo_path() -> Path | None:
+    candidates = [
+        Path.home() / ".config/fastfetch/nox-logo.txt",
+        Path("/etc/skel/.config/fastfetch/nox-logo.txt"),
+    ]
+    for p in candidates:
+        if p.is_file():
+            return p
+    return None
+
+
+def parse_fastfetch_lines(raw_lines: list[str]) -> dict:
+    """Parse raw `fastfetch --logo none --pipe false` lines into header, sections, colors."""
+    title_line = ""
+    sep_line = ""
+    sections: list[dict] = []
+    colors_line = ""
+    cur: dict | None = None
+
+    for raw in raw_lines:
+        line = strip_non_sgr(raw.rstrip("\r\n"))
+        plain = strip_ansi(line).strip()
+        if not plain:
+            continue
+
+        if not title_line and "@" in plain and "✦" not in plain and "│" not in plain:
+            title_line = line.strip()
+            continue
+
+        if title_line and not sep_line and set(plain) <= {"─", "-"}:
+            sep_line = line.strip()
+            continue
+
+        if plain.startswith("✦ "):
+            sec_title = plain[2:].strip()
+            cur = {"title": sec_title, "rows": []}
+            sections.append(cur)
+            continue
+
+        if cur is not None and "│" in plain:
+            # Split raw line on the first literal '│' (outside escapes)
+            idx = line.find("│")
+            left = line[:idx]
+            right = line[idx + 1 :]
+            left_plain = strip_ansi(left).strip()
+            # Strip existing ├─ or └─ prefix cleanly
+            for pfx in ("├─", "└─"):
+                if left_plain.startswith(pfx):
+                    left_plain = left_plain[len(pfx) :].strip()
+                    break
+            val_ansi = strip_non_sgr(right).lstrip(" ")
+            val_plain = strip_ansi(val_ansi).strip()
+            if left_plain == "Shell" and (
+                val_plain == "fastfetch" or val_plain.startswith(("fastfetch ", "python"))
+            ):
+                real_sh = resolve_parent_shell()
+                if real_sh:
+                    val_ansi = f"{VALUE_WHITE}{real_sh}{RESET}"
+            cur["rows"].append((left_plain, val_ansi))
+            continue
+
+        if "●" in plain or ("█" in plain) or (sections and len(sections) >= 4 and "─" not in plain):
+            colors_line = line.strip()
+
+    return {
+        "title": title_line,
+        "sep": sep_line,
+        "sections": sections,
+        "colors": colors_line,
+    }
+
+
+def render_dashboard(parsed: dict, logo_lines: list[str], term_cols: int) -> str:
+    sections = parsed["sections"]
+    if not sections:
+        return ""
+
+    # Global key width across all 4 panels so all `│` align in one strict vertical column
+    all_keys = [k for sec in sections for (k, _v) in sec["rows"]]
+    key_w = max((vis_len(k) for k in all_keys), default=8)
+    # Cap key_w reasonably in ultra-narrow terminals
+    key_w = max(key_w, 8)
+
+    # Ideal natural content width of each row:
+    # "├─ " (3) + key_w + " │ " (3) + val_w + " " (1) + "│" (1) => inner overhead = key_w + 7 (excluding left border 2 cols)
+    max_val_w = max((vis_len(v) for sec in sections for (_k, v) in sec["rows"]), default=12)
+    max_title_w = max((vis_len(sec["title"]) + 6 for sec in sections), default=24)
+
+    logo_w = max((vis_len(l) for l in logo_lines), default=0)
+    side_by_side = bool(logo_lines) and term_cols >= (logo_w + 46)
+
+    if side_by_side:
+        left_pad = 1
+        gap = 3
+        avail_right = max(36, term_cols - left_pad - logo_w - gap - 1)
+    else:
+        avail_right = max(34, term_cols - 2)
+
+    ideal_box_w = max(max_title_w + 4, 3 + key_w + 3 + max_val_w + 2)
+    box_w = min(ideal_box_w, avail_right)
+    # Ensure minimum sensible box_w
+    box_w = max(box_w, min(avail_right, 3 + key_w + 3 + 10 + 2))
+    val_col_w = max(8, box_w - (3 + key_w + 3 + 2))
+
+    panel_lines: list[str] = []
+
+    if parsed["title"]:
+        t_vis = vis_len(parsed["title"])
+        panel_lines.append(parsed["title"])
+        dash_n = min(box_w, max(12, t_vis))
+        panel_lines.append(f"{VALUE_WHITE}{'─' * dash_n}{RESET}")
+
+    for sec in sections:
+        title = sec["title"]
+        # Top border: "╭─ " (3) + "✦ " (2) + TITLE + " " (1) + "─"*fill + "╮" (1)
+        exact_prefix_vis = 3 + 2 + vis_len(title) + 1
+        fill_n = max(1, box_w - exact_prefix_vis - 1)
+        top_border = (
+            f"{GOLD}╭─ ✦ {PURPLE_BOLD}{title} {GOLD}{'─' * fill_n}╮{RESET}"
+        )
+        panel_lines.append(top_border)
+
+        rows = sec["rows"]
+        for r_idx, (k, v_ansi) in enumerate(rows):
+            branch = "└─" if r_idx == len(rows) - 1 else "├─"
+            k_pad = k + (" " * max(0, key_w - vis_len(k)))
+            v_fit = truncate_ansi(v_ansi, val_col_w)
+            pad_r = max(0, val_col_w - vis_len(v_fit))
+            row_str = (
+                f"{GOLD}{branch} "
+                f"{LAVENDER}{k_pad}"
+                f"{SEP_PURPLE} │ "
+                f"{VALUE_WHITE}{v_fit}{RESET}"
+                f"{' ' * pad_r} "
+                f"{GOLD}│{RESET}"
+            )
+            panel_lines.append(row_str)
+
+        bottom_border = f"{GOLD}╰{'─' * (box_w - 2)}╯{RESET}"
+        panel_lines.append(bottom_border)
+
+    if parsed["colors"]:
+        c_plain = strip_ansi(parsed["colors"]).strip()
+        c_w = vis_len(c_plain)
+        c_pad = max(0, (box_w - c_w) // 2)
+        panel_lines.append("")
+        panel_lines.append((" " * c_pad) + parsed["colors"])
+
+    out_lines: list[str] = []
+    if side_by_side:
+        top_logo_pad = max(1, (len(panel_lines) - len(logo_lines)) // 2)
+        padded_logo = ([""] * top_logo_pad) + logo_lines
+        total_rows = max(len(padded_logo), len(panel_lines))
+        for i in range(total_rows):
+            l_part = padded_logo[i] if i < len(padded_logo) else ""
+            r_part = panel_lines[i] if i < len(panel_lines) else ""
+            l_fill = " " * max(0, logo_w - vis_len(l_part))
+            out_lines.append(f"{' ' * left_pad}{l_part}{RESET}{l_fill}{' ' * gap}{r_part}")
+    else:
+        for l_part in logo_lines:
+            l_pad = max(0, (box_w - logo_w) // 2)
+            out_lines.append(f"{' ' * l_pad}{l_part}{RESET}")
+        if logo_lines:
+            out_lines.append("")
+        for r_part in panel_lines:
+            out_lines.append(f" {r_part}")
+
+    return "\n".join(out_lines) + "\n"
+
+
+def main(argv: list[str]) -> int:
+    real_ff = "/usr/bin/fastfetch"
+    if not Path(real_ff).is_file():
+        real_ff = shutil.which("fastfetch") or "/usr/bin/fastfetch"
+
+    # Forward explicit CLI flags straight to real fastfetch unchanged
+    if argv:
+        os.execv(real_ff, [real_ff, *argv])
+
+    cfg = _find_config_path()
+    cmd = [real_ff, "--logo", "none", "--pipe", "false"]
+    if cfg is not None:
+        cmd.extend(["--config", str(cfg)])
+
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if res.returncode != 0 or not res.stdout.strip():
+        os.execv(real_ff, [real_ff])
+
+    parsed = parse_fastfetch_lines(res.stdout.splitlines())
+    titles = tuple(s["title"] for s in parsed["sections"])
+    if not all(t in titles for t in EXPECTED_SECTIONS):
+        sys.stdout.write(res.stdout)
+        return 0
+
+    logo_path = _find_logo_path()
+    logo_lines: list[str] = []
+    if logo_path is not None:
+        logo_lines = [l.rstrip("\r\n") for l in logo_path.read_text(encoding="utf-8", errors="replace").splitlines() if strip_ansi(l).strip()]
+
+    cols = shutil.get_terminal_size((120, 40)).columns
+    sys.stdout.write(render_dashboard(parsed, logo_lines, cols))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

@@ -120,24 +120,60 @@ class TestDisplayProfile(unittest.TestCase):
             tpath.unlink(missing_ok=True)
 
     def test_physical_dual_monitors(self) -> None:
+        # List AOC first to verify EDID model matching beats enumeration order and sets G5 (DP-1) as primary
         out = self.run_profile(
             [
-                {"name": "DP-2", "model": "Odyssey G5", "modes": ["2560x1440@165", "2560x1440@60"]},
-                {"name": "HDMI-A-1", "model": "24B35HM2", "modes": ["1920x1080@100", "1920x1080@60"]},
+                {"name": "HDMI-A-1", "make": "AOC", "model": "24B35", "modes": ["1920x1080@100", "1920x1080@60"]},
+                {"name": "DP-1", "make": "Samsung", "model": "Odyssey G5", "modes": ["2560x1440@165", "2560x1440@60"]},
             ]
         )
-        self.assertIn('xwayland_primary_output = "DP-2"', out)
+        self.assertIn('xwayland_primary_output = "DP-1"', out)
         self.assertIn('mode = "2560x1440@165"', out)
+        self.assertIn('position = [0, 0]', out)
         self.assertIn('position = [2560, -350]', out)
         self.assertIn('transform = "90"', out)
+
+    def test_sysfs_edid_identification_matches_g5_and_aoc(self) -> None:
+        loader = importlib.machinery.SourceFileLoader(
+            "nox_display_profile", str(REPO / "configs/bin/nox-display-profile")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        def make_edid(name_txt: str) -> bytes:
+            buf = bytearray(128)
+            blk = b"\x00\x00\x00\xfc\x00" + name_txt.encode("ascii")[:13].ljust(13, b"\n")
+            buf[54:72] = blk
+            return bytes(buf)
+
+        with tempfile.TemporaryDirectory() as td:
+            drm = Path(td)
+            for card_conn, mode, title in [
+                ("card0-HDMI-A-1", "1920x1080", "24B35HM2"),
+                ("card0-DP-1", "2560x1440", "Odyssey G5"),
+            ]:
+                d = drm / card_conn
+                d.mkdir(parents=True)
+                (d / "status").write_text("connected\n", encoding="utf-8")
+                (d / "modes").write_text(mode + "\n", encoding="utf-8")
+                (d / "edid").write_bytes(make_edid(title))
+            outs = mod.load_outputs_from_sysfs(drm)
+            cfg = json.loads((REPO / "profiles/hardware.json").read_text(encoding="utf-8"))
+            self.assertEqual(cfg["displays"]["primary"]["preferred_connectors"][0], "DP-1")
+            rendered = mod.render_outputs_toml(outs, cfg)
+            self.assertIn('xwayland_primary_output = "DP-1"', rendered)
+            self.assertIn('[output."HDMI-A-1"]', rendered)
+            self.assertIn('transform = "90"', rendered)
 
     def test_secondary_disconnected_or_swapped_order(self) -> None:
         out = self.run_profile(
             [
-                {"name": "DP-1", "model": "Samsung Odyssey G5", "modes": ["2560x1440@164.83"]},
+                {"name": "DP-2", "model": "Samsung Odyssey G5", "modes": ["2560x1440@164.83"]},
             ]
         )
-        self.assertIn('xwayland_primary_output = "DP-1"', out)
+        self.assertIn('xwayland_primary_output = "DP-2"', out)
         self.assertIn('mode = "2560x1440@164.83"', out)
         self.assertNotIn("HDMI-A-1", out)
 
@@ -148,6 +184,7 @@ class TestDisplayProfile(unittest.TestCase):
             ]
         )
         self.assertIn('[output."Virtual-1"]', out)
+        self.assertNotIn("DP-1", out)
         self.assertNotIn("DP-2", out)
 
 
@@ -521,17 +558,17 @@ class TestNoctaliaLayout(unittest.TestCase):
         spec.loader.exec_module(mod)
 
         outputs = [
-            {"name": "DP-2", "model": "Odyssey G5", "width": 2560, "height": 1440},
-            {"name": "HDMI-A-1", "model": "24B35HM2", "width": 1920, "height": 1080, "transform": "90"},
+            {"name": "HDMI-A-1", "make": "AOC", "model": "24B35", "width": 1920, "height": 1080},
+            {"name": "DP-1", "make": "Samsung", "model": "Odyssey G5", "width": 2560, "height": 1440},
         ]
         assigns = mod.build_mpvpaper_assignments(outputs)["assignments"]
-        self.assertTrue(assigns["DP-2"].endswith("nox-g5-runtime.webm"))
+        self.assertTrue(assigns["DP-1"].endswith("nox-g5-runtime.webm"))
         self.assertTrue(assigns["HDMI-A-1"].endswith("nox-aoc-runtime.webm"))
 
         import tomllib
         ls = tomllib.loads(mod.build_lockscreen_widgets_toml(outputs))
         self.assertTrue(ls["lockscreen_widgets"]["enabled"])
-        self.assertIn("lockscreen-login-box@DP-2", ls["lockscreen_widgets"]["widget"])
+        self.assertIn("lockscreen-login-box@DP-1", ls["lockscreen_widgets"]["widget"])
         self.assertIn("lockscreen-login-box@HDMI-A-1", ls["lockscreen_widgets"]["widget"])
         self.assertEqual(ls["lockscreen_widgets"]["widget"]["lockscreen-widget-emblem-HDMI-A-1"]["cx"], 540.0)
 
@@ -725,3 +762,218 @@ class TestBootstrapVerification(unittest.TestCase):
             check=False,
         )
         self.assertNotEqual(res.returncode, 0)
+
+
+class TestVisualPolishDefinitiva(unittest.TestCase):
+    def test_greeter_and_lockscreen_unification_contracts(self) -> None:
+        import tomllib
+
+        greeter = tomllib.loads((REPO / "configs/greeter/greeter.toml").read_text(encoding="utf-8"))
+        sync_cfg = tomllib.loads((REPO / "configs/greeter/sync.toml").read_text(encoding="utf-8"))
+        theme_cfg = tomllib.loads((REPO / "configs/noctalia/nox-theme.toml").read_text(encoding="utf-8"))
+        self.assertTrue(greeter["appearance"]["hide_logo"])
+        self.assertEqual(greeter["appearance"]["corner_radius_scale"], 1.05)
+        self.assertEqual(sync_cfg["appearance"]["corner_radius_scale"], 1.05)
+        self.assertEqual(greeter["appearance"]["palette"]["outline"], "#5b21b6")
+        self.assertEqual(sync_cfg["appearance"]["palette"]["outline"], "#5b21b6")
+        self.assertIn("shadow", greeter["appearance"]["palette"])
+        self.assertIn("shadow", sync_cfg["appearance"]["palette"])
+        self.assertEqual(sync_cfg["appearance"]["scheme"], "Synced")
+        self.assertEqual(greeter["appearance"]["wallpaper"]["tint"], 0.0)
+        self.assertEqual(greeter["appearance"]["wallpaper"]["blur"], 0.0)
+        self.assertEqual(theme_cfg["lockscreen"]["blur_intensity"], 0.0)
+        self.assertEqual(theme_cfg["lockscreen"]["tint_intensity"], 0.0)
+        self.assertNotIn("avatar_path", theme_cfg["shell"])
+        self.assertTrue(theme_cfg["plugin_settings"]["noctalia/mpvpaper"]["dual_sync"])
+        actions = {a["action"]: a for a in theme_cfg["shell"]["session"]["actions"]}
+        self.assertEqual(actions["shutdown"]["variant"], "outline")
+        self.assertEqual(actions["lock_and_suspend"]["variant"], "outline")
+        self.assertTrue(greeter["appearance"]["wallpaper"]["path"].endswith("nox-greeter.png"))
+
+        loader = importlib.machinery.SourceFileLoader(
+            "nox_noctalia_layout", str(REPO / "configs/bin/nox-noctalia-layout")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        ls = tomllib.loads(
+            mod.build_lockscreen_widgets_toml(
+                [{"name": "DP-1", "model": "Odyssey G5", "width": 2560, "height": 1440}]
+            )
+        )
+        emblem = ls["lockscreen_widgets"]["widget"]["lockscreen-widget-emblem-DP-1"]
+        date_w = ls["lockscreen_widgets"]["widget"]["lockscreen-widget-date-DP-1"]
+        login_w = ls["lockscreen_widgets"]["widget"]["lockscreen-login-box@DP-1"]
+        self.assertEqual(emblem["box_width"], 160.0)
+        self.assertEqual(emblem["box_height"], 160.0)
+        self.assertTrue(emblem["settings"]["image_path"].endswith("nox-lockscreen-emblem.gif"))
+        self.assertEqual(date_w["type"], "clock")
+        self.assertFalse(login_w["settings"]["show_unlock_hint"])
+        self.assertTrue(login_w["settings"]["show_session_buttons"])
+        self.assertNotIn("background_padding", login_w["settings"])
+
+    def test_dual_monitor_shared_trajectory_and_ipc_sync_contracts(self) -> None:
+        import math
+        import tomllib
+
+        loader = importlib.machinery.SourceFileLoader(
+            "generate_nox_visuals", str(REPO / "tools/generate_nox_visuals.py")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        assert spec and spec.loader
+        gen_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gen_mod)
+
+        self.assertIsNone(gen_mod._compute_dual_sweep_global(0.02))
+        self.assertIsNone(gen_mod._compute_dual_sweep_global(0.85))
+        xs = [gen_mod._compute_dual_sweep_global(p)[0] for p in [i / 40.0 for i in range(4, 30)]]
+        self.assertTrue(all(xs[i] < xs[i + 1] for i in range(len(xs) - 1)), "Dual sweep must move forward monotonically")
+        self.assertLess(xs[0], 0.0)
+        self.assertGreater(xs[-1], 3640.0)
+
+        # Verify bezel continuity formula at x_global = 2560 across y in [0, 1440]
+        tilt = math.tan(math.radians(-20.0))
+        bx_g5 = 2560.0 + (0.0 * tilt) - 0.0
+        bx_aoc = 2560.0 + (-350.0 * tilt) - 2560.0
+        # At y_virtual = 720 -> y_g5 = 720, y_aoc = 720 - (-350) = 1070
+        x_g5_at_y720 = bx_g5 + 720.0 * tilt
+        x_aoc_at_y720 = bx_aoc + 1070.0 * tilt
+        self.assertAlmostEqual(x_g5_at_y720 - 2560.0, x_aoc_at_y720, places=6)
+
+        plug = tomllib.loads((REPO / "configs/noctalia/plugins/mpvpaper/plugin.toml").read_text(encoding="utf-8"))
+        dual_settings = [s for s in plug["setting"] if s["key"] == "dual_sync"]
+        self.assertEqual(len(dual_settings), 1)
+        self.assertTrue(dual_settings[0]["default"])
+
+        lua = (REPO / "configs/noctalia/plugins/mpvpaper/mpvpaper_service.luau").read_text(encoding="utf-8")
+        for needle in ("dualSyncEnabled", "orderedDualConnectors", "syncPairPhase", "resetDualPairZero", "DUAL_CYCLE_SECONDS = 14.0"):
+            self.assertIn(needle, lua)
+
+    def test_nox_fastfetch_panel_alignment_and_sections(self) -> None:
+        loader = importlib.machinery.SourceFileLoader(
+            "nox_fastfetch", str(REPO / "configs/bin/nox-fastfetch")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        sample_raw = [
+            "\x1b[m\x1b[?7lawerkori@nox-arch",
+            "-----------------",
+            "✦ SYSTEM",
+            "\x1b[1m├─ OS        \x1b[38;2;168;85;247m│ \x1b[m\x1b[13G\x1b[38;2;245;242;255mArch Linux x86_64",
+            "├─ Host      │ \x1b[13GKVM/QEMU Standard PC",
+            "├─ Kernel    │ \x1b[13G6.14.0-cachyos",
+            "└─ Packages  │ \x1b[13G742 (pacman)",
+            "✦ SESSION",
+            "├─ DE/WM     │ \x1b[13GUmbriel (Wayland)",
+            "└─ Terminal  │ \x1b[13Gkitty 0.41.0",
+            "✦ HARDWARE",
+            "├─ CPU       │ \x1b[13GAMD Ryzen 9 7950X",
+            "└─ Memory    │ \x1b[13G1.24 GiB / 7.75 GiB (\x1b[32m16%\x1b[m)",
+            "✦ DISPLAY & STORAGE",
+            "├─ Display   │ \x1b[13G1280x800 in 14\" [External]",
+            "└─ Disk (/)  │ \x1b[13G8.4 GiB / 60.0 GiB (\x1b[32m14%\x1b[m) - btrfs",
+            "● ● ● ● ● ● ● ●",
+            "\x1b[?7h",
+        ]
+        parsed = mod.parse_fastfetch_lines(sample_raw)
+        self.assertEqual([s["title"] for s in parsed["sections"]], list(mod.EXPECTED_SECTIONS))
+        logo_lines = (REPO / "configs/fastfetch/nox-logo.txt").read_text(encoding="utf-8").splitlines()
+        for cols in (120, 90, 62):
+            rendered = mod.render_dashboard(parsed, logo_lines, cols)
+            self.assertNotIn("\x1b[13G", rendered)
+            self.assertNotIn("\x1b[?7l", rendered)
+            plain_lines = [mod.strip_ansi(l) for l in rendered.splitlines()]
+            sep_cols = {l.find("│") for l in plain_lines if "├─" in l or "└─" in l}
+            self.assertEqual(len(sep_cols), 1, f"Misaligned │ separators at cols={cols}: {sep_cols}")
+            border_widths = {
+                mod.vis_len(l[l.find("╭") :]) for l in plain_lines if "╭─ ✦ " in l
+            } | {
+                mod.vis_len(l[l.find("╰") :]) for l in plain_lines if "╰─" in l
+            }
+            self.assertEqual(len(border_widths), 1, f"Mismatched border widths at cols={cols}: {border_widths}")
+
+
+class TestCorrectiveAuditAdditions(unittest.TestCase):
+    def test_nox_install_builds_btrfs_and_locked_root_equivalently(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("nox_install", REPO / "bootstrap/nox-install.py")
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        self.assertFalse(mod.validate_username("root")[0])
+        self.assertFalse(mod.validate_username("BadUser")[0])
+        self.assertTrue(mod.validate_username("awerkori")[0])
+
+        base_cfg = json.loads((REPO / "user_configuration.json").read_text(encoding="utf-8"))
+        disk = {"name": "nvme0n1", "path": "/dev/nvme0n1", "size_bytes": 1000 * 1024**3}
+        cfg, creds = mod.build_final_configs(base_cfg, disk, "awerkori", "$6$salt$hash", sector_size=512)
+
+        self.assertNotIn("auth_config", cfg)
+        self.assertIsNone(creds["root_enc_password"])
+        self.assertEqual(len(creds["users"]), 1)
+        self.assertEqual(creds["users"][0]["username"], "awerkori")
+        self.assertTrue(creds["users"][0]["sudo"])
+        self.assertEqual(creds["users"][0]["groups"], ["wheel"])
+
+        dc = cfg["disk_config"]
+        self.assertEqual(dc["btrfs_options"]["snapshot_config"]["type"], "Snapper")
+        parts = dc["device_modifications"][0]["partitions"]
+        self.assertEqual(parts[0]["fs_type"], "fat32")
+        self.assertEqual(parts[0]["size"]["value"], 4096)
+        self.assertEqual(parts[1]["fs_type"], "btrfs")
+        self.assertEqual(parts[1]["mount_options"], ["compress=zstd"])
+        subvols = [(s["name"], s["mountpoint"]) for s in parts[1]["btrfs"]]
+        self.assertEqual(
+            subvols,
+            [
+                ("@", "/"),
+                ("@home", "/home"),
+                ("@log", "/var/log"),
+                ("@pkg", "/var/cache/pacman/pkg"),
+                ("@.snapshots", "/.snapshots"),
+            ],
+        )
+
+    def test_limine_interrupted_restore_guards_present(self) -> None:
+        for rel in (
+            "configs/bin/nox-limine-integrity",
+            "configs/bin/nox-limine-snapper-restore",
+            "configs/systemd/nox-limine-integrity-shutdown.service",
+        ):
+            self.assertTrue((REPO / rel).is_file(), f"Missing {rel}")
+        pre_hook = (REPO / "configs/boot-hooks/05-nox-limine-naming-pre").read_text(encoding="utf-8")
+        fb_hook = (REPO / "configs/boot-hooks/95-nox-sbctl-fallback").read_text(encoding="utf-8")
+        k_script = (REPO / "scripts/20-cachyos-kernel.sh").read_text(encoding="utf-8")
+        self.assertIn("/run/nox-limine-tx.dirty", pre_hook)
+        self.assertIn("/run/nox-limine-tx.dirty", fb_hook)
+        self.assertIn("nox-limine-integrity-shutdown.service", k_script)
+        self.assertIn("/usr/local/bin/limine-snapper-restore", k_script)
+
+        # Ensure P1/P2/P4/P5 corrective invariants remain intact
+        nox_inst = (REPO / "bootstrap/nox-install.py").read_text(encoding="utf-8")
+        self.assertIn("ensure_interactive_tty", nox_inst)
+        self.assertIn("verify_disk_safe_to_wipe", nox_inst)
+        self.assertIn("validate_payload_spec", nox_inst)
+        self.assertIn('HOMOLOGATED_ARCHINSTALL_SERIES = "4.5"', nox_inst)
+        self.assertIn("select_tmpfs_dir", nox_inst)
+        self.assertIn("scrub_persisted_archinstall_credentials", nox_inst)
+        repo_stage = (REPO / "scripts/10-cachyos-repos.sh").read_text(encoding="utf-8")
+        self.assertNotIn("pacman -Sy --noconfirm", repo_stage)
+        desktop_stage = (REPO / "scripts/50-desktop.sh").read_text(encoding="utf-8")
+        self.assertIn("nox_log_missing_lib_diagnostics", desktop_stage)
+        self.assertIn("pacman -Syyu --noconfirm", desktop_stage)
+        self.assertNotIn("_nox_lagging", desktop_stage)
+        limine_integ = (REPO / "configs/bin/nox-limine-integrity").read_text(encoding="utf-8")
+        self.assertIn('CONF_B2="$(b2sum "$CONF"', limine_integ)
+        self.assertIn('grep -qaiF "$CONF_B2" "$LIMINE_EFI"', limine_integ)
+        mem_stage = (REPO / "scripts/70-memory.sh").read_text(encoding="utf-8")
+        self.assertNotIn("nodatacow", mem_stage)
+        wrap = (REPO / "configs/bin/nox-limine-snapper-restore").read_text(encoding="utf-8")
+        self.assertIn("/usr/bin/limine-snapper-list", wrap)
+

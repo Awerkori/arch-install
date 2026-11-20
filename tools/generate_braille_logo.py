@@ -34,8 +34,9 @@ def generate_braille_logo(src_png: Path, cols: int = 30) -> str:
     trim_y = int(h_box * 0.11)
     crop = img.crop((x0 + trim_x, y0 + trim_y, x1 - trim_x, y1 - trim_y))
 
-    # Boost saturation slightly so gold & purple shine cleanly in Braille cells
-    rgb_img = ImageEnhance.Color(crop).enhance(1.18)
+    # Boost saturation slightly and preserve deep violet tones cleanly in Braille cells
+    rgb_img = ImageEnhance.Color(crop).enhance(1.22)
+    rgb_img = ImageEnhance.Brightness(rgb_img).enhance(1.06)
 
     pw = cols * 2
     # Terminal char aspect ~ 1:2, Braille cell is 2x4 dots -> square visual aspect matches pw x ph!
@@ -59,7 +60,9 @@ def generate_braille_logo(src_png: Path, cols: int = 30) -> str:
                     px = c * 2 + dx
                     cr, cg, cb, ca = arr[py, px]
                     luma = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb
-                    if ca > 90 and luma > 28:
+                    max_c = max(cr, cg, cb)
+                    # Keep deep violet Lambda cells solid (alpha-first + max channel), preserve real inner cutout gaps
+                    if ca > 72 and (max_c > 36 or luma > 10):
                         mask |= DOT_MASK[(dx, dy)]
                         wt = ca / 255.0
                         r_sum += cr * wt

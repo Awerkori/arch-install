@@ -75,6 +75,70 @@ PKGS=(
 nox_info "Instalando stack desktop oficial (Umbriel + Noctalia + Greeter + Kitty + Firefox Pure + Btop + Fastfetch + ProtonPlus + Proton-CachyOS SLR + Mesa)..."
 pacman -S --needed --noconfirm "${PKGS[@]}"
 
+# Guard against CachyOS vs Arch rebuild skew without performing partial/selective package promotions.
+NOX_AUDITED_DESKTOP_BINS=(
+  /usr/bin/mpvpaper
+  /usr/bin/mpv
+  /usr/bin/ffmpeg
+  /usr/bin/ffmpegthumbnailer
+  /usr/bin/noctalia
+  /usr/bin/noctalia-greeter
+  /usr/bin/umbriel
+  /usr/bin/kitty
+  /usr/bin/firefox
+  /usr/lib/glycin-loaders/2+/glycin-jxl
+  /usr/lib/glycin-loaders/2+/glycin-svg
+  /usr/lib/glycin-loaders/2+/glycin-image-rs
+)
+
+nox_core_bins_missing_libs() {
+  local b
+  for b in "${NOX_AUDITED_DESKTOP_BINS[@]}"; do
+    [[ -x "$b" ]] || continue
+    if ldd "$b" 2>/dev/null | grep -q "not found"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+nox_log_missing_lib_diagnostics() {
+  local b missing_lines owner_pkg
+  for b in "${NOX_AUDITED_DESKTOP_BINS[@]}"; do
+    [[ -x "$b" ]] || continue
+    missing_lines="$(ldd "$b" 2>/dev/null | grep "not found" || true)"
+    [[ -n "$missing_lines" ]] || continue
+    owner_pkg="$(pacman -Qoq "$b" 2>/dev/null || echo "desconhecido")"
+    nox_error "Binario com SONAME ausente: $b (pacote: $owner_pkg)"
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && nox_error "  ldd: $line"
+    done <<<"$missing_lines"
+    if [[ "$owner_pkg" != "desconhecido" ]]; then
+      pacman -Qi "$owner_pkg" 2>/dev/null | grep -E '^(Name|Version|Repository|Installed From|Depends On)' | while IFS= read -r qi; do
+        nox_error "  pacman -Qi: $qi"
+      done || true
+      pacman -Si "$owner_pkg" 2>/dev/null | grep -E '^(Repository|Name|Version|Depends On)' | while IFS= read -r si; do
+        nox_error "  pacman -Si: $si"
+      done || true
+    fi
+  done
+}
+
+if nox_core_bins_missing_libs; then
+  nox_warn "Detectada dessincronizacao de SONAME/ABI apos instalacao do desktop; registrando diagnostico e executando apenas atualizacao completa coerente (pacman -Syyu)..."
+  nox_log_missing_lib_diagnostics
+  pacman -Syyu --noconfirm
+  if nox_core_bins_missing_libs; then
+    nox_log_missing_lib_diagnostics
+    nox_die "Incompatibilidade de SONAME/ABI persiste apos pacman -Syyu completo. Abortando sem aplicar promocao seletiva/parcial de pacotes."
+  fi
+fi
+
+# Functional execution verification of critical multimedia/wallpaper components
+mpvpaper --help >/dev/null 2>&1 || nox_die "Falha funcional ao carregar mpvpaper."
+mpv --version >/dev/null 2>&1 || nox_die "Falha funcional ao carregar mpv."
+ffmpeg -version >/dev/null 2>&1 || nox_die "Falha funcional ao carregar ffmpeg."
+
 # Build & install Luciole and Topgrade from AUR as unprivileged user (noxbuild)
 nox_aur_install_pkg "luciole-git"
 nox_aur_install_pkg "topgrade-bin"

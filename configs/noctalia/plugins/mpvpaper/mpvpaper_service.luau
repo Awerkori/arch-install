@@ -29,6 +29,12 @@ local currentPath = {}      -- Map of connector -> file mpv is actually showing 
 local available = false     -- Is mpvpaper binary installed?
 local mpvpaperSupportsAutoMode = false -- resolved at boot, before any launch
 local socatAvailable = nil
+local spawnSeq = {}         -- Generation counter per connector to serialize overlapping startMpvpaper calls
+
+-- Dual-monitor light-sweep synchronization constants (matches 14.0s shared trajectory)
+local DUAL_CYCLE_SECONDS = 14.0
+local DUAL_DRIFT_THRESHOLD = 0.15
+local syncTickCounter = 0
 
 -- Slideshow interval in seconds, set exclusively from the picker's slider (no
 -- manifest setting backs this anymore). 0 means disabled. Persisted to disk so
@@ -402,6 +408,10 @@ local function killMpvpaper(connector, callback, signal)
   currentPath[connector] = nil
 
   if callback then
+    if not launchedAsSystemd[connector] then
+      -- Wait briefly for mpvpaper to exit and release its Wayland surface/IPC socket
+      killCmd = killCmd .. " ; i=0; while [ $i -lt 12 ] && pgrep -f -- " .. pattern .. " >/dev/null 2>&1; do sleep 0.05; i=$((i+1)); done"
+    end
     noctalia.runAsync(killCmd, callback)
   else
     noctalia.runAsync(killCmd)
@@ -412,6 +422,9 @@ end
 -- When a slideshow is active, we start mpvpaper against the generated
 -- playlist; when it is disabled, we just point it at the single file.
 local function startMpvpaper(connector, path)
+  local seq = (spawnSeq[connector] or 0) + 1
+  spawnSeq[connector] = seq
+
   -- Temporarily set the cached thumbnail as the background to prevent black screens during startup.
   local thumb = CACHE_DIR .. "/" .. path:gsub("[^%w]", "_") .. ".jpg"
   local target = resolveTarget(connector, path)
@@ -424,6 +437,7 @@ local function startMpvpaper(connector, path)
   end
 
   killMpvpaper(connector, function()
+    if spawnSeq[connector] ~= seq then return end
     launchedAsSystemd[connector] = cfg("run_as_systemd")
     persist()
     local flags = mpvpaperFlags()
@@ -546,7 +560,7 @@ local function setVideo(connector, path)
 end
 
 -- ==============================================================================
--- ── LIFECYCLE ──────────────────────────────────────────────────────────────
+-- ── LIFECYCLE & DUAL-MONITOR IPC SYNC COORDINATOR ──────────────────────────
 -- ==============================================================================
 
 -- Returns a quick dictionary of currently attached physical monitors.
@@ -556,26 +570,135 @@ local function presentOutputs()
   return present
 end
 
--- Applies saved video assignments upon plugin startup.
--- When a slideshow interval is present, this will reapply playlists as needed.
-local function applyAll()
-  for connector, path in pairs(assignments) do
-    startMpvpaper(connector, path)
-  end
-end
-
 local function ensureSocatChecked()
   if socatAvailable == nil then
     socatAvailable = noctalia.commandExists("socat")
     if not socatAvailable then
-      noctalia.log("mpvpaper: socat not found — slideshow static-frame sync disabled")
+      noctalia.log("mpvpaper: socat not found — slideshow & dual-monitor sync disabled")
     end
   end
   return socatAvailable
 end
 
--- Polls mpv over IPC for the currently displayed file while a slideshow is
--- active, keeping `assignments` and the static wallpaper texture in sync.
+local function dualSyncEnabled()
+  return cfg("dual_sync") ~= false
+end
+
+-- Returns sorted active concrete connectors; puts G5 wallpaper owner first as clock master.
+local function orderedDualConnectors(present)
+  local list = {}
+  local pmap = present or presentOutputs()
+  for connector, _ in pairs(assignments) do
+    if connector ~= "*" and pmap[connector] then
+      table.insert(list, connector)
+    end
+  end
+  table.sort(list, function(a, b)
+    local pa = tostring(assignments[a] or "")
+    local pb = tostring(assignments[b] or "")
+    local aG5 = pa:find("nox%-g5") ~= nil
+    local bG5 = pb:find("nox%-g5") ~= nil
+    if aG5 ~= bG5 then return aG5 end
+    return a < b
+  end)
+  return list
+end
+
+local function sendMpvIpc(connector, jsonCmd, callback)
+  local sock = ipcSocketPath(connector)
+  if not noctalia.fileExists(sock) then
+    if callback then callback(nil) end
+    return
+  end
+  local cmd = "printf '%s\\n' " .. shellQuote(jsonCmd) .. " | socat -t 0.5 - " .. shellQuote("UNIX-CONNECT:" .. sock)
+  noctalia.runAsync(cmd, function(result)
+    if type(result) ~= "table" or result.exitCode ~= 0 or type(result.stdout) ~= "string" then
+      if callback then callback(nil) end
+      return
+    end
+    if callback then callback(result.stdout) end
+  end)
+end
+
+local function queryMpvNumberProp(connector, prop, callback)
+  sendMpvIpc(connector, '{"command":["get_property",' .. noctalia.json.encode(prop) .. ']}', function(stdout)
+    if type(stdout) ~= "string" then
+      callback(nil)
+      return
+    end
+    local numStr = stdout:match('"data"%s*:%s*([%-]?%d+%.?%d*)')
+    callback(numStr and tonumber(numStr) or nil)
+  end)
+end
+
+local function queryMpvBoolProp(connector, prop, callback)
+  sendMpvIpc(connector, '{"command":["get_property",' .. noctalia.json.encode(prop) .. ']}', function(stdout)
+    if type(stdout) ~= "string" then
+      callback(nil)
+      return
+    end
+    local val = stdout:match('"data"%s*:%s*(true|false)')
+    if val == "true" then callback(true)
+    elseif val == "false" then callback(false)
+    else callback(nil) end
+  end)
+end
+
+local function seekMpvExact(connector, targetPos)
+  local clamped = math.max(0.0, tonumber(targetPos) or 0.0) % DUAL_CYCLE_SECONDS
+  local cmd = string.format('{"command":["seek",%.4f,"absolute+exact"]}', clamped)
+  sendMpvIpc(connector, cmd)
+end
+
+local function syncPairPhase(master, followers)
+  if not dualSyncEnabled() or not ensureSocatChecked() then return end
+  if isPaused[master] then return end
+  queryMpvNumberProp(master, "time-pos", function(masterPos)
+    if type(masterPos) ~= "number" then return end
+    local phase = masterPos % DUAL_CYCLE_SECONDS
+    for _, follower in ipairs(followers) do
+      if not isPaused[follower] then
+        queryMpvNumberProp(follower, "time-pos", function(folPos)
+          if type(folPos) ~= "number" then return end
+          local fPhase = folPos % DUAL_CYCLE_SECONDS
+          local rawDiff = math.abs(phase - fPhase)
+          local wrapDiff = math.min(rawDiff, DUAL_CYCLE_SECONDS - rawDiff)
+          if wrapDiff > DUAL_DRIFT_THRESHOLD then
+            noctalia.log(string.format("mpvpaper: dual-sync drift %.3fs (%s=%.2fs, %s=%.2fs) -> aligning", wrapDiff, master, phase, follower, fPhase))
+            seekMpvExact(follower, phase)
+          end
+        end)
+      end
+    end
+  end)
+end
+
+local function resetDualPairZero(conns)
+  if not dualSyncEnabled() or not ensureSocatChecked() or #conns < 2 then return end
+  noctalia.runAsync("sleep 1.2", function()
+    for _, conn in ipairs(conns) do
+      if not isPaused[conn] then
+        sendMpvIpc(conn, '{"command":["seek",0.0,"absolute+exact"]}')
+        sendMpvIpc(conn, '{"command":["set_property","pause",false]}')
+      end
+    end
+  end)
+end
+
+-- Applies saved video assignments upon plugin startup.
+-- When a slideshow interval is present, this will reapply playlists as needed.
+local function applyAll()
+  local present = presentOutputs()
+  for connector, path in pairs(assignments) do
+    startMpvpaper(connector, path)
+  end
+  local conns = orderedDualConnectors(present)
+  if #conns >= 2 then
+    resetDualPairZero(conns)
+  end
+end
+
+-- Polls mpv over IPC for slideshow updates and dual-monitor phase drift.
 function update()
   if not available then return end
 
@@ -587,10 +710,21 @@ function update()
     applyAll()
   end
 
-  if not slideshowInterval() then return end
-  if not ensureSocatChecked() then return end
-  for connector in pairs(assignments) do
-    refreshCurrentFile(connector)
+  if slideshowInterval() and ensureSocatChecked() then
+    for connector in pairs(assignments) do
+      refreshCurrentFile(connector)
+    end
+  end
+
+  syncTickCounter = syncTickCounter + 1
+  if dualSyncEnabled() and (syncTickCounter % 3 == 0) and ensureSocatChecked() then
+    local conns = orderedDualConnectors()
+    if #conns >= 2 then
+      local master = conns[1]
+      local followers = {}
+      for i = 2, #conns do table.insert(followers, conns[i]) end
+      syncPairPhase(master, followers)
+    end
   end
 end
 
@@ -609,12 +743,32 @@ function onOutputsChanged()
     startMpvpaper("*", assignments["*"])
   end
 
-  -- Relaunch specific assignments for monitors that just connected.
+  -- Relaunch specific assignments for monitors that just connected, aligning phase to running master.
+  local reconnected = {}
   for connector, path in pairs(assignments) do
     if connector ~= "*" then
       if present[connector] and not lastPresent[connector] then
         startMpvpaper(connector, path)
+        table.insert(reconnected, connector)
       end
+    end
+  end
+
+  if #reconnected > 0 and dualSyncEnabled() and ensureSocatChecked() then
+    local conns = orderedDualConnectors(present)
+    if #conns >= 2 then
+      local master = conns[1]
+      noctalia.runAsync("sleep 1.2", function()
+        queryMpvNumberProp(master, "time-pos", function(masterPos)
+          if type(masterPos) ~= "number" then return end
+          local phase = masterPos % DUAL_CYCLE_SECONDS
+          for _, conn in ipairs(reconnected) do
+            if conn ~= master then
+              seekMpvExact(conn, phase)
+            end
+          end
+        end)
+      end)
     end
   end
 
@@ -683,12 +837,37 @@ function onIpc(event, payload)
       thawMpvpaper(payload)
     else
       for conn in pairs(assignments) do thawMpvpaper(conn) end
+      if dualSyncEnabled() and ensureSocatChecked() then
+        local conns = orderedDualConnectors()
+        if #conns >= 2 then
+          local master = conns[1]
+          local followers = {}
+          for i = 2, #conns do table.insert(followers, conns[i]) end
+          noctalia.runAsync("sleep 0.25", function()
+            syncPairPhase(master, followers)
+          end)
+        end
+      end
     end
     publish()
 
   elseif event == "toggle" then
     if type(payload) == "string" and payload ~= "" then
       toggleMpvpaper(payload)
+    elseif dualSyncEnabled() then
+      local conns = orderedDualConnectors()
+      local groupPaused = (#conns > 0 and isPaused[conns[1]]) == true
+      for conn in pairs(assignments) do
+        if groupPaused then thawMpvpaper(conn) else freezeMpvpaper(conn) end
+      end
+      if groupPaused and ensureSocatChecked() and #conns >= 2 then
+        local master = conns[1]
+        local followers = {}
+        for i = 2, #conns do table.insert(followers, conns[i]) end
+        noctalia.runAsync("sleep 0.25", function()
+          syncPairPhase(master, followers)
+        end)
+      end
     else
       for conn in pairs(assignments) do toggleMpvpaper(conn) end
     end

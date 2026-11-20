@@ -24,6 +24,10 @@
     "cpu_weight": {
       "label": "Peso da CPU"
     },
+    "dual_sync": {
+      "description": "Sincronizar a fase de 14s do feixe luminoso e o estado pausa/retomada entre os monitores G5 e AOC",
+      "label": "Sincronização Dual-Monitor"
+    },
     "extract_last_frame": {
       "description": "Extrair automaticamente um quadro do vídeo para usar como papel de parede estático quando a reprodução estiver parada",
       "label": "Quadro Estático de Fallback"

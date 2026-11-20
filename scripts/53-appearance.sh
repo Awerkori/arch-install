@@ -114,6 +114,9 @@ nox_atomic_install 0644 "${NOX_ROOT}/configs/fastfetch/config.jsonc" /etc/skel/.
 if [[ -f "${NOX_ROOT}/configs/fastfetch/nox-logo.txt" ]]; then
   nox_atomic_install 0644 "${NOX_ROOT}/configs/fastfetch/nox-logo.txt" /etc/skel/.config/fastfetch/nox-logo.txt
 fi
+if [[ -f "${NOX_ROOT}/configs/bin/nox-fastfetch" ]]; then
+  nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-fastfetch" /usr/local/bin/fastfetch
+fi
 nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/nox-launcher.toml" /etc/skel/.config/noctalia/nox-launcher.toml
 nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/nox-power.toml" /etc/skel/.config/noctalia/nox-power.toml
 nox_atomic_install 0644 "${NOX_ROOT}/configs/noctalia/nox-theme.toml" /etc/skel/.config/noctalia/nox-theme.toml

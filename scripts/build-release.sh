@@ -12,8 +12,12 @@ COMMIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 TAR_NAME="nox-archinstall-payload-${VERSION}.tar.gz"
 TAR_PATH="${DIST_DIR}/${TAR_NAME}"
 
-# Deterministic archive from git HEAD (or working tree via temp index)
-git -C "$REPO_ROOT" archive --format=tar.gz --prefix="nox-archinstall/" -o "$TAR_PATH" HEAD
+# Deterministic archive excluding release-pointer files (user_configuration.json & manifests/release.json)
+# to eliminate circular hash dependency between the payload tarball and the files storing its SHA-256.
+tar --sort=name --mtime='UTC 2026-01-01' --owner=0 --group=0 --numeric-owner \
+  --exclude='.git' --exclude='dist' --exclude='__pycache__' --exclude='*.pyc' \
+  --exclude='./user_configuration.json' --exclude='./manifests/release.json' \
+  -czf "$TAR_PATH" -C "$REPO_ROOT" .
 SHA256="$(sha256sum "$TAR_PATH" | awk '{print $1}')"
 printf '%s  %s\n' "$SHA256" "$TAR_NAME" > "${TAR_PATH}.sha256"
 

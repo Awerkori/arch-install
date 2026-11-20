@@ -24,6 +24,10 @@
     "cpu_weight": {
       "label": "CPU Weight"
     },
+    "dual_sync": {
+      "description": "Synchronize 14s dual-monitor light-sweep playback phase and pause/resume state across G5 and AOC displays",
+      "label": "Dual-Monitor Light-Sweep Sync"
+    },
     "extract_last_frame": {
       "description": "Automatically extract a frame from the video to use as the static wallpaper when playback is stopped",
       "label": "Static Fallback Frame"

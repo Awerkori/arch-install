@@ -6,6 +6,7 @@ set -Eeuo pipefail
 /usr/local/libexec/nox/nox-display-profile || true
 if command -v umbriel >/dev/null 2>&1 && [[ -n "${UMBRIEL_SOCKET:-}" ]]; then
   umbriel msg config-reload >/dev/null 2>&1 || true
+  sleep 0.3
 fi
 
 # 2. Apply GSettings dark mode (requires D-Bus user session)
@@ -15,7 +16,29 @@ if command -v gsettings >/dev/null 2>&1; then
 fi
 
 # 3. Apply Project Nox Obsidian Purple identity, lockscreen widgets, animated mpvpaper & templates once
-NOX_INIT_MARKER="${XDG_STATE_HOME:-$HOME/.local/state}/noctalia/.nox-obsidian-init-v2"
+#    and auto-refresh connector layout if physical monitor ports changed (e.g. DP-2 -> DP-1).
+NOX_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}"
+NOX_INIT_MARKER="${NOX_STATE_DIR}/noctalia/.nox-obsidian-init-v2"
+MPV_ASSIGN_FILE="${NOX_STATE_DIR}/noctalia/mpvpaper/assignments.json"
+
+nox_mpv_layout_stale() {
+  [[ -f "$MPV_ASSIGN_FILE" ]] || return 0
+  python3 - "$MPV_ASSIGN_FILE" <<'PY' >/dev/null 2>&1 || return 0
+import json, subprocess, sys
+from pathlib import Path
+cur = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("assignments", {})
+res = subprocess.run(["umbriel", "outputs", "--json"], capture_output=True, text=True, timeout=3)
+outs = json.loads(res.stdout) if res.returncode == 0 and res.stdout.strip() else []
+names = {str(o.get("name", "")) for o in outs if o.get("name")}
+if not names:
+    sys.exit(0)
+# Stale if current keys omit an active output or hold an absent concrete connector
+if any(k != "*" and k not in names for k in cur) or not names.issubset(set(cur)):
+    sys.exit(1)
+sys.exit(0)
+PY
+}
+
 if [[ ! -f "$NOX_INIT_MARKER" ]]; then
   mkdir -p "$(dirname "$NOX_INIT_MARKER")"
   /usr/local/libexec/nox/nox-noctalia-layout >/dev/null 2>&1 || true
@@ -35,6 +58,12 @@ if [[ ! -f "$NOX_INIT_MARKER" ]]; then
     noctalia msg plugin noctalia/mpvpaper:service all reapply >/dev/null 2>&1 || true
   fi
   touch "$NOX_INIT_MARKER"
+elif nox_mpv_layout_stale; then
+  /usr/local/libexec/nox/nox-noctalia-layout >/dev/null 2>&1 || true
+  if command -v noctalia >/dev/null 2>&1; then
+    noctalia msg config-reload >/dev/null 2>&1 || true
+    noctalia msg plugin noctalia/mpvpaper:service all reapply >/dev/null 2>&1 || true
+  fi
 fi
 
 # 4. Harmonize Firefox Pure toolbar/tabs (userChrome/userContent) for all profiles

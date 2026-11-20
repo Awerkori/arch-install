@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Atomic repair / verification helper for Limine config normalization, BLAKE2b enrollment, and sbctl signatures.
+set -Eeuo pipefail
+
+MODE="${1:---repair-if-dirty}"
+ESP="${ESP_PATH:-/boot}"
+if ! findmnt "$ESP" >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
+  ESP="/efi"
+fi
+export ESP_PATH="$ESP"
+
+CONF="${ESP}/limine.conf"
+DIRTY_MARKER="/run/nox-limine-tx.dirty"
+LIMINE_EFI="${ESP}/EFI/limine/limine_x64.efi"
+FALLBACK_EFI="${ESP}/EFI/BOOT/BOOTX64.EFI"
+
+[[ -f "$CONF" ]] || exit 0
+
+needs_repair=false
+if [[ "$MODE" == "--force" || "$MODE" == "--repair" ]]; then
+  needs_repair=true
+elif [[ -f "$DIRTY_MARKER" ]]; then
+  needs_repair=true
+elif grep -Eq '^[[:space:]]*//linux-cachyos$|^[[:space:]]*///[0-9]+[[:space:]]*\|' "$CONF"; then
+  needs_repair=true
+elif grep -Eq '^[[:space:]]*/\+Arch Linux' "$CONF" && ! grep -Eq '^[[:space:]]*//Project Nox$' "$CONF"; then
+  needs_repair=true
+elif [[ -f "$LIMINE_EFI" || -f "$FALLBACK_EFI" ]] && grep -qE '^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=yes' /etc/default/limine 2>/dev/null; then
+  CONF_B2="$(b2sum "$CONF" 2>/dev/null | awk '{print $1}' || true)"
+  if [[ -n "$CONF_B2" ]]; then
+    if { [[ -f "$LIMINE_EFI" ]] && ! grep -qaiF "$CONF_B2" "$LIMINE_EFI" 2>/dev/null; } || \
+       { [[ -f "$FALLBACK_EFI" ]] && ! grep -qaiF "$CONF_B2" "$FALLBACK_EFI" 2>/dev/null; }; then
+      needs_repair=true
+    fi
+  elif { [[ -f "$LIMINE_EFI" ]] && grep -qaE '0{128}' "$LIMINE_EFI" 2>/dev/null; } || \
+       { [[ -f "$FALLBACK_EFI" ]] && grep -qaE '0{128}' "$FALLBACK_EFI" 2>/dev/null; }; then
+    needs_repair=true
+  fi
+fi
+
+$needs_repair || exit 0
+
+if (( EUID != 0 )); then
+  echo "nox-limine-integrity: root privileges required to repair $CONF" >&2
+  exit 1
+fi
+
+if [[ -x /usr/local/libexec/nox/nox-limine-normalize ]]; then
+  /usr/local/libexec/nox/nox-limine-normalize --post
+fi
+
+if command -v limine-enroll-config >/dev/null 2>&1; then
+  limine-enroll-config
+fi
+
+if [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]]; then
+  /etc/boot/hooks/post.d/95-nox-sbctl-fallback
+fi
+
+sync -f "$CONF" 2>/dev/null || sync
+rm -f "$DIRTY_MARKER"

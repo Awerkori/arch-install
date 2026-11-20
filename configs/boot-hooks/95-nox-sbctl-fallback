@@ -35,3 +35,4 @@ fi
 sbctl sign "$TMP_EFI" >/dev/null
 mv -f "$TMP_EFI" "$FALLBACK_EFI"
 sync -f "$FALLBACK_EFI" 2>/dev/null || sync
+rm -f /run/nox-limine-tx.dirty

@@ -115,16 +115,15 @@ PY
 
 pacman-conf --repo-list | grep -q 'cachyos-znver4\|cachyos-v4' || nox_die "Repositorios CachyOS ausentes apos edicao de pacman.conf."
 
-# 4. Sync DBs, optionally rank mirrors if cachyos-rate-mirrors is installable, then full coherent -Syyu
-pacman -Sy --noconfirm
-if pacman -S --needed --noconfirm cachyos-rate-mirrors >/dev/null 2>&1; then
+# 4. Full coherent upgrade (-Syyu) including cachyos/pacman sync registration before installing rate-mirrors
+nox_info "Executando atualizacao coerente completa (pacman -Syyu)..."
+pacman -Syyu --noconfirm cachyos/pacman
+if pacman -Syu --needed --noconfirm cachyos-rate-mirrors >/dev/null 2>&1; then
   nox_info "Classificando mirrors com cachyos-rate-mirrors..."
   timeout 120 cachyos-rate-mirrors >/dev/null 2>&1 || nox_warn "cachyos-rate-mirrors falhou/timeout; mantendo mirrorlists existentes."
+  pacman -Syyu --noconfirm
 fi
-
-nox_info "Executando atualizacao coerente completa (pacman -Syyu)..."
-pacman -Syyu --noconfirm
-pacman -S --noconfirm cachyos/pacman >/dev/null 2>&1 || true
+pacman -S --needed --noconfirm cachyos/pacman >/dev/null 2>&1 || true
 
 # Verify pacman fork provenance
 pacman -Qi pacman | grep -E 'Version|Installed From|Architecture'

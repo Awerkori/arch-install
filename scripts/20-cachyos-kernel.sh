@@ -154,6 +154,11 @@ nox_atomic_install 0755 "${NOX_ROOT}/configs/boot-hooks/05-nox-limine-naming-pre
 nox_atomic_install 0755 "${NOX_ROOT}/configs/boot-hooks/85-nox-limine-naming-post" /etc/boot/hooks/post.d/85-nox-limine-naming-post
 [[ -e /etc/boot/hooks/post.d/90-limine-enroll-config ]] || ln -sf /usr/bin/limine-enroll-config /etc/boot/hooks/post.d/90-limine-enroll-config
 nox_atomic_install 0755 "${NOX_ROOT}/configs/boot-hooks/95-nox-sbctl-fallback" /etc/boot/hooks/post.d/95-nox-sbctl-fallback
+nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-limine-integrity" "${NOX_LIBEXEC_DIR}/nox-limine-integrity"
+nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-limine-snapper-restore" /usr/local/bin/limine-snapper-restore
+ln -sf /usr/local/bin/limine-snapper-restore /usr/local/bin/limine-snapper-sync
+nox_atomic_install 0644 "${NOX_ROOT}/configs/systemd/nox-limine-integrity-shutdown.service" /etc/systemd/system/nox-limine-integrity-shutdown.service
+systemctl enable nox-limine-integrity-shutdown.service
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-secureboot-enroll" /usr/local/bin/nox-secureboot-enroll
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-secureboot-verify" /usr/local/bin/nox-secureboot-verify
 

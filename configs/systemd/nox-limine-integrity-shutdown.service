@@ -1,0 +1,15 @@
+[Unit]
+Description=Project Nox Limine Config & EFI Integrity Guard on Shutdown/Reboot
+DefaultDependencies=no
+After=local-fs.target
+Conflicts=shutdown.target reboot.target halt.target kexec.target
+Before=umount.target shutdown.target reboot.target halt.target kexec.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/nox/nox-limine-integrity --repair-if-dirty
+ExecStop=/usr/local/libexec/nox/nox-limine-integrity --repair-if-dirty
+
+[Install]
+WantedBy=multi-user.target

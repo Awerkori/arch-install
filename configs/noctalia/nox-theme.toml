@@ -16,9 +16,9 @@ builtin_ids = [
 ]
 
 [shell]
-avatar_path = "/usr/share/nox-archinstall/icons/nox-emblem.png"
+# Leave user avatar empty by default so Control Center / AccountsService controls it cleanly
 font_family = "Plus Jakarta Sans"
-corner_radius_scale = 1.0
+corner_radius_scale = 1.05
 setup_wizard_enabled = false
 telemetry_enabled = false
 
@@ -33,8 +33,9 @@ transition_on_startup = false
 [lockscreen]
 enabled = true
 blurred_desktop = false
+blur_intensity = 0.0
 tint_color = "surface"
-tint_intensity = 0.08
+tint_intensity = 0.0
 transition = ["golden"]
 transition_duration = 900.0
 wallpaper = "/usr/share/nox-archinstall/wallpapers/nox-lockscreen.png"
@@ -49,12 +50,6 @@ enabled = ["noctalia/mpvpaper"]
 
 [[plugins.source]]
 enabled = true
-kind = "path"
-location = "/usr/share/nox-archinstall/noctalia-plugins"
-name = "nox-bundled"
-
-[[plugins.source]]
-enabled = true
 kind = "git"
 location = "https://github.com/noctalia-dev/official-plugins"
 name = "official"
@@ -65,9 +60,46 @@ kind = "git"
 location = "https://github.com/noctalia-dev/community-plugins"
 name = "community"
 
+[[plugins.source]]
+enabled = true
+kind = "path"
+location = "/usr/share/nox-archinstall/noctalia-plugins"
+name = "nox-bundled"
+
 [plugin_settings."noctalia/mpvpaper"]
 video_directory = "/usr/share/nox-archinstall/wallpapers"
 mute = true
 hardware_decode = true
 auto_pause = "full"
 extract_last_frame = true
+dual_sync = true
+
+[[shell.session.actions]]
+action = "lock"
+enabled = true
+shortcut = "1"
+variant = "default"
+
+[[shell.session.actions]]
+action = "logout"
+enabled = true
+shortcut = "2"
+variant = "outline"
+
+[[shell.session.actions]]
+action = "lock_and_suspend"
+enabled = true
+shortcut = "3"
+variant = "outline"
+
+[[shell.session.actions]]
+action = "reboot"
+enabled = true
+shortcut = "4"
+variant = "outline"
+
+[[shell.session.actions]]
+action = "shutdown"
+enabled = true
+shortcut = "5"
+variant = "outline"

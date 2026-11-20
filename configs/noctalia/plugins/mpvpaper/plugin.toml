@@ -116,6 +116,13 @@ max = 19
 step = 1
 visible_when = { key = "run_as_systemd", values = ["true"] }
 
+[[setting]]
+key = "dual_sync"
+type = "bool"
+label_key = "settings.dual_sync.label"
+description_key = "settings.dual_sync.description"
+default = true
+
 # Headless background service: owns the mpvpaper logic and per-output assignments.
 [[service]]
 id = "service"

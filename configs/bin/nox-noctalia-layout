@@ -35,6 +35,19 @@ def _load_outputs_from_umbriel() -> list[dict[str, Any]]:
     return []
 
 
+def _parse_edid_text(edid_bytes: bytes) -> str:
+    if len(edid_bytes) < 128:
+        return ""
+    tokens: list[str] = []
+    for off in (54, 72, 90, 108):
+        blk = edid_bytes[off : off + 18]
+        if len(blk) == 18 and blk[:3] == b"\x00\x00\x00" and blk[3] in (0xFC, 0xFE):
+            txt = blk[5:18].split(b"\n", 1)[0].decode("ascii", errors="ignore").strip()
+            if txt:
+                tokens.append(txt)
+    return " ".join(tokens)
+
+
 def _load_outputs_from_sysfs(drm_root: Path = Path("/sys/class/drm")) -> list[dict[str, Any]]:
     outputs: list[dict[str, Any]] = []
     if not drm_root.is_dir():
@@ -59,13 +72,27 @@ def _load_outputs_from_sysfs(drm_root: Path = Path("/sys/class/drm")) -> list[di
                         w, h = int(parts[0]), int(parts[1])
             except OSError:
                 pass
-        outputs.append({"name": name, "width": w, "height": h})
+        entry: dict[str, Any] = {"name": name, "width": w, "height": h}
+        edid_file = conn_dir / "edid"
+        if edid_file.is_file():
+            try:
+                edid_desc = _parse_edid_text(edid_file.read_bytes())
+                if edid_desc:
+                    entry["model"] = edid_desc
+            except OSError:
+                pass
+        outputs.append(entry)
     return outputs
 
 
+def _output_identity_text(out: dict[str, Any]) -> str:
+    return " ".join(
+        str(out.get(k, "")) for k in ("name", "make", "model", "description", "config_name")
+    ).lower()
+
+
 def _output_dimensions(out: dict[str, Any]) -> tuple[int, int, bool]:
-    name = str(out.get("name", ""))
-    model = str(out.get("model", ""))
+    ident = _output_identity_text(out)
     transform = str(out.get("transform", "normal")).lower()
 
     w = out.get("logical_width") or out.get("width")
@@ -98,7 +125,9 @@ def _output_dimensions(out: dict[str, Any]) -> tuple[int, int, bool]:
     if rotated and width > height:
         width, height = height, width
 
-    is_portrait = height > width or any(tag in f"{name} {model}".lower() for tag in ("24b35hm2", "aoc"))
+    is_g5 = any(tag in ident for tag in ("odyssey g5", "samsung"))
+    is_aoc = any(tag in ident for tag in ("24b35", "aoc"))
+    is_portrait = False if is_g5 else (height > width or is_aoc)
     if is_portrait and width > height:
         width, height = height, width
     return width, height, is_portrait
@@ -146,13 +175,15 @@ def build_lockscreen_widgets_toml(outputs: list[dict[str, Any]]) -> str:
 
         emblem_id = f"lockscreen-widget-emblem-{sid}"
         clock_id = f"lockscreen-widget-clock-{sid}"
+        date_id = f"lockscreen-widget-date-{sid}"
         login_id = f"lockscreen-login-box@{name}"
 
-        emblem_cy = round(max(116.0, h * 0.21), 1)
-        clock_cy = round(max(emblem_cy + 124.0, h * 0.365), 1)
-        login_cy = round(max(clock_cy + 158.0, h * 0.60), 1)
+        emblem_cy = round(max(110.0, h * 0.145), 1)
+        clock_cy = round(max(emblem_cy + 114.0, h * 0.300), 1)
+        date_cy = round(clock_cy + 48.0, 1)
+        login_cy = round(max(date_cy + 132.0, h * 0.545), 1)
 
-        widget_order.extend([emblem_id, clock_id, login_id])
+        widget_order.extend([emblem_id, clock_id, date_id, login_id])
 
         widget_blocks.extend(
             [
@@ -162,12 +193,12 @@ def build_lockscreen_widgets_toml(outputs: list[dict[str, Any]]) -> str:
                 f'output = "{name}"',
                 f"cx = {cx}",
                 f"cy = {emblem_cy}",
-                "box_width = 148.0",
-                "box_height = 148.0",
+                "box_width = 160.0",
+                "box_height = 160.0",
                 "rotation = 0.0",
                 f'[lockscreen_widgets.widget."{emblem_id}".settings]',
                 f'image_path = "{ICON_EMBLEM_GIF}"',
-                "opacity = 0.96",
+                "opacity = 0.98",
                 "background = false",
                 "",
                 f'[lockscreen_widgets.widget."{clock_id}"]',
@@ -175,8 +206,8 @@ def build_lockscreen_widgets_toml(outputs: list[dict[str, Any]]) -> str:
                 f'output = "{name}"',
                 f"cx = {cx}",
                 f"cy = {clock_cy}",
-                "box_width = 360.0",
-                "box_height = 96.0",
+                "box_width = 340.0",
+                "box_height = 76.0",
                 "rotation = 0.0",
                 f'[lockscreen_widgets.widget."{clock_id}".settings]',
                 'clock_style = "digital"',
@@ -187,12 +218,29 @@ def build_lockscreen_widgets_toml(outputs: list[dict[str, Any]]) -> str:
                 "shadow = true",
                 "background = false",
                 "",
+                f'[lockscreen_widgets.widget."{date_id}"]',
+                'type = "clock"',
+                f'output = "{name}"',
+                f"cx = {cx}",
+                f"cy = {date_cy}",
+                "box_width = 340.0",
+                "box_height = 24.0",
+                "rotation = 0.0",
+                f'[lockscreen_widgets.widget."{date_id}".settings]',
+                'clock_style = "digital"',
+                'format = "{:%A, %d %b %Y}"',
+                'font_family = "Plus Jakarta Sans"',
+                'color = "#d4c6f7"',
+                "center_text = true",
+                "shadow = false",
+                "background = false",
+                "",
                 f'[lockscreen_widgets.widget."{login_id}"]',
                 'type = "login_box"',
                 f'output = "{name}"',
                 f"cx = {cx}",
                 f"cy = {login_cy}",
-                "box_width = 0.0",
+                "box_width = 520.0",
                 "box_height = 0.0",
                 "rotation = 0.0",
                 f'[lockscreen_widgets.widget."{login_id}".settings]',
@@ -202,11 +250,16 @@ def build_lockscreen_widgets_toml(outputs: list[dict[str, Any]]) -> str:
                 "show_media_controls = false",
                 "show_weather = false",
                 'background_color = "surface_container"',
-                "background_opacity = 0.88",
-                "background_radius = 14",
+                "background_opacity = 0.90",
+                "background_radius = 16",
+                "input_opacity = 0.94",
+                "input_radius = 10",
+                "center_password_text = false",
+                "show_caps_lock = true",
+                "show_keyboard_layout = false",
                 "show_password_reveal = true",
                 "show_login_button = true",
-                "show_unlock_hint = true",
+                "show_unlock_hint = false",
             ]
         )
 

@@ -9,7 +9,7 @@
   },
   "displays": {
     "primary": {
-      "preferred_connectors": ["DP-2", "DP-1"],
+      "preferred_connectors": ["DP-1", "DP-2"],
       "match_model_keywords": ["Odyssey G5", "Samsung"],
       "mode": "2560x1440@165",
       "position": [0, 0],

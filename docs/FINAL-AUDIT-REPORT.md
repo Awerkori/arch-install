@@ -88,6 +88,51 @@ Todas as provas abaixo foram executadas e registradas na VM limpa `ACCEPT-B` (`0
 
 ## 6. Recomendações ao Operador (`v1.0.0-rc10` → `v1.0.0`)
 
-1. Inspecionar os artefatos visuais e logs em `/home/awerkori/Downloads/Aprovacao-Visual-Nox-Archinstall/PROXIMA-RC/`.
+1. Inspecionar os artefatos visuais e logs em `/home/awerkori/Downloads/Aprovacao-Visual-Nox-Archinstall/REFINAMENTO-FINAL/` (`01-Referencias/` a `07-Relatorio/` e `MANIFEST.md`), além de `REVISAO-VISUAL-DEFINITIVA/` (Fastfetch e Limine aprovados).
 2. Após testar em hardware físico (ou aprovar explicitamente o pacote visual/técnico da RC10), autorizar a publicação da release estável **`v1.0.0`**.
 3. Até lá, **`v1.0.0-rc10`** permanece exclusivamente como pré-release no repositório `Awerkori/arch-install`.
+
+---
+
+## 8. Refinamento Visual Final (`REFINAMENTO-FINAL` — Feixe Global, Greeter & Lock Screen)
+
+- **Feixe solar global (`tools/generate_nox_visuals.py`):** Corrigida a implementação anterior restrita à máscara metálica do ouro; implementada camada `draw_global_light_sweep` baseada em `Awerkori/Awerkori/assets/profile/hero.svg`, `ProjectNox-org/.github` e `banner-engine.mjs` (`sweepBeam` inclinado `-20°` atravessando fundo esquerdo, emblema, fundo direito e saída fora da tela em loop contínuo de `10.0s` para G5 `2560×1440` e AOC `1080×1920`).
+- **Greeter Obsidian Purple real (`configs/greeter/sync.toml`, `greeter.toml`, `scripts/51-input-displays.sh`):** Adicionada a 16ª chave `shadow` e `sync.toml` com `scheme = "Synced"` para aplicar o cartão escuro `#140c24`, bordas `#6d28d9` e ação `#9333ea` (em substituição ao fallback azul/amarelo), sem chaves não reconhecidas no relógio.
+- **Lock Screen unificada (`configs/noctalia/nox-theme.toml`, `configs/bin/nox-noctalia-layout`):** `blur_intensity = 0.0` e `tint_intensity = 0.0` para nitidez da neve cósmica, remoção da caixa redundante `show_unlock_hint = false`, adição do subtítulo de data alinhado ao Greeter e unificação tipográfica (`Outfit` + `Plus Jakarta Sans`). Validada ao vivo na VM `ACCEPT-B` (`mpvpaper` G5 em movimento, login no Greeter e Lock Screen animada com `LOCKSCREEN_ANIM_CHANGED_PIXELS=2867`).
+
+---
+
+## 7. Revisão Visual Definitiva (`v1.0.0-rc10` — Obsidian Purple & Ouro)
+
+- **Pacote organizado para aprovação:** `/home/awerkori/Downloads/Aprovacao-Visual-Nox-Archinstall/REVISAO-VISUAL-DEFINITIVA/` (`01-Fastfetch/` a `08-Relatorio/` + `MANIFEST.md` com 36 arquivos e hashes SHA-256).
+- **Mudanças visuais aplicadas:**
+  - Substituição global de partículas amarelas/roxas de fundo pela `neveCosmica` oficial (`snowWhite`, `snowSilver`, `snowLilac` desfocadas) em `tools/generate_nox_visuals.py` para G5, AOC, Greeter, Lock Screen e Limine.
+  - Feixe metálico diagonal oficial (`feixeLuminoso`) restrito à máscara dourada do emblema nos loops WebM/GIF (`nox-g5*`, `nox-aoc*`, `nox-lockscreen-emblem.gif`).
+  - Remoção de geometria inventada: linha horizontal no G5, elipses gigantes e eixo vertical no AOC, oval gigante/divisor no Greeter (`hide_logo = true`, emblema superior integrado, relógio e cartão Obsidian Purple refinados) e colchetes/divisor no fundo do Lock Screen (layout unificado em `configs/bin/nox-noctalia-layout`).
+  - Reprodução fiel do painel `Fastfetch` (`configs/bin/nox-fastfetch` + `tools/generate_braille_logo.py`), eliminando `\x1b[13G`, alinhando colunas `│` e bordas dos 4 quadros em modos cheio e split Dwindle, e preservando Lambda violeta sólido.
+- **Validação em VM existente (`ACCEPT-B`):** boot pelo Limine atualizado (`limine-live-vm.png`), captura de Greeter e erro/login, `mpvpaper` G5 em movimento (`desktop-frame-1.png` vs `desktop-frame-2.png`), Lock Screen animado (`LOCKSCREEN_ANIM_CHANGED_PIXELS=1416`) com desbloqueio real e Fastfetch no Kitty cheio e em split (`fastfetch-kitty-full.png`, `fastfetch-kitty-split.png`), além de `24/24` testes unitários OK (`python3 -m unittest discover -s tests/unit -v`).
+
+---
+
+## 9. Rodada Final Dual-Monitor (`REFINAMENTO-DUAL-MONITOR` — G5 → AOC, Greeter, Lock Screen & Avatar)
+
+- **Pacote entregue para aprovação:** `/home/awerkori/Downloads/Aprovacao-Visual-Nox-Archinstall/REFINAMENTO-DUAL-MONITOR/` (`01-Referencias/` a `08-Relatorio/` + `MANIFEST.md` e `RELATORIO-DUAL-MONITOR.md`).
+- **Animação contínua G5 → AOC (`tools/generate_nox_visuals.py` + `configs/noctalia/plugins/mpvpaper/`):**
+  - Timeline global única de `14.0 s` (`840` quadros a `60 fps` em WebM; `280` quadros a `20 fps` em GIF) calculada em espaço virtual contínuo (`Odyssey G5 [0,0]` `2560×1440` → `AOC 24B35 [2560,-350]` `1080×1920`), sem feixe duplicado e sem ping-pong.
+  - Sincronizador leve por IPC Unix JSON via `socat` (`dual_sync = true`, checagem de drift a cada `3 s` em módulo `14.0 s` com `seek absolute+exact`, pausa/retomada coordenada em `session_locked`/`session_unlocked` e alinhamento automático em `onOutputsChanged`), com `nox-bundled` como última `[[plugins.source]]` em `nox-theme.toml`.
+  - **Evidência:** prévia composta sintética `04-Animacao-Conjunta/preview-dual-monitor.webm`, teste live na VM `ACCEPT-B` (`mpvpaper` G5 em `Virtual-1`, `seek` exato via `socat`, `STAT=T<l` no Lock Screen e teste empírico com dois processos `mpv --vo=null` corrigindo `5.0 s` de desvio para `Δ = 0.016 s`). Travessia simultânea nas duas saídas físicas (`DP-*` + `HDMI-A-*`) permanece **`PENDENTE-HARDWARE`**.
+- **Greeter, Lock Screen e Avatar:**
+  - Greeter refinado com `corner_radius_scale = 1.05`, borda `#5b21b6`, superfície `#120a21` e ajuste de altura/diâmetro do emblema em `nox-greeter.png` (documentando ausência de `card_width` configurável no binário).
+  - Lock Screen refinada sem `background_padding` (0 warnings em `noctalia config validate`), botões `[[shell.session.actions]]` em `variant = "outline"` eliminando o destaque coral sólido do `Shut Down`, GIF `360×360` animado e desbloqueio preservado.
+  - Removida imposição de `nox-emblem.png` como `[shell].avatar_path` e documentada a ausência de `accountsservice` na RC10 (avatar customizado funciona no Noctalia Shell via Settings → Shell; compartilhamento com Greeter depende de instalação futura de `accountsservice`).
+- **Testes unitários após alterações finais:** `25/25` OK em `tests/unit/test_nox.py`.
+
+---
+
+## 10. Adendo `DP-1` (Odyssey G5) e Revisão Plug-and-Play
+
+- **Atualização de porta e EDID (`profiles/hardware.json`, `configs/bin/nox-display-profile`, `configs/bin/nox-noctalia-layout`, `configs/bin/nox-session-init`):**
+  - `preferred_connectors` do monitor primário atualizado para `["DP-1", "DP-2"]` (G5 à esquerda em `[0, 0]`, `2560×1440@165`; AOC em `[2560, -350]`, `transform = "90"`, `1920×1080@100`).
+  - Identificação em duas etapas estritas priorizando modelo/EDID (`Odyssey G5`/`Samsung` e `24B35`/`AOC`, incluindo leitura dos blocos descritores em `/sys/class/drm/card*-*/edid`) antes da ordem de conectores, evitando inversão de monitor primário ou troca de wallpapers por ordem de enumeração.
+  - `nox-session-init` atualiza automaticamente `outputs.toml` e revalida `assignments.json` (`nox_mpv_layout_stale`) se os conectores ativos divergirem entre boots, preservando operação plug-and-play no primeiro login (`scripts/50-desktop.sh`, `51-input-displays.sh`, `53-appearance.sh`).
+- **Limitação honesta:** conectores físicos reais (`DP-1` + `HDMI-A-*`) permanecem **`PENDENTE-HARDWARE`** até execução no computador físico (VM KVM expõe apenas `Virtual-1`).

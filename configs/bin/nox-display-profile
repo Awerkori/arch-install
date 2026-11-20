@@ -34,6 +34,21 @@ def load_outputs_from_umbriel() -> list[dict[str, Any]]:
     return []
 
 
+def _parse_edid_text(edid_bytes: bytes) -> str:
+    """Extract readable ASCII monitor/vendor descriptor strings from a 128+ byte DRM EDID blob."""
+    if len(edid_bytes) < 128:
+        return ""
+    tokens: list[str] = []
+    # 4 detailed descriptor blocks at offsets 54, 72, 90, 108; tags 0xfc (name) and 0xfe (string)
+    for off in (54, 72, 90, 108):
+        blk = edid_bytes[off : off + 18]
+        if len(blk) == 18 and blk[:3] == b"\x00\x00\x00" and blk[3] in (0xFC, 0xFE):
+            txt = blk[5:18].split(b"\n", 1)[0].decode("ascii", errors="ignore").strip()
+            if txt:
+                tokens.append(txt)
+    return " ".join(tokens)
+
+
 def load_outputs_from_sysfs(drm_root: Path = Path("/sys/class/drm")) -> list[dict[str, Any]]:
     outputs: list[dict[str, Any]] = []
     if not drm_root.is_dir():
@@ -53,7 +68,17 @@ def load_outputs_from_sysfs(drm_root: Path = Path("/sys/class/drm")) -> list[dic
                 modes = [m.strip() for m in modes_file.read_text().splitlines() if m.strip()]
             except OSError:
                 modes = []
-        outputs.append({"name": name, "modes": modes, "connected": True})
+        edid_desc = ""
+        edid_file = conn_dir / "edid"
+        if edid_file.is_file():
+            try:
+                edid_desc = _parse_edid_text(edid_file.read_bytes())
+            except OSError:
+                edid_desc = ""
+        entry: dict[str, Any] = {"name": name, "modes": modes, "connected": True}
+        if edid_desc:
+            entry["model"] = edid_desc
+        outputs.append(entry)
     return outputs
 
 
@@ -96,17 +121,37 @@ def pick_best_mode(advertised: list[Any], wanted: str, fallback: str | None = No
     return str_modes[0] if str_modes else None
 
 
-def matches_output(out: dict[str, Any], spec: dict[str, Any]) -> bool:
-    name = str(out.get("name", ""))
+def _match_by_keywords(out: dict[str, Any], spec: dict[str, Any]) -> bool:
     desc = " ".join(
         str(out.get(k, "")) for k in ("make", "model", "config_name", "description")
     ).lower()
     keywords = [k.lower() for k in spec.get("match_model_keywords", [])]
-    if keywords and any(k in desc for k in keywords):
+    return bool(keywords and any(k in desc for k in keywords))
+
+
+def matches_output(out: dict[str, Any], spec: dict[str, Any]) -> bool:
+    if _match_by_keywords(out, spec):
         return True
-    if name in spec.get("preferred_connectors", []):
-        return True
-    return False
+    name = str(out.get("name", ""))
+    return name in spec.get("preferred_connectors", [])
+
+
+def _select_output(
+    outputs: list[dict[str, Any]],
+    spec: dict[str, Any],
+    exclude: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    pool = [o for o in outputs if o is not exclude]
+    # Priority 1: hardware EDID/model match independent of enumeration order
+    by_model = next((o for o in pool if _match_by_keywords(o, spec)), None)
+    if by_model is not None:
+        return by_model
+    # Priority 2: preferred_connectors in explicit priority order (e.g. DP-1 before DP-2)
+    for conn in spec.get("preferred_connectors", []):
+        by_conn = next((o for o in pool if str(o.get("name", "")) == conn), None)
+        if by_conn is not None:
+            return by_conn
+    return None
 
 
 def render_outputs_toml(outputs: list[dict[str, Any]], profile: dict[str, Any]) -> str:
@@ -123,11 +168,8 @@ def render_outputs_toml(outputs: list[dict[str, Any]], profile: dict[str, Any]) 
         lines.append("# No active outputs reported; relying on Umbriel automatic output defaults.")
         return "\n".join(lines) + "\n"
 
-    prim_out = next((o for o in outputs if matches_output(o, prim_spec)), None)
-    sec_out = next(
-        (o for o in outputs if o is not prim_out and matches_output(o, sec_spec)),
-        None,
-    )
+    prim_out = _select_output(outputs, prim_spec)
+    sec_out = _select_output(outputs, sec_spec, exclude=prim_out)
 
     # Physical dual or primary match vs VM / single output fallback
     if prim_out and not str(prim_out.get("name", "")).startswith(("Virtual-", "VGA-")):
@@ -164,7 +206,7 @@ def render_outputs_toml(outputs: list[dict[str, Any]], profile: dict[str, Any]) 
             lines.append(f'transform = "{sec_spec.get("transform", "90")}"')
             lines.append("")
     else:
-        # Safe single-output / VM fallback: never hardcode disconnected DP-2/HDMI-A-1
+        # Safe single-output / VM fallback: never hardcode disconnected DP-1/DP-2/HDMI-A-1
         first = outputs[0]
         fname = first.get("name", "Virtual-1")
         lines.append("[general]")

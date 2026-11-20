@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Pre-boot hook: temporarily restore canonical //linux-cachyos before limine-entry-tool/limine-snapper-sync parses limine.conf.
+# Pre-boot hook: mark Limine transaction dirty and restore canonical //linux-cachyos before limine-entry-tool/limine-snapper-sync parses limine.conf.
 set -Eeuo pipefail
+
+mkdir -p /run
+: > /run/nox-limine-tx.dirty || true
 
 if [[ -x /usr/local/libexec/nox/nox-limine-normalize ]]; then
   /usr/local/libexec/nox/nox-limine-normalize --pre

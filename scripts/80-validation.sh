@@ -61,7 +61,7 @@ check "regras Fuxi H3 hotplug e BlueZ/WirePlumber presentes" bash -c "test -s /e
 check "mesa e vulkan-radeon 64/32 bits instalados" bash -c "pacman -Q mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon >/dev/null"
 
 # 2. Pacman & Paru from CachyOS
-check "pacman instalado do CachyOS" bash -c "pacman -Qi pacman | grep -qE 'Installed From[[:space:]]*:[[:space:]]*cachyos'"
+check "pacman instalado do CachyOS" bash -c "pacman -Qi pacman | grep -qE '(Installed From[[:space:]]*:[[:space:]]*cachyos|Packager[[:space:]]*:[[:space:]]*CachyOS)'"
 check "paru estavel instalado do CachyOS" bash -c "pacman -Qi paru | grep -qE 'Installed From[[:space:]]*:[[:space:]]*cachyos' && ! pacman -Q paru-git >/dev/null 2>&1"
 
 # 3. Forbidden packages absent (including GRUB, grub-btrfs, HushMic, redundant monitors/fetchers)
@@ -71,6 +71,11 @@ done
 
 # 4. Desktop, Greeter, Kitty, Bash, Luciole, Firefox Pure, Btop, Fastfetch, Minimalist Launcher & Obsidian Purple
 check "umbriel, noctalia, noctalia-greeter, greetd, mpvpaper, socat, kitty instalados" bash -c "pacman -Q umbriel noctalia noctalia-greeter greetd mpvpaper socat kitty >/dev/null"
+check "binarios graficos e mpvpaper sem bibliotecas ausentes (ldd)" bash -c '
+  for b in /usr/bin/mpvpaper /usr/bin/mpv /usr/bin/ffmpeg /usr/bin/ffmpegthumbnailer /usr/bin/noctalia /usr/bin/noctalia-greeter /usr/bin/umbriel /usr/bin/kitty /usr/bin/firefox /usr/lib/glycin-loaders/2+/glycin-jxl /usr/lib/glycin-loaders/2+/glycin-svg /usr/lib/glycin-loaders/2+/glycin-image-rs; do
+    test -x "$b" && ! ldd "$b" 2>/dev/null | grep -q "not found"
+  done && mpvpaper --help >/dev/null 2>&1 && mpv --version >/dev/null 2>&1
+'
 check "vulkan-tools, mesa-utils e pilha grafica presentes (libva-utils ausente)" bash -c "pacman -Q vulkan-tools mesa-utils mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon libva lib32-libva linux-firmware >/dev/null && ! pacman -Q libva-utils >/dev/null 2>&1"
 check "luciole-git instalado e .desktop presente" bash -c "pacman -Q luciole-git >/dev/null && test -f /usr/share/applications/dev.noctalia.luciole.desktop"
 check "firefox-pure (CachyOS) instalado como navegador padrao XDG e dark/Obsidian CSS" bash -c "pacman -Qi firefox-pure | grep -qE 'Installed From[[:space:]]*:[[:space:]]*(cachyos-znver4|cachyos)' && test -f /usr/share/applications/firefox.desktop && grep -q 'x-scheme-handler/https=firefox.desktop' /etc/skel/.config/mimeapps.list && test -s /usr/lib/firefox/browser/defaults/preferences/nox-theme.js && grep -q 'toolkit.legacyUserProfileCustomizations.stylesheets' /usr/lib/firefox/browser/defaults/preferences/nox-theme.js && test -s /usr/share/nox-archinstall/firefox/userChrome.css"

@@ -9,7 +9,7 @@ Os itens abaixo dependem de periféricos e GPU físicos (Tipo C) e não podem se
    journalctl -k -b --no-pager | grep -Ei 'amdgpu|drm.*error'
    ```
 
-2. **Monitores Samsung Odyssey G5 (`DP-2`, 1440p@165) e AOC (`HDMI-A-1`, 1080p@100 vertical):**
+2. **Monitores Samsung Odyssey G5 (`DP-1`, 1440p@165) e AOC (`HDMI-A-1`, 1080p@100 vertical):**
    ```bash
    umbriel outputs
    umbriel workspaces

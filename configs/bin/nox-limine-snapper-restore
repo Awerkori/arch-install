@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# Safe wrapper for /usr/bin/limine-snapper-restore and /usr/bin/limine-snapper-sync
+# 1) Collects interactive snapshot choice BEFORE running pre.d hooks (eliminating
+#    checksum mismatch window while the user reviews snapshots or cancels).
+# 2) Traps EXIT/INT/TERM/HUP to repair /boot/limine.conf + BLAKE2B + sbctl if
+#    the critical execution window fails or receives a signal.
+set -Eeuo pipefail
+
+CMD_NAME="$(basename "$0")"
+case "$CMD_NAME" in
+  limine-snapper-sync) REAL_BIN="/usr/bin/limine-snapper-sync" ;;
+  *) REAL_BIN="/usr/bin/limine-snapper-restore" ;;
+esac
+INTEGRITY_HELPER="/usr/local/libexec/nox/nox-limine-integrity"
+
+if [[ ! -x "$REAL_BIN" ]]; then
+  echo "ERRO: $REAL_BIN nao encontrado." >&2
+  exit 127
+fi
+
+repaired=0
+repair_if_interrupted() {
+  local rc="$1"
+  (( repaired == 0 )) || return 0
+  repaired=1
+  if [[ "$rc" -ne 0 || -f /run/nox-limine-tx.dirty ]]; then
+    if (( EUID == 0 )) && [[ -x "$INTEGRITY_HELPER" ]]; then
+      echo "[nox-limine] Verificando/reparando integridade de /boot/limine.conf e EFI apos saida ($rc)..." >&2
+      "$INTEGRITY_HELPER" --repair-if-dirty || true
+    fi
+  fi
+}
+
+trap 'rc=$?; repair_if_interrupted "$rc"' EXIT
+trap 'repair_if_interrupted 130; exit 130' INT
+trap 'repair_if_interrupted 143; exit 143' TERM
+trap 'repair_if_interrupted 129; exit 129' HUP
+
+# Determine if this invocation is an interactive full snapshot restore
+is_interactive_restore=false
+has_non_interactive_flag=false
+for arg in "$@"; do
+  case "$arg" in
+    --kernels|--restore-kernels|--list|--info|--add|--remove|-h|--help)
+      has_non_interactive_flag=true
+      ;;
+    --restore)
+      is_interactive_restore=true
+      ;;
+  esac
+done
+if [[ "$CMD_NAME" == "limine-snapper-restore" ]] && ! $has_non_interactive_flag; then
+  is_interactive_restore=true
+fi
+
+# Pre-hook interactive selection only once when running as root on a TTY (prevents touching /boot before confirmation)
+if $is_interactive_restore && (( EUID == 0 )) && [[ -t 0 && -t 1 ]] && \
+   [[ "${NOX_LIMINE_PREPROMPT_DONE:-0}" != "1" ]] && [[ "${NOX_RAW_LIMINE_RESTORE:-0}" != "1" ]] && \
+   command -v /usr/bin/limine-snapper-list >/dev/null 2>&1; then
+  export NOX_LIMINE_PREPROMPT_DONE=1
+  echo "[nox-limine] Listando snapshots disponiveis (somente leitura; /boot intacto)..."
+  /usr/bin/limine-snapper-list
+  mapfile -t VALID_IDS < <(/usr/bin/limine-snapper-list 2>/dev/null | awk -F'│' '/^[[:space:]]*[0-9]+[[:space:]]*│/{gsub(/[[:space:]]+/,"",$1); print $1}')
+  if (( ${#VALID_IDS[@]} == 0 )); then
+    echo "Nenhum snapshot restauravel encontrado." >&2
+    exit 1
+  fi
+  echo ""
+  read -r -p "Informe o ID do snapshot para restaurar (ou 'c' para cancelar): " SNAP_CHOICE
+  if [[ -z "$SNAP_CHOICE" || "${SNAP_CHOICE,,}" == "c" || "${SNAP_CHOICE,,}" == "q" ]]; then
+    echo "Restauracao cancelada antes de modificar /boot."
+    exit 0
+  fi
+  id_ok=false
+  for vid in "${VALID_IDS[@]}"; do
+    if [[ "$SNAP_CHOICE" == "$vid" ]]; then
+      id_ok=true
+      break
+    fi
+  done
+  if ! $id_ok; then
+    echo "ERRO: Snapshot ID '$SNAP_CHOICE' nao encontrado na lista." >&2
+    exit 1
+  fi
+  read -r -p "Descricao opcional do backup do @ atual [Enter para padrao]: " BACKUP_DESC
+  read -r -p "Confirmar restauracao do snapshot ID ${SNAP_CHOICE}? [s/N]: " FINAL_CONF
+  case "${FINAL_CONF,,}" in
+    s|sim|y|yes) ;;
+    *)
+      echo "Restauracao cancelada antes de modificar /boot."
+      exit 0
+      ;;
+  esac
+
+  set +e
+  python3 - "$REAL_BIN" "$SNAP_CHOICE" "$BACKUP_DESC" "$@" <<'PY'
+import os, pty, select, sys, termios, tty
+
+real_bin, snap_id, desc = sys.argv[1], sys.argv[2], sys.argv[3]
+extra_args = sys.argv[4:]
+cmd = [real_bin, *extra_args]
+
+pid, fd = pty.fork()
+if pid == 0:
+    os.execv(real_bin, cmd)
+
+sent_choice = False
+sent_desc = False
+buf = b""
+stdin_fd = sys.stdin.fileno()
+old_tty = None
+if os.isatty(stdin_fd):
+    old_tty = termios.tcgetattr(stdin_fd)
+    tty.setraw(stdin_fd)
+
+try:
+    while True:
+        watch = [fd]
+        if sent_choice and sent_desc and os.isatty(stdin_fd):
+            watch.append(stdin_fd)
+        r, _, _ = select.select(watch, [], [], 0.2)
+        if fd in r:
+            try:
+                chunk = os.read(fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            os.write(sys.stdout.fileno(), chunk)
+            buf = (buf + chunk)[-2048:]
+            if not sent_choice and b"Choice:" in buf:
+                os.write(fd, snap_id.encode() + b"\n")
+                sent_choice = True
+                buf = b""
+            elif sent_choice and not sent_desc and b"Description for backup subvolume" in buf:
+                os.write(fd, desc.encode() + b"\n")
+                sent_desc = True
+                buf = b""
+        if stdin_fd in r:
+            user_data = os.read(stdin_fd, 1024)
+            if user_data:
+                os.write(fd, user_data)
+finally:
+    if old_tty is not None:
+        termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_tty)
+
+_, status = os.waitpid(pid, 0)
+os.close(fd)
+if os.WIFEXITED(status):
+    raise SystemExit(os.WEXITSTATUS(status))
+if os.WIFSIGNALED(status):
+    raise SystemExit(128 + os.WTERMSIG(status))
+raise SystemExit(1)
+PY
+  rc=$?
+  set -e
+  repair_if_interrupted "$rc"
+  exit "$rc"
+fi
+
+set +e
+"$REAL_BIN" "$@"
+rc=$?
+set -e
+
+repair_if_interrupted "$rc"
+exit "$rc"

@@ -46,7 +46,7 @@ if (( SWAP_SIZE_G > 0 )); then
   rmdir "$TOP_MNT"
 
   if ! mountpoint -q /nox-swap; then
-    mount -t btrfs -o subvol=@swap,noatime,nodatacow "$ROOT_DEV" /nox-swap
+    mount -t btrfs -o subvol=@swap,noatime "$ROOT_DEV" /nox-swap
   fi
   chmod 700 /nox-swap
 
@@ -56,10 +56,12 @@ if (( SWAP_SIZE_G > 0 )); then
   fi
 
   # Ensure /etc/fstab has @swap subvolume mount + swapfile pri=10 (idempotent)
+  # Note: Btrfs superblock mount options (compress=zstd:3) are filesystem-wide from first mount (/);
+  # NOCOW and no-compression on /nox-swap/swapfile are enforced per-inode (+C) by btrfs filesystem mkswapfile.
   UUID="$(blkid -s UUID -o value "$ROOT_DEV")"
   touch /etc/fstab
   if ! grep -qE '[[:space:]]/nox-swap[[:space:]]' /etc/fstab; then
-    printf 'UUID=%s /nox-swap btrfs rw,noatime,nodatacow,subvol=/@swap 0 0\n' "$UUID" >> /etc/fstab
+    printf 'UUID=%s /nox-swap btrfs rw,noatime,subvol=/@swap 0 0\n' "$UUID" >> /etc/fstab
   fi
   if ! grep -qF '/nox-swap/swapfile ' /etc/fstab; then
     printf '/nox-swap/swapfile none swap defaults,pri=10 0 0\n' >> /etc/fstab

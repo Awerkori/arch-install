@@ -1,0 +1,34 @@
+# Nox Archinstall — Noctalia Greeter Synced Appearance (Project Nox Obsidian Purple)
+[appearance]
+scheme = "Synced"
+theme_mode = "dark"
+font_family = "Outfit"
+corner_radius_scale = 1.05
+
+[appearance.palette]
+primary = "#9333ea"
+on_primary = "#faf5ff"
+secondary = "#c4b5fd"
+on_secondary = "#160b2b"
+tertiary = "#fbbf24"
+on_tertiary = "#1f1402"
+error = "#fb7185"
+on_error = "#2b0610"
+surface = "#0b0715"
+on_surface = "#f5f2ff"
+surface_variant = "#120a21"
+on_surface_variant = "#d4c6f7"
+outline = "#5b21b6"
+shadow = "#000000"
+hover = "#25183c"
+on_hover = "#faf5ff"
+
+[appearance.wallpaper]
+path = "/usr/share/nox-archinstall/wallpapers/nox-greeter.png"
+fill_mode = "crop"
+fill_color = "#090610"
+blur = 0.0
+tint = 0.0
+
+[session]
+last = "Umbriel"
