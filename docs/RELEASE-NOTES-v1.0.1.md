@@ -30,7 +30,7 @@
 | [`bootstrap/nox-install.py`](../bootstrap/nox-install.py) | `46d3835b05ab43252454ce1648dd054f110857d5` | `fa6c2a3b1ee86cd60976857555326bf6a63c341914e9c061f557a62a74e03b47` |
 | [`user_configuration.json`](../user_configuration.json) | `83624813f3f32fd8608ee881b21b7ab6ec92cf3e` | `9cb32121cb9a87b54b7c07749a92d3b8cb6cffcf6e4dadc502f3fa9a3da3a867` |
 | `nox-archinstall-payload-v1.0.1.tar.gz` | `83624813f3f32fd8608ee881b21b7ab6ec92cf3e` | `52008f9c454c8b39c91d6e51b3546f6a76546f021c3c6a0850dc7a55d5bf92b2` |
-| `nox-archinstall-payload-v1.0.1.tar.gz.sha256` | `83624813f3f32fd8608ee881b3546f6a76546f021c3c6a0850dc7a55d5bf92b2` (arquivo `.sha256`: `c6d52792ff1e1038663c633ea81a4f96d9db953ef54139a221b00ee46373ccf0`) | `c6d52792ff1e1038663c633ea81a4f96d9db953ef54139a221b00ee46373ccf0` |
+| `nox-archinstall-payload-v1.0.1.tar.gz.sha256` | `—` | `c6d52792ff1e1038663c633ea81a4f96d9db953ef54139a221b00ee46373ccf0` |
 
 ## 3. Roteiro Pós-Aprovação (Executar somente após aprovação do proprietário)
 
@@ -41,23 +41,31 @@ gh pr view 1 --web
 # 2. Aprovar e fazer merge na branch main (sem force-push)
 gh pr merge 1 --merge
 
-# 3. Sincronizar main local, gerar os 4 assets exatos de dist/ e conferir digests
+# 3. Antes de publicar: habilitar 'immutable releases' na UI web do GitHub (Settings -> General -> Releases)
+
+# 4. Sincronizar main local, validar a cadeia congelada e conferir digests dos 4 assets
 git checkout main && git pull --ff-only origin main
 ./scripts/build-release.sh --verify-only
+sha256sum dist/nox-archinstall-payload-v1.0.1.tar.gz dist/nox-archinstall-payload-v1.0.1.tar.gz.sha256 bootstrap/nox-install.py user_configuration.json
 
-# 4. Criar tag assinada/anotada v1.0.1 e publicar release com os 4 assets congelados
+# 5. Criar tag anotada (nao assinada criptograficamente) v1.0.1 e enviar para o remoto
 git tag -a v1.0.1 -m "Release v1.0.1 — Hardening, Limine/Snapper/Secure Boot reliability, and docs"
 git push origin v1.0.1
+
+# 6. Criar a release como draft, anexar os 4 assets, conferir digests e somente entao publicar
 gh release create v1.0.1 \
+  --draft \
+  --title "Nox Archinstall v1.0.1" \
+  --notes-file docs/RELEASE-NOTES-v1.0.1.md
+gh release upload v1.0.1 \
   dist/nox-archinstall-payload-v1.0.1.tar.gz \
   dist/nox-archinstall-payload-v1.0.1.tar.gz.sha256 \
   bootstrap/nox-install.py \
-  user_configuration.json \
-  --title "Nox Archinstall v1.0.1" \
-  --notes-file docs/RELEASE-NOTES-v1.0.1.md
+  user_configuration.json
+gh release view v1.0.1 --json assets --jq '.assets[] | {name, digest, size}'
+gh release edit v1.0.1 --draft=false
 
-# 5. Após publicar v1.0.1, habilitar 'immutable releases' na UI web do GitHub (Settings -> General -> Releases)
-#    e atualizar o bloco principal de README.md / docs/INSTALLATION.md em PR subsequente apontando para v1.0.1.
+# 7. Atualizar o bloco principal de README.md / docs/INSTALLATION.md em PR subsequente apontando para v1.0.1.
 ```
 
 > **Pendências exclusivas de hardware físico (`PENDENTE-HARDWARE`):** validação presencial em GPU AMD Radeon RX 9060 XT, monitores DP-1 (`2560x1440@165Hz`) + HDMI-A-1 (`1920x1080@100Hz`), Intel AX210, headset Havit Fuxi H3, microfone P2, teclado AULA F75 e enrollment UEFI na MSI PRO B650M-P conforme [`docs/POST_INSTALL_CHECKS.md`](POST_INSTALL_CHECKS.md) e [`docs/SECURE-BOOT-MSI.md`](SECURE-BOOT-MSI.md).
