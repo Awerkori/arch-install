@@ -84,17 +84,17 @@ O Project Nox utiliza uma **única cadeia oficial de instalação** baseada em *
 
 | Estágio | Artefato | Referência Imutável (`v1.0.1`) | SHA-256 Verificado antes do uso |
 |---|---|---|---|
-| **1. Iniciador** | [`i`](../i) | Commit `058c37de6279d427c8d902bde47e124d6a671106` | `36ce94494db9fb13caad373fa13ed55b8f2d6b15ed4dac8f3b4827ecb687ad11` |
-| **2. Bootstrap** | [`bootstrap/nox-install.py`](../bootstrap/nox-install.py) | Commit `e3944d172bc07de3852e931a3c703241df4031ce` | `8aeabbd274fa0ab3375e12bd5ea2b096299e806c530df62e4821161fd0ea9ccf` |
-| **3. Configuração** | [`user_configuration.json`](../user_configuration.json) | Commit `9e810de859f731984b7af09fad03c8767cef071c` | `8358edd4bdb154d1157c187f6dbfa83df341d91df64b45fcb0180a9872a87641` |
-| **4. Payload** | `nox-archinstall-payload-v1.0.1.tar.gz` | Candidato `v1.0.1` (`hardening/v1.0.1`) | `6e9500f44ce9c4882db27e91e20aa3e276499d3f1681ed0872c92dae696a2509` |
+| **1. Iniciador** | [`i`](../i) | Commit `9504584cd8a01936e0588a900c8c2dba88b90d7c` | `9a752b29f43f5f68224e5693375f849ec818d182150d571861e596ca7ef67c75` |
+| **2. Bootstrap** | [`bootstrap/nox-install.py`](../bootstrap/nox-install.py) | Commit `5f01eaaed8744fc1049e9e97e8d953f638361e24` | `0963baf3832952591874853bf715c9fe059672cc33af9ed0d9b19635ed792a38` |
+| **3. Configuração** | [`user_configuration.json`](../user_configuration.json) | Commit `48ef35686a2fb948ad9b1b96621019ba7d47611e` | `d815b8577d268ded529da1a45ba753861ce75b333ff331b6058967ad9625404a` |
+| **4. Payload** | `nox-archinstall-payload-v1.0.1.tar.gz` | Candidato `v1.0.1` (`hardening/v1.0.1`) | `7dcc5acea5feab877ab18c4677656eae9b85358dddccd550e43f8d09c36d52c8` |
 
 > **Nota sobre o modelo de segurança e suas limitações:** Como o projeto não utiliza infraestrutura externa de chaves de assinatura digital pré-instaladas na ISO oficial do Arch Linux, a autenticidade da cadeia é estabelecida pela pinagem criptográfica de hashes SHA-256 combinada a URLs imutáveis por commit SHA sobre HTTPS/TLSv1.2+ (com bloqueio de downgrade HTTP em redirecionamentos). A raiz de confiança parte do comando e hash SHA-256 do Estágio 1 copiados pelo operador a partir desta documentação.
 
 ### Opção 1 — Comando oficial verificado em linha única (Recomendado)
 
 ```bash
-sh -c 'set -eu; umask 077; f=$(mktemp /tmp/nox-i.XXXXXX); trap "rm -f \"$f\"" EXIT INT TERM; curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/058c37de6279d427c8d902bde47e124d6a671106/i -o "$f"; printf "%s  %s\n" "36ce94494db9fb13caad373fa13ed55b8f2d6b15ed4dac8f3b4827ecb687ad11" "$f" | sha256sum -c -; sh "$f"'
+sh -c 'set -eu; umask 077; f=$(mktemp /tmp/nox-i.XXXXXX); trap "rm -f \"$f\"" EXIT INT TERM; curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/9504584cd8a01936e0588a900c8c2dba88b90d7c/i -o "$f"; printf "%s  %s\n" "9a752b29f43f5f68224e5693375f849ec818d182150d571861e596ca7ef67c75" "$f" | sha256sum -c -; sh "$f"'
 ```
 
 ### Opção 2 — Download, verificação SHA-256 e inspeção manual passo a passo
@@ -103,8 +103,8 @@ Se desejar inspecionar o iniciador antes de executá-lo, execute os passos abaix
 
 ```bash
 umask 077
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/058c37de6279d427c8d902bde47e124d6a671106/i -o /tmp/nox-i
-printf '%s  /tmp/nox-i\n' '36ce94494db9fb13caad373fa13ed55b8f2d6b15ed4dac8f3b4827ecb687ad11' | sha256sum -c -
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/9504584cd8a01936e0588a900c8c2dba88b90d7c/i -o /tmp/nox-i
+printf '%s  /tmp/nox-i\n' '9a752b29f43f5f68224e5693375f849ec818d182150d571861e596ca7ef67c75' | sha256sum -c -
 less /tmp/nox-i
 sh /tmp/nox-i
 rm -f /tmp/nox-i
@@ -117,9 +117,9 @@ Caso deseje executar especificamente os artefatos congelados da release estável
 ```bash
 umask 077
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-install.py -o /tmp/nox-install.py
-printf '%s  /tmp/nox-install.py\n' 'fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10' | sha256sum -c -
+printf '%s  /tmp/nox-install.py\n' '9a752b29f43f5f68224e5693375f849ec818d182150d571861e596ca7ef67c75' | sha256sum -c -
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/32c074ca3819d261a774b92ee4c7359411b963d5/user_configuration.json -o /tmp/nox-cfg.json
-printf '%s  /tmp/nox-cfg.json\n' '6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c' | sha256sum -c -
+printf '%s  /tmp/nox-cfg.json\n' '9a752b29f43f5f68224e5693375f849ec818d182150d571861e596ca7ef67c75' | sha256sum -c -
 python3 /tmp/nox-install.py --config /tmp/nox-cfg.json
 rm -f /tmp/nox-install.py /tmp/nox-cfg.json
 ```

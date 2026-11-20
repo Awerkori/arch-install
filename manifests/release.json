@@ -1,66 +1,61 @@
 {
   "schema_version": 2,
   "version": "v1.0.1",
-  "payload_commit": "058c37de6279d427c8d902bde47e124d6a671106",
-  "source_commit": "058c37de6279d427c8d902bde47e124d6a671106",
-  "config_commit": "9e810de859f731984b7af09fad03c8767cef071c",
-  "bootstrap_commit": "e3944d172bc07de3852e931a3c703241df4031ce",
-  "launcher_commit": "058c37de6279d427c8d902bde47e124d6a671106",
-  "generated_at_utc": "2026-11-20T11:14:41Z",
+  "payload_commit": "48ef35686a2fb948ad9b1b96621019ba7d47611e",
+  "source_commit": "48ef35686a2fb948ad9b1b96621019ba7d47611e",
+  "config_commit": "48ef35686a2fb948ad9b1b96621019ba7d47611e",
+  "bootstrap_commit": "5f01eaaed8744fc1049e9e97e8d953f638361e24",
+  "launcher_commit": "9504584cd8a01936e0588a900c8c2dba88b90d7c",
+  "generated_at_utc": "2026-11-20T11:20:02Z",
   "trust_model": "immutable-commit-and-sha256-pinning",
   "payload_url": "https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz",
-  "payload_sha256": "6e9500f44ce9c4882db27e91e20aa3e276499d3f1681ed0872c92dae696a2509",
-  "config_sha256": "8358edd4bdb154d1157c187f6dbfa83df341d91df64b45fcb0180a9872a87641",
-  "bootstrap_sha256": "8aeabbd274fa0ab3375e12bd5ea2b096299e806c530df62e4821161fd0ea9ccf",
-  "launcher_sha256": "36ce94494db9fb13caad373fa13ed55b8f2d6b15ed4dac8f3b4827ecb687ad11",
+  "payload_sha256": "7dcc5acea5feab877ab18c4677656eae9b85358dddccd550e43f8d09c36d52c8",
+  "config_sha256": "d815b8577d268ded529da1a45ba753861ce75b333ff331b6058967ad9625404a",
+  "bootstrap_sha256": "0963baf3832952591874853bf715c9fe059672cc33af9ed0d9b19635ed792a38",
+  "launcher_sha256": "9a752b29f43f5f68224e5693375f849ec818d182150d571861e596ca7ef67c75",
   "artifacts": {
     "launcher": {
       "name": "i",
       "path": "i",
-      "commit": "058c37de6279d427c8d902bde47e124d6a671106",
-      "url": "https://raw.githubusercontent.com/Awerkori/arch-install/058c37de6279d427c8d902bde47e124d6a671106/i",
-      "sha256": "36ce94494db9fb13caad373fa13ed55b8f2d6b15ed4dac8f3b4827ecb687ad11"
+      "commit": "9504584cd8a01936e0588a900c8c2dba88b90d7c",
+      "url": "https://raw.githubusercontent.com/Awerkori/arch-install/9504584cd8a01936e0588a900c8c2dba88b90d7c/i",
+      "sha256": "9a752b29f43f5f68224e5693375f849ec818d182150d571861e596ca7ef67c75"
     },
     "bootstrap": {
       "name": "nox-install.py",
       "path": "bootstrap/nox-install.py",
-      "commit": "e3944d172bc07de3852e931a3c703241df4031ce",
-      "url": "https://raw.githubusercontent.com/Awerkori/arch-install/e3944d172bc07de3852e931a3c703241df4031ce/bootstrap/nox-install.py",
-      "sha256": "8aeabbd274fa0ab3375e12bd5ea2b096299e806c530df62e4821161fd0ea9ccf"
+      "commit": "5f01eaaed8744fc1049e9e97e8d953f638361e24",
+      "url": "https://raw.githubusercontent.com/Awerkori/arch-install/5f01eaaed8744fc1049e9e97e8d953f638361e24/bootstrap/nox-install.py",
+      "sha256": "0963baf3832952591874853bf715c9fe059672cc33af9ed0d9b19635ed792a38"
     },
     "config": {
       "name": "user_configuration.json",
       "path": "user_configuration.json",
-      "commit": "9e810de859f731984b7af09fad03c8767cef071c",
-      "url": "https://raw.githubusercontent.com/Awerkori/arch-install/9e810de859f731984b7af09fad03c8767cef071c/user_configuration.json",
-      "sha256": "8358edd4bdb154d1157c187f6dbfa83df341d91df64b45fcb0180a9872a87641"
+      "commit": "48ef35686a2fb948ad9b1b96621019ba7d47611e",
+      "url": "https://raw.githubusercontent.com/Awerkori/arch-install/48ef35686a2fb948ad9b1b96621019ba7d47611e/user_configuration.json",
+      "sha256": "d815b8577d268ded529da1a45ba753861ce75b333ff331b6058967ad9625404a"
     },
     "payload": {
       "name": "nox-archinstall-payload-v1.0.1.tar.gz",
       "url": "https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz",
-      "sha256": "6e9500f44ce9c4882db27e91e20aa3e276499d3f1681ed0872c92dae696a2509"
+      "sha256": "7dcc5acea5feab877ab18c4677656eae9b85358dddccd550e43f8d09c36d52c8"
     },
     "payload_checksum_file": {
       "name": "nox-archinstall-payload-v1.0.1.tar.gz.sha256",
-      "sha256": "57a0759e874ce04c6abef7d967a8c32be05b8126477615eb62993bffcd595739"
+      "sha256": "4229206966f7ceccb137b6f38a7fec1209e392f4ea1a6bee74f03bf877a4e7f4"
     }
   },
   "reproducibility": {
     "build_script": "scripts/build-release.sh",
-    "tar_flags": "GZIP=-n tar --sort=name --mtime='UTC 2026-01-01' --owner=0 --group=0 --numeric-owner",
-    "excluded_paths": [
-      ".git",
-      "dist",
-      "__pycache__",
-      "*.pyc",
-      "*.pyo",
-      "./user_configuration.json",
-      "./manifests/release.json",
-      "./i",
-      "./bootstrap/nox-install.py",
-      "./README.md",
-      "./docs",
-      "./tests"
+    "tar_flags": "GZIP=-n tar --format=gnu --sort=name --mtime='UTC 2026-01-01' --owner=0 --group=0 --numeric-owner --mode='a+rX,u+w,go-w'",
+    "included_paths": [
+      "LICENSE",
+      "install.sh",
+      "bootstrap/nox-bootstrap.sh",
+      "configs",
+      "profiles",
+      "scripts",
+      "tools"
     ]
   }
 }
