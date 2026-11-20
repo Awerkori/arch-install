@@ -6,16 +6,16 @@
 
 ---
 
-## 1. Identificação da Revisão Analisada (`v1.0.1` — Branch `hardening/v1.0.1`)
+## 1. Identificação da Revisão Analisada (`v1.0.1` — Publicada em `main`)
 
 - **Projeto:** Nox Archinstall / Project Nox (`https://github.com/Awerkori/arch-install`)
-- **Versão analisada:** `v1.0.1` (revisão de hardening sobre a release estável `v1.0.0`)
-- **Branch de trabalho / PR:** `hardening/v1.0.1` (aguardando revisão e aprovação para merge em `main` e publicação da release `v1.0.1`)
+- **Versão analisada:** `v1.0.1` (publicada como `Latest` e imutável em [`releases/tag/v1.0.1`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.1), sucedendo a `v1.0.0`)
+- **Integração:** [PR #1](https://github.com/Awerkori/arch-install/pull/1) (`hardening/v1.0.1` integrado em `main` no commit `efc8e9018a2c4bf15ff3493af1f36d0b7eddc84a`)
 - **ISO oficial homologada:** `archlinux-2026.11.01-x86_64.iso` (`SHA-256: 01bcdcf01af2f7d58f2794899c834770d25c9bfc945bd092b32bb66672a4a216`, `archinstall 4.5`)
 - **Manifesto de integridade:** [`manifests/release.json`](../manifests/release.json) (schema v2)
 - **Evidências públicas sanitizadas:** [`docs/evidence/v1.0.1/`](evidence/v1.0.1/MANIFEST.sha256)
 
-### Cadeia Acíclica de Commits Imutáveis e Hashes SHA-256 (`v1.0.1` — PR #1 em Homologação)
+### Cadeia Acíclica de Commits Imutáveis e Hashes SHA-256 (`v1.0.1` Publicada)
 
 | Estágio | Artefato | Commit de Origem Imutável | SHA-256 |
 |---|---|---|---|
@@ -23,7 +23,7 @@
 | **Estágio 2 (Bootstrap)** | [`bootstrap/nox-install.py`](../bootstrap/nox-install.py) | `46d3835b05ab43252454ce1648dd054f110857d5` | `fa6c2a3b1ee86cd60976857555326bf6a63c341914e9c061f557a62a74e03b47` |
 | **Estágio 3 (Configuração)** | [`user_configuration.json`](../user_configuration.json) | `83624813f3f32fd8608ee881b21b7ab6ec92cf3e` | `9cb32121cb9a87b54b7c07749a92d3b8cb6cffcf6e4dadc502f3fa9a3da3a867` |
 | **Estágio 4 (Payload)** | `nox-archinstall-payload-v1.0.1.tar.gz` | `83624813f3f32fd8608ee881b21b7ab6ec92cf3e` | `52008f9c454c8b39c91d6e51b3546f6a76546f021c3c6a0850dc7a55d5bf92b2` |
-| **Arquivo `.sha256`** | `nox-archinstall-payload-v1.0.1.tar.gz.sha256` | `83624813f3f32fd8608ee881b21b7ab6ec92cf3e` | `c6d52792ff1e1038663c633ea81a4f96d9db953ef54139a221b00ee46373ccf0` |
+| **Arquivo `.sha256`** | `nox-archinstall-payload-v1.0.1.tar.gz.sha256` | `—` | `c6d52792ff1e1038663c633ea81a4f96d9db953ef54139a221b00ee46373ccf0` |
 
 ---
 
@@ -143,7 +143,7 @@ Todas as evidências abaixo foram verificadas quanto à ausência de senhas, tok
 
 ### 6.1. Limitações Arquiteturais Documentadas
 1. **Pinagem de hashes SHA-256 sem chave pública offline pré-instalada na ISO:** A ISO oficial do Arch Linux não inclui chaves públicas do proprietário do Project Nox. A cadeia de confiança utiliza commits imutáveis no GitHub sobre HTTPS/TLSv1.2+ e verificação SHA-256 explícita em cada estágio a partir do comando inicial copiado da documentação.
-2. **Releases imutáveis no GitHub (`immutable_releases`):** A proteção da branch `main` e o ruleset de tags `refs/tags/v*` estão ativos via API. A opção *Enable release immutability* na UI web do GitHub (`Settings → General → Releases`) depende de ação manual do proprietário.
+2. **Releases imutáveis no GitHub (`immutable_releases`):** Proteção da branch `main`, ruleset de tags `refs/tags/v*` (`active`) e **Immutable Releases** (`enabled: true`) habilitados na publicação da `v1.0.1`.
 
 ### 6.2. Checklist de Validação Física (`PENDENTE-HARDWARE`)
 Os itens abaixo dependem exclusivamente do hardware físico de destino (`PENDENTE-HARDWARE`, procedimento detalhado em [`docs/POST_INSTALL_CHECKS.md`](POST_INSTALL_CHECKS.md)):

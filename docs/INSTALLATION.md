@@ -1,4 +1,4 @@
-# Guia de Instalação Passo a Passo — Nox Archinstall (`v1.0.0` Estável / Candidato `v1.0.1`)
+# Guia de Instalação Passo a Passo — Nox Archinstall (`v1.0.1` Estável)
 
 Este guia explica, do começo ao fim e sem exigir experiência avançada com o `archinstall`, como instalar o **Nox Archinstall (Project Nox)** a partir da mídia oficial do Arch Linux mantendo verificação criptográfica de integridade em todos os estágios.
 
@@ -81,16 +81,17 @@ curl -I https://archlinux.org
 ## 3. Cadeia de Confiança e Comando Oficial de Instalação
 
 > **Estado das versões no GitHub:**
-> - **Release estável publicada e disponível agora (`v1.0.0`):** possui tag e assets congelados em [`releases/tag/v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0). **Este é o único comando oficial pronto para execução imediata na ISO.**
-> - **Revisão `v1.0.1` em homologação ([PR #1](https://github.com/Awerkori/arch-install/pull/1), branch `hardening/v1.0.1`):** ainda **não foi publicada** no GitHub Releases. Sua cadeia determinística para o futuro lançamento é mantida em [`manifests/release.json`](../manifests/release.json).
+> - **Release estável atual (`v1.0.1` — `Latest` e Imutável):** publicada em [`releases/tag/v1.0.1`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.1) com cadeia criptográfica verificada em [`manifests/release.json`](../manifests/release.json). **Este é o comando oficial vigente para execução imediata na ISO.**
+> - **Release anterior preservada (`v1.0.0`):** mantida intacta para referência histórica em [`releases/tag/v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0).
 
-### Comando Oficial Verificado — Release Estável Publicada `v1.0.0` (Pronto para Uso)
+### Comando Oficial Verificado — Release Estável Publicada `v1.0.1` (Vigente)
 
-| Artefato (`v1.0.0`) | Origem Congelada | SHA-256 Verificado |
+| Artefato (`v1.0.1`) | Origem Congelada | SHA-256 Verificado |
 |---|---|---|
-| `nox-install.py` | [`releases/download/v1.0.0/nox-install.py`](https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-install.py) | `fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10` |
-| `user_configuration.json` | [`releases/download/v1.0.0/user_configuration.json`](https://github.com/Awerkori/arch-install/releases/download/v1.0.0/user_configuration.json) | `6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c` |
-| `nox-archinstall-payload-v1.0.0.tar.gz` | [`releases/download/v1.0.0/nox-archinstall-payload-v1.0.0.tar.gz`](https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-archinstall-payload-v1.0.0.tar.gz) | `08fbf62a2325b2a3a4b30a3d7ec4b986bc17f412970ba25f83839624444d6fd9` |
+| `nox-install.py` | [`releases/download/v1.0.1/nox-install.py`](https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-install.py) | `fa6c2a3b1ee86cd60976857555326bf6a63c341914e9c061f557a62a74e03b47` |
+| `user_configuration.json` | [`releases/download/v1.0.1/user_configuration.json`](https://github.com/Awerkori/arch-install/releases/download/v1.0.1/user_configuration.json) | `9cb32121cb9a87b54b7c07749a92d3b8cb6cffcf6e4dadc502f3fa9a3da3a867` |
+| `nox-archinstall-payload-v1.0.1.tar.gz` | [`releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz`](https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz) | `52008f9c454c8b39c91d6e51b3546f6a76546f021c3c6a0850dc7a55d5bf92b2` |
+| `nox-archinstall-payload-v1.0.1.tar.gz.sha256` | [`releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz.sha256`](https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz.sha256) | `c6d52792ff1e1038663c633ea81a4f96d9db953ef54139a221b00ee46373ccf0` |
 
 > **AVISO DESTRUTIVO:** O disco selecionado durante a instalação será **formatado integralmente** e **todos os dados existentes serão apagados permanentemente**.
 
@@ -98,18 +99,23 @@ Execute na ISO oficial do Arch Linux (**recomendado**, usando diretório tempor�
 
 ```bash
 sh -c 'set -eu; d=$(umask 077; mktemp -d); trap "rm -rf \"$d\"" EXIT INT TERM; \
-curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-install.py -o "$d/nox-install.py"; \
-printf "%s  %s/nox-install.py\n" "fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10" "$d" | sha256sum -c -; \
-curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/user_configuration.json -o "$d/nox-cfg.json"; \
-printf "%s  %s/nox-cfg.json\n" "6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c" "$d" | sha256sum -c -; \
+curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-install.py -o "$d/nox-install.py"; \
+printf "%s  %s/nox-install.py\n" "fa6c2a3b1ee86cd60976857555326bf6a63c341914e9c061f557a62a74e03b47" "$d" | sha256sum -c -; \
+curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.1/user_configuration.json -o "$d/nox-cfg.json"; \
+printf "%s  %s/nox-cfg.json\n" "9cb32121cb9a87b54b7c07749a92d3b8cb6cffcf6e4dadc502f3fa9a3da3a867" "$d" | sha256sum -c -; \
 umask 022; python3 "$d/nox-install.py" --config "$d/nox-cfg.json"'
 ```
 
 > **Nota sobre `umask` e modelo de confiança:** O download é feito em subshell com `umask 077` para manter os temporários restritos (`0600`), os dois arquivos passam por `sha256sum -c -` antes de executar código Python, e `umask 022` é garantido antes de invocar o `archinstall`. Sem chave pública offline pré-instalada na ISO do Arch Linux, a autenticidade apoia-se em HTTPS/TLSv1.2+ sem downgrade para HTTP e pinagem criptográfica SHA-256 explícita.
 
-### Referência Técnica do Candidato `v1.0.1` em Homologação (Ainda Não Publicado)
+### Cadeia Acíclica `v1.0.1` e Release Anterior Preservada (`v1.0.0`)
 
-Na branch `hardening/v1.0.1` (PR #1), o projeto introduziu o iniciador curto [`i`](../i) e o manifesto determinístico schema v2 em [`manifests/release.json`](../manifests/release.json) (`i → bootstrap/nox-install.py → user_configuration.json → nox-archinstall-payload-v1.0.1.tar.gz`), com commits imutáveis e isolamento interno de `umask 022`. Os comandos de execução direta da `v1.0.1` só serão ativados para uso final após o merge do PR #1 e a publicação dos assets da release `v1.0.1` no GitHub.
+Na `v1.0.1`, a cadeia completa está registrada no manifesto schema v2 em [`manifests/release.json`](../manifests/release.json) (`i` `978c1f1892d19a42d3b1eb3bc0c2a9f1e9b093db` → `bootstrap/nox-install.py` `46d3835b05ab43252454ce1648dd054f110857d5` → `user_configuration.json` `83624813f3f32fd8608ee881b21b7ab6ec92cf3e` → `nox-archinstall-payload-v1.0.1.tar.gz`), com isolamento interno de `umask 022`.
+
+Para conferência histórica, os digests originais da release anterior [`v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0) (preservada no repositório) permanecem:
+- `nox-install.py`: `fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10`
+- `user_configuration.json`: `6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c`
+- `nox-archinstall-payload-v1.0.0.tar.gz`: `08fbf62a2325b2a3a4b30a3d7ec4b986bc17f412970ba25f83839624444d6fd9`
 
 ### O que o assistente verifica automaticamente antes de tocar no disco
 1. Confirma que você está em um terminal interativo dentro da ISO oficial do Arch Linux (`/run/archiso`) em modo UEFI com **`archinstall 4.5`**.
