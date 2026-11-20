@@ -1,0 +1,283 @@
+=== KERNEL & OS ===
+Linux 7.3.5-1-cachyos x86_64
+linux-cachyos 7.3.5-1
+kernel_count=1
+=== LOCALE, TIMEZONE & KEYMAP ===
+LANG=en_CA.UTF-8
+LC_MESSAGES=en_CA.UTF-8
+LANGUAGE=en_CA:en_US:en
+               Local time: Fri 2026-11-20 09:19:31 -03
+                Time zone: America/Sao_Paulo (-03, -0300)
+System clock synchronized: yes
+              NTP service: active
+KEYMAP=us-acentos
+FONT=default8x16
+System Locale: LANG=en_CA.UTF-8
+               LANGUAGE=en_CA:en_US:en
+    VC Keymap: us-acentos
+   X11 Layout: us
+  X11 Variant: intl
+-rw-r--r-- 1 noxdev noxdev 79 Nov 20 09:05 /home/noxdev/.XCompose
+=== BTRFS & SWAP ===
+NAME    SIZE TYPE FSTYPE MOUNTPOINTS
+sr0    1024M rom         
+zram0   7.7G disk swap   [SWAP]
+vda      60G disk        
+├─vda1    4G part vfat   /boot
+└─vda2   56G part btrfs  /var/log
+                         /var/cache/pacman/pkg
+                         /nox-swap
+                         /home
+                         /.snapshots
+                         /
+TARGET                                        SOURCE                  FSTYPE          OPTIONS
+/                                             /dev/vda2[/@]           btrfs           rw,relatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=256,subvol=/@
+├─/proc                                       proc                    proc            rw,nosuid,nodev,noexec,relatime
+│ └─/proc/sys/fs/binfmt_misc                  systemd-1               autofs          rw,relatime,fd=44,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=925
+├─/sys                                        sys                     sysfs           rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/firmware/efi/efivars                 efivarfs                efivarfs        rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/kernel/security                      securityfs              securityfs      rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/fs/cgroup                            cgroup2                 cgroup2         rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot,memory_hugetlb_accounting
+│ ├─/sys/fs/pstore                            none                    pstore          rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/fs/bpf                               bpf                     bpf             rw,nosuid,nodev,noexec,relatime,mode=700
+│ ├─/sys/kernel/debug                         debugfs                 debugfs         rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/fs/fuse/connections                  fusectl                 fusectl         rw,nosuid,nodev,noexec,relatime
+│ ├─/sys/kernel/tracing                       tracefs                 tracefs         rw,nosuid,nodev,noexec,relatime
+│ └─/sys/kernel/config                        configfs                configfs        rw,nosuid,nodev,noexec,relatime
+├─/dev                                        dev                     devtmpfs        rw,nosuid,relatime,size=3989184k,nr_inodes=997296,mode=755,inode64,huge=advise
+│ ├─/dev/shm                                  tmpfs                   tmpfs           rw,nosuid,nodev,inode64,huge=advise,usrquota
+│ ├─/dev/pts                                  devpts                  devpts          rw,nosuid,noexec,relatime,gid=5,mode=600,ptmxmode=000
+│ ├─/dev/hugepages                            hugetlbfs               hugetlbfs       rw,nosuid,nodev,relatime,pagesize=2M
+│ └─/dev/mqueue                               mqueue                  mqueue          rw,nosuid,nodev,noexec,relatime
+├─/run                                        run                     tmpfs           rw,nosuid,nodev,relatime,mode=755,inode64,huge=advise
+│ ├─/run/credentials/systemd-journald.service none                    tmpfs           ro,nosuid,nodev,noexec,relatime,nosymfollow,size=1024k,nr_inodes=1024,mode=700,inode64,huge=advise,noswap
+│ ├─/run/credentials/systemd-resolved.service none                    tmpfs           ro,nosuid,nodev,noexec,relatime,nosymfollow,size=1024k,nr_inodes=1024,mode=700,inode64,huge=advise,noswap
+│ ├─/run/user/1000                            tmpfs                   tmpfs           rw,nosuid,nodev,relatime,size=805228k,nr_inodes=201307,mode=700,uid=1000,gid=1000,inode64,huge=advise
+│ │ └─/run/user/1000/gvfs                     gvfsd-fuse              fuse.gvfsd-fuse rw,nosuid,nodev,relatime,user_id=1000,group_id=1000
+│ └─/run/credentials/getty@tty2.service       none                    tmpfs           ro,nosuid,nodev,noexec,relatime,nosymfollow,size=1024k,nr_inodes=1024,mode=700,inode64,huge=advise,noswap
+├─/.snapshots                                 /dev/vda2[/@.snapshots] btrfs           rw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=257,subvol=/@.snapshots
+├─/home                                       /dev/vda2[/@home]       btrfs           rw,relatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=258,subvol=/@home
+├─/nox-swap                                   /dev/vda2[/@swap]       btrfs           rw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=264,subvol=/@swap
+├─/var/cache/pacman/pkg                       /dev/vda2[/@pkg]        btrfs           rw,relatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=260,subvol=/@pkg
+├─/var/log                                    /dev/vda2[/@log]        btrfs           rw,relatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=259,subvol=/@log
+├─/boot                                       /dev/vda1               vfat            rw,relatime,fmask=0177,dmask=0077,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro
+└─/tmp                                        tmpfs                   tmpfs           rw,nosuid,nodev,nr_inodes=1048576,inode64,huge=advise,usrquota
+--- btrfs subvolume list ---
+
+We trust you have received the usual lecture from the local System
+Administrator. It usually boils down to these three things:
+
+    #1) Respect the privacy of others.
+    #2) Think before you type.
+    #3) With great power comes great responsibility.
+
+For security reasons, the password you type will not be visible.
+
+[sudo] password for noxdev: ID 256 gen 32 top level 5 path @
+ID 257 gen 9 top level 5 path @.snapshots
+ID 258 gen 32 top level 5 path @home
+ID 259 gen 32 top level 5 path @log
+ID 260 gen 28 top level 5 path @pkg
+ID 261 gen 12 top level 256 path var/lib/portables
+ID 262 gen 12 top level 256 path var/lib/machines
+ID 264 gen 28 top level 5 path @swap
+--- zram & swap ---
+NAME       ALGORITHM DISKSIZE DATA COMPR TOTAL STREAMS MOUNTPOINT
+/dev/zram0 zstd          7.7G   4K   64B   20K         [SWAP]
+NAME               TYPE      SIZE USED PRIO
+/dev/zram0         partition 7.7G   0B  100
+/nox-swap/swapfile file        2G   0B   10
+lsattr: No such file or directory while trying to stat /swap/swapfile
+=== SYSTEMD HEALTH ===
+  UNIT LOAD ACTIVE SUB DESCRIPTION
+
+0 loaded units listed.
+  UNIT LOAD ACTIVE SUB DESCRIPTION
+
+0 loaded units listed.
+active
+inactive
+active
+inactive
+active
+active
+active
+=== AUDIO / PIPEWIRE ===
+PipeWire 'pipewire-0' [1.6.11, noxdev@Nox-Device-PC, cookie:452658011]
+ └─ Clients:
+        32. WirePlumber                         [1.6.11, noxdev@Nox-Device-PC, pid:1111]
+        41. WirePlumber [client]                [1.6.11, noxdev@Nox-Device-PC, pid:1111]
+        57. noctalia                            [1.6.11, noxdev@Nox-Device-PC, pid:1164]
+        58. noctalia                            [1.6.11, noxdev@Nox-Device-PC, pid:1164]
+        59. pipewire                            [1.6.11, noxdev@Nox-Device-PC, pid:1664]
+        60. wpctl                               [1.6.11, noxdev@Nox-Device-PC, pid:2001]
+
+Audio
+ ├─ Devices:
+ │      50. Built-in Audio                      [alsa]
+ │  
+ ├─ Sinks:
+ │  *   46. Built-in Audio Analog Stereo        [vol: 0.40]
+ │  
+ ├─ Sources:
+ │  *   48. Built-in Audio Analog Stereo        [vol: 1.00]
+ │  
+ ├─ Filters:
+ │  
+ └─ Streams:
+
+Video
+ ├─ Devices:
+ │  
+ ├─ Sinks:
+ │  
+ ├─ Sources:
+ │  
+=== DESKTOP & UMBRIEL & NOCTALIA & PURE FOX & LUCIOLE ===
+noxdev   mpvpaper
+noxdev   noctalia
+noxdev   pipewire
+noxdev   pipewire-pulse
+noxdev   start-umbriel
+noxdev   umbriel
+noxdev   wireplumber
+/home/noxdev/.config/umbriel/config.toml:autostart = ["sh -c '/usr/local/libexec/nox/nox-noctalia-layout --init-once >/dev/null 2>&1 || true; exec noctalia'"]
+/home/noxdev/.config/umbriel/config.toml:layout = "us"
+/home/noxdev/.config/umbriel/config.toml:track_layout = "global"
+/home/noxdev/.config/umbriel/config.toml:[layout]
+/home/noxdev/.config/umbriel/config.toml:mode = "dwindle"
+/home/noxdev/.config/umbriel/config.toml:[layout.dwindle]
+/home/noxdev/.config/umbriel/config.toml:"Mod+J" = { action = "layout-toggle-split", repeat = false }
+/usr/bin/luciole
+/usr/bin/kitty
+/usr/local/bin/fastfetch
+/usr/bin/firefox
+/home/noxdev/.local/state/nox-audio:
+total 4
+drwxr-xr-x 1 noxdev noxdev 26 Nov 20 09:18 .
+drwx------ 1 noxdev noxdev 56 Nov 20 09:18 ..
+-rw-r--r-- 1 noxdev noxdev 31 Nov 20 09:18 fuxi-h3-state
+
+/var/lib/nox-archinstall/:
+total 8
+drwxr-xr-x 1 root root 126 Nov 20 09:18 .
+drwxr-xr-x 1 root root 288 Nov 20 09:05 ..
+-rw-r--r-- 1 root root  26 Nov 20 09:18 first-boot.done
+drwxr-xr-x 1 root root 106 Nov 20 09:00 payload
+drwxr-xr-x 1 root root 468 Nov 20 09:05 stages
+-rw-r--r-- 1 root root 150 Nov 20 09:05 status.json
+-rw------- 1 root root   0 Nov 20 09:05 update-session.json.lock
+=== ROOT SECURITY & BOOT INTEGRITY ===
+--- passwd -S root ---
+root L 2010-09-19 -1 -1 -1 -1
+--- sbctl status ---
+Installed:	✓ sbctl is installed
+Owner GUID:	672fae11-8dca-4dae-a932-c30e3c22cb34
+Setup Mode:	✗ Enabled
+Secure Boot:	✗ Disabled
+Vendor Keys:	none
+--- nox-secureboot-verify (default) ---
+[PASS] Stage 1 (Key Preparation): sbctl per-install private keys present
+[PASS] Stage 3 (Transaction State): no dirty Limine transaction marker
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/limine/limine_x64.efi is signed
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/b202c250610540d8bce0ca5ee4f6d011/linux-cachyos/vmlinuz is signed
+[PASS] Stage 3 (Limine Policy): /etc/default/limine enables verification + config enrollment
+[PASS] Stage 3 (Config Syntax): /boot/limine.conf all kernel/initramfs paths carry BLAKE2 checksums
+[PASS] Stage 3 (Asset Integrity): all boot():/ files referenced in /boot/limine.conf match their BLAKE2B hashes on disk
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (a4808c3355df270b...) enrolled in /boot/EFI/limine/limine_x64.efi
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (a4808c3355df270b...) enrolled in /boot/EFI/BOOT/BOOTX64.EFI
+[INFO] Stage 4 (Firmware Key Enrollment): UEFI is in Setup Mode (keys prepared on disk, NOT yet enrolled in UEFI NVRAM)
+[INFO] Stage 5 (UEFI Enforcement): UEFI Secure Boot is Disabled in firmware (offline signing & BLAKE2B verified; NOT actively enforced)
+[NOX SECUREBOOT] OK: chaves verificadas, Limine/kernel assinados, hash BLAKE2B de limine.conf inscrito e estado do firmware valido.
+EXIT=0
+--- nox-secureboot-verify --require-active ---
+[PASS] Stage 1 (Key Preparation): sbctl per-install private keys present
+[PASS] Stage 3 (Transaction State): no dirty Limine transaction marker
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/limine/limine_x64.efi is signed
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/b202c250610540d8bce0ca5ee4f6d011/linux-cachyos/vmlinuz is signed
+[PASS] Stage 3 (Limine Policy): /etc/default/limine enables verification + config enrollment
+[PASS] Stage 3 (Config Syntax): /boot/limine.conf all kernel/initramfs paths carry BLAKE2 checksums
+[PASS] Stage 3 (Asset Integrity): all boot():/ files referenced in /boot/limine.conf match their BLAKE2B hashes on disk
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (a4808c3355df270b...) enrolled in /boot/EFI/limine/limine_x64.efi
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (a4808c3355df270b...) enrolled in /boot/EFI/BOOT/BOOTX64.EFI
+[INFO] Stage 4 (Firmware Key Enrollment): UEFI is in Setup Mode (keys prepared on disk, NOT yet enrolled in UEFI NVRAM)
+[FAIL] Stage 5 (UEFI Enforcement): UEFI Secure Boot is Disabled (--require-active)
+REQUIRE_ACTIVE_EXIT=1
+--- nox-limine-integrity ---
+bash: line 11: nox-limine-integrity: command not found
+bash: line 11: nox-limine-integrity: command not found
+INTEGRITY_EXIT=127
+--- snapper list ---
+# │ Type   │ Pre # │ Date │ User │ Cleanup │ Description │ Userdata
+──┼────────┼───────┼──────┼──────┼─────────┼─────────────┼─────────
+0 │ single │       │      │ root │         │ current     │
+--- /boot tree & limine.conf ---
+/boot/amd-ucode.img
+/boot/b202c250610540d8bce0ca5ee4f6d011/limine_history/snapshots.json
+/boot/b202c250610540d8bce0ca5ee4f6d011/linux-cachyos/initramfs
+/boot/b202c250610540d8bce0ca5ee4f6d011/linux-cachyos/vmlinuz
+/boot/EFI/BOOT/BOOTX64.EFI
+/boot/EFI/limine/limine_x64.bak
+/boot/EFI/limine/limine_x64.efi
+/boot/limine.conf
+/boot/limine.conf.old
+/boot/loader/random-seed
+/boot/nox-limine-wallpaper.png
+--- limine.conf ---
+timeout: 5
+default_entry: Arch Linux/Project Nox
+remember_last_entry: no
+wallpaper: boot():/nox-limine-wallpaper.png#bdf2f188893728606309c95168838d04bef399987e81868b5110938822885f443ac32494c90500663f167a7fa47693033da90ad3e6ac0947d73bd44033851364
+wallpaper_style: stretched
+backdrop: 090610
+interface_branding: Project Nox
+interface_branding_colour: fbbf24
+interface_help_hidden: yes
+term_background: c8090610
+term_foreground: f5f2ff
+term_background_bright: 7c3aed
+term_foreground_bright: fbfbfb
+term_palette: 090610;f87171;4ade80;fbbf24;818cf8;a855f7;c084fc;c4b5fd
+term_palette_bright: 1b122c;fca5a5;86efac;fde68a;a5b4fc;c084fc;e9d5ff;f5f2ff
+term_margin: 48
+term_margin_gradient: 12
+/+Arch Linux
+### This OS entry is auto-generated by limine-entry-tool
+comment: Arch Linux
+comment: machine-id=b202c250610540d8bce0ca5ee4f6d011 order-priority=50 
+  //Project Nox
+  ### This kernel entry is auto-generated by limine-entry-tool
+  comment: Kernel version: 7.3.5-1-cachyos
+  comment: kernel-id=linux-cachyos 
+  protocol: linux
+  module_path: boot():/b202c250610540d8bce0ca5ee4f6d011/linux-cachyos/initramfs#b757bde75ce7fbc11bbde5b156d8c1299e6fa9499949c1fa2670e015faa5a6d6eb7beb944ace009e59a91f3bef8e1b1e100383b0c7435a6d0c61c9e781b52010
+  path: boot():/b202c250610540d8bce0ca5ee4f6d011/linux-cachyos/vmlinuz#f25b5ebe190e9c3a2175ee0e1ee9ce9f57cdcae04a6cbaab55117e5e203348c278b400e0f17760e8a3ad6cd28e45a257b080b1281fb4dabaf012844affda4d46
+  cmdline: root=UUID=5464c633-4e17-42d2-8d89-6d1adfa4300c rw rootflags=subvol=/@ rootfstype=btrfs quiet loglevel=3 systemd.show_status=auto rd.udev.log_level=3 amd_pstate=active amd_iommu=on iommu=pt zswap.enabled=0 nowatchdog
+
+OK
+OK
+OK
+OK
+OK
+VERIFY_COMPLETE
+__NOX_EXIT=0
+=== swapfile NOCOW & zram unit ===
+---------------C------ /nox-swap/swapfile
+● systemd-zram-setup@zram0.service - Create swap on /dev/zram0
+     Loaded: loaded (/usr/lib/systemd/system/systemd-zram-setup@.service; static)
+    Drop-In: /run/systemd/generator/systemd-zram-setup@zram0.service.d
+             └─bindings.conf
+             /usr/lib/systemd/system/systemd-zram-setup@.service.d
+             └─xswap.conf
+     Active: active (exited) since Fri 2026-11-20 09:18:16 -03; 1min 44s ago
+ Invocation: d978e38427d248a1a0999c8b35d133bd
+       Docs: man:zram-generator(8)
+             man:zram-generator.conf(5)
+   Main PID: 446 (code=exited, status=0/SUCCESS)
+   Mem peak: 3.5M
+=== nox-limine-integrity check ===
+=== Firefox Pure policies & user.js ===
+=== Desktop scene preparation: fastfetch in Kitty ===
+__NOX_EXIT=0

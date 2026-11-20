@@ -118,9 +118,9 @@ ROOT_UUID="$(blkid -s UUID -o value "$ROOT_DEV" || true)"
 
 CMDLINE_STR="root=UUID=${ROOT_UUID} rw rootflags=subvol=/@ rootfstype=btrfs quiet loglevel=3 systemd.show_status=auto rd.udev.log_level=3 amd_pstate=active amd_iommu=on iommu=pt zswap.enabled=0 nowatchdog"
 install -d -m 0755 /etc/kernel /etc/default
-printf '%s\n' "$CMDLINE_STR" > /etc/kernel/cmdline
+printf '%s\n' "$CMDLINE_STR" >/etc/kernel/cmdline
 
-cat > /etc/default/limine <<EOF
+cat >/etc/default/limine <<EOF
 TARGET_OS_NAME="Arch Linux"
 ESP_PATH="${BOOT_MP}"
 FIND_BOOTLOADERS=no
@@ -168,7 +168,7 @@ if [[ -f "${NOX_ROOT}/configs/wallpapers/nox-limine.png" ]]; then
 fi
 
 # Ensure /boot/limine.conf starts clean with 5s unattended auto-boot targeting Arch Linux/Project Nox
-cat > "${BOOT_MP}/limine.conf" <<'EOF'
+cat >"${BOOT_MP}/limine.conf" <<'EOF'
 timeout: 5
 default_entry: Arch Linux/Project Nox
 remember_last_entry: no
@@ -186,10 +186,14 @@ fi
 nox_info "Executando limine-update para gerar initramfs e entradas linux-cachyos..."
 limine-update
 
-# Enforce normalized header & Project Nox visual title idempotently, then re-enroll if needed
+# Enforce normalized header & Project Nox visual title idempotently, then enroll + sign fail-closed
 ESP_PATH="${BOOT_MP}" "${NOX_LIBEXEC_DIR}/nox-limine-normalize" --post
-limine-enroll-config || true
-/etc/boot/hooks/post.d/95-nox-sbctl-fallback || true
+if [[ -d /sys/firmware/efi ]]; then
+  ESP_PATH="${BOOT_MP}" "${NOX_LIBEXEC_DIR}/nox-limine-integrity" --force || nox_die "Falha na convergencia/assinatura do Limine via nox-limine-integrity."
+else
+  limine-enroll-config
+  /etc/boot/hooks/post.d/95-nox-sbctl-fallback
+fi
 
 # Guarantee EFI binaries are enrolled + signed cleanly
 if [[ -d /sys/firmware/efi ]]; then

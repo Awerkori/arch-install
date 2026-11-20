@@ -6,12 +6,25 @@ YES_CONFIRM=false
 USE_MICROSOFT=true
 IGNORE_IMMUTABLE=false
 
+SBCTL_BIN="${NOX_SBCTL_BIN:-sbctl}"
+LIMINE_INSTALL_BIN="${NOX_LIMINE_INSTALL_BIN:-limine-install}"
+LIMINE_ENROLL_BIN="${NOX_LIMINE_ENROLL_BIN:-limine-enroll-config}"
+FALLBACK_HOOK="${NOX_FALLBACK_HOOK:-/etc/boot/hooks/post.d/95-nox-sbctl-fallback}"
+VERIFY_BIN="${NOX_VERIFY_BIN:-/usr/local/bin/nox-secureboot-verify}"
+EFI_SYS_DIR="${NOX_EFI_SYS_DIR:-/sys/firmware/efi}"
+ESP="${ESP_PATH:-/boot}"
+if [[ -z "${ESP_PATH:-}" ]] && ! findmnt /boot >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
+  ESP="/efi"
+fi
+LIMINE_DEFAULT="${NOX_LIMINE_DEFAULT:-/etc/default/limine}"
+DIRTY_MARKER="${NOX_DIRTY_MARKER:-/run/nox-limine-tx.dirty}"
+
 for arg in "$@"; do
   case "$arg" in
     --yes-enroll-uefi-keys) YES_CONFIRM=true ;;
     --no-microsoft) USE_MICROSOFT=false ;;
     --ignore-immutable) IGNORE_IMMUTABLE=true ;;
-    -h|--help)
+    -h | --help)
       cat <<'USAGE'
 Usage: sudo nox-secureboot-enroll [options]
   --yes-enroll-uefi-keys   Non-interactive confirmation to modify UEFI NVRAM keys
@@ -27,18 +40,70 @@ USAGE
   esac
 done
 
-(( EUID == 0 )) || { echo "Run as root (sudo nox-secureboot-enroll)." >&2; exit 1; }
-[[ -d /sys/firmware/efi ]] || { echo "System is not booted in UEFI mode." >&2; exit 1; }
-command -v sbctl >/dev/null 2>&1 || { echo "sbctl is not installed." >&2; exit 1; }
+_parse_sbctl_status_json() {
+  local raw="$1"
+  python3 - "$raw" <<'PY'
+import json, sys
+try:
+    data = json.loads(sys.argv[1])
+except Exception as exc:
+    raise SystemExit(f"invalid JSON from sbctl status: {exc}")
+if not isinstance(data, dict):
+    raise SystemExit("sbctl status JSON is not an object")
+for key in ("setup_mode", "secure_boot"):
+    if key not in data or type(data[key]) is not bool:
+        raise SystemExit(f"sbctl status missing valid boolean field: {key}")
+print(f"{'true' if data['setup_mode'] else 'false'} {'true' if data['secure_boot'] else 'false'}")
+PY
+}
 
-if ! sbctl setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
+# Preflight all permissions, UEFI environment, and mandatory tools BEFORE any mutation
+((EUID == 0)) || [[ "${NOX_ALLOW_NONROOT_TEST:-0}" == "1" ]] || {
+  echo "Run as root (sudo nox-secureboot-enroll)." >&2
+  exit 1
+}
+[[ -d "$EFI_SYS_DIR" ]] || {
+  echo "System is not booted in UEFI mode ($EFI_SYS_DIR missing)." >&2
+  exit 1
+}
+command -v "$SBCTL_BIN" >/dev/null 2>&1 || {
+  echo "ERROR: mandatory tool missing: $SBCTL_BIN" >&2
+  exit 1
+}
+command -v "$LIMINE_INSTALL_BIN" >/dev/null 2>&1 || {
+  echo "ERROR: mandatory tool missing: $LIMINE_INSTALL_BIN" >&2
+  exit 1
+}
+command -v "$LIMINE_ENROLL_BIN" >/dev/null 2>&1 || {
+  echo "ERROR: mandatory tool missing: $LIMINE_ENROLL_BIN" >&2
+  exit 1
+}
+[[ -x "$FALLBACK_HOOK" ]] || {
+  echo "ERROR: mandatory fallback hook missing or not executable: $FALLBACK_HOOK" >&2
+  exit 1
+}
+[[ -x "$VERIFY_BIN" ]] || command -v "$VERIFY_BIN" >/dev/null 2>&1 || {
+  echo "ERROR: mandatory verification tool missing: $VERIFY_BIN" >&2
+  exit 1
+}
+
+if ! "$SBCTL_BIN" setup --print-state --json | grep -q '"installed": true'; then
   echo "Generating per-installation private Secure Boot keys..."
-  sbctl create-keys
+  "$SBCTL_BIN" create-keys
 fi
 
-STATUS_JSON="$(sbctl status --json 2>/dev/null || true)"
-if ! printf '%s' "$STATUS_JSON" | grep -q '"setup_mode": true'; then
-  echo "UEFI firmware is NOT in Setup Mode." >&2
+STATUS_JSON="$("$SBCTL_BIN" status --json)" || {
+  echo "ERROR: failed to query UEFI firmware state via $SBCTL_BIN status --json." >&2
+  exit 1
+}
+STATUS_FLAGS="$(_parse_sbctl_status_json "$STATUS_JSON")" || {
+  echo "ERROR: invalid or unknown UEFI firmware state returned by $SBCTL_BIN status --json." >&2
+  exit 1
+}
+SETUP_MODE="${STATUS_FLAGS%% *}"
+
+if [[ "$SETUP_MODE" != "true" ]]; then
+  echo "UEFI firmware is NOT in Setup Mode (setup_mode=$SETUP_MODE)." >&2
   echo "To enroll custom Secure Boot keys:" >&2
   echo "  1. Reboot into UEFI/BIOS settings (systemctl reboot --firmware-setup)" >&2
   echo "  2. Switch Secure Boot to Custom / Setup Mode (clear existing PK/KEK/db keys)" >&2
@@ -54,25 +119,51 @@ if ! $YES_CONFIRM; then
     echo "WARNING: --no-microsoft selected; third-party PCIe/GPU Option ROMs may fail unless built into firmware."
   fi
   read -r -p "Type ENROLL to continue: " reply
-  [[ "$reply" == "ENROLL" ]] || { echo "Aborted by user." >&2; exit 1; }
+  [[ "$reply" == "ENROLL" ]] || {
+    echo "Aborted by user." >&2
+    exit 1
+  }
 fi
 
 ENROLL_ARGS=()
 $USE_MICROSOFT && ENROLL_ARGS+=(--microsoft)
 $IGNORE_IMMUTABLE && ENROLL_ARGS+=(--ignore-immutable)
 
-sbctl enroll-keys "${ENROLL_ARGS[@]}"
+"$SBCTL_BIN" enroll-keys "${ENROLL_ARGS[@]}"
+"$LIMINE_INSTALL_BIN" --fallback
+"$LIMINE_ENROLL_BIN"
+NOX_PRESERVE_DIRTY_MARKER=1 "$FALLBACK_HOOK"
 
-if command -v limine-install >/dev/null 2>&1; then
-  limine-install --fallback
-fi
-if command -v limine-enroll-config >/dev/null 2>&1; then
-  limine-enroll-config
-fi
-if [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]]; then
-  /etc/boot/hooks/post.d/95-nox-sbctl-fallback
+# Mandatory post-enrollment verification of EFI signatures, kernels, Limine BLAKE2B, and NVRAM state
+"$VERIFY_BIN" \
+  --esp-path "$ESP" \
+  --limine-default "$LIMINE_DEFAULT" \
+  --dirty-marker "$DIRTY_MARKER" \
+  --ignore-dirty-marker \
+  --sbctl-bin "$SBCTL_BIN"
+
+POST_JSON="$("$SBCTL_BIN" status --json)" || {
+  echo "ERROR: unable to verify UEFI firmware state after key enrollment." >&2
+  exit 1
+}
+POST_FLAGS="$(_parse_sbctl_status_json "$POST_JSON")" || {
+  echo "ERROR: invalid firmware JSON returned after key enrollment." >&2
+  exit 1
+}
+POST_SETUP="${POST_FLAGS%% *}"
+POST_SB="${POST_FLAGS##* }"
+
+if [[ "$POST_SETUP" != "false" ]]; then
+  echo "ERROR: UEFI firmware remained in Setup Mode after enroll-keys (keys not actively bound in NVRAM)." >&2
+  exit 1
 fi
 
-echo "UEFI Secure Boot keys enrolled and Limine signed."
-echo "Next step (if Secure Boot was disabled during Setup Mode): enable Secure Boot in UEFI/BIOS and reboot."
-sbctl status || true
+rm -f "$DIRTY_MARKER"
+echo "Stage 1-4 OK: Secure Boot keys generated and enrolled in UEFI NVRAM (User Mode confirmed); Limine, kernels, and BLAKE2B config verified."
+if [[ "$POST_SB" == "true" ]]; then
+  echo "Stage 5 OK: UEFI Secure Boot is ACTIVELY ENFORCED by firmware."
+else
+  echo "Stage 5 PENDING: UEFI Secure Boot is still DISABLED in BIOS/UEFI setup (keys are enrolled, NOT yet enforced)."
+  echo "Next step: enable Secure Boot in UEFI/BIOS settings and reboot, then run: sudo nox-secureboot-verify --require-active"
+fi
+"$SBCTL_BIN" status

@@ -1,15 +1,14 @@
-# Inventário Completo — Nox Archinstall (`v1.0.0-rc10`)
+# Inventário Completo — Nox Archinstall (`v1.0.0` / `v1.0.1`)
 
-> Documento de referência das instalações e configurações automatizadas pelo **Nox Archinstall** na pré-release **`v1.0.0-rc10`** (candidata antes da aprovação explícita da `v1.0.0`).
+> Documento de referência das instalações e configurações automatizadas pelo **Nox Archinstall** na release estável **`v1.0.0`** e na revisão de hardening **`v1.0.1`**.
 > Listagem completa e exata de todos os **711 pacotes** (explícitos e dependências) disponível em [`INSTALLED-PACKAGES.tsv`](INSTALLED-PACKAGES.tsv).
 
 ## Metadados da Revisão Documentada
 
 - **Repositório:** `https://github.com/Awerkori/arch-install`
-- **Pré-release validada:** `v1.0.0-rc10` (`https://github.com/Awerkori/arch-install/releases/tag/v1.0.0-rc10`)
-- **Commit do payload (`main`):** `4f58011a820e6638b3e9f900f117cd03fabc4f7b` (`release.json`: `d8900ba221230448820c8b99d6f2863188690c72`)
-- **SHA-256 do payload (`nox-archinstall-payload-v1.0.0-rc10.tar.gz`):** `6463bc0d24ac78aaa6ae08f86d18d67da96995256105a16ab4c96ec1bd128650`
-- **Base de comprovação:** Duas instalações limpas completas a partir da ISO oficial `archlinux-2026.11.01-x86_64.iso` (`ACCEPT-A` e `ACCEPT-B`), verificadas com `diff` nulo entre ambas.
+- **Release estável publicada:** `v1.0.0` (`https://github.com/Awerkori/arch-install/releases/tag/v1.0.0`, payload SHA-256 `08fbf62a2325b2a3a4b30a3d7ec4b986bc17f412970ba25f83839624444d6fd9`)
+- **Revisão de hardening em homologação:** `v1.0.1` (branch `hardening/v1.0.1`, PR #1 ainda não publicado, payload SHA-256 `52008f9c454c8b39c91d6e51b3546f6a76546f021c3c6a0850dc7a55d5bf92b2`)
+- **Base de comprovação:** Instalações limpas independentes a partir da ISO oficial `archlinux-2026.11.01-x86_64.iso` (`ACCEPT-A-CLEAN` / `ACCEPT-B-CLEAN` e par definitivo congelado `ACCEPT-A-V101-FINAL` / `ACCEPT-B-V101-FINAL`), verificadas com `diff` nulo entre ambas e contra [`INSTALLED-PACKAGES.tsv`](INSTALLED-PACKAGES.tsv).
 
 ### Contagem Total de Pacotes (`ACCEPT-A` e `ACCEPT-B`)
 

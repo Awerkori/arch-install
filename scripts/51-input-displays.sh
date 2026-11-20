@@ -20,14 +20,14 @@ if [[ -f /etc/locale.gen ]]; then
   for loc in "en_CA.UTF-8 UTF-8" "en_US.UTF-8 UTF-8"; do
     sed -i "s/^#[[:space:]]*\(${loc//./\\.}\)/\1/" /etc/locale.gen
     if ! grep -Eq "^[[:space:]]*${loc//./\\.}" /etc/locale.gen; then
-      printf '%s\n' "$loc" >> /etc/locale.gen
+      printf '%s\n' "$loc" >>/etc/locale.gen
     fi
   done
 fi
 if ! locale -a 2>/dev/null | grep -qiE '^en_CA\.utf-?8$' || ! locale -a 2>/dev/null | grep -qiE '^en_US\.utf-?8$'; then
   locale-gen
 fi
-cat > /etc/locale.conf <<'EOF'
+cat >/etc/locale.conf <<'EOF'
 LANG=en_CA.UTF-8
 LC_MESSAGES=en_CA.UTF-8
 LANGUAGE=en_CA:en_US:en
@@ -72,13 +72,13 @@ os.replace(tmp, p)
 PY
 
 # Console keymap (valid kbd map for US International) & localectl X11 keymap
-cat > /etc/vconsole.conf <<'EOF'
+cat >/etc/vconsole.conf <<'EOF'
 KEYMAP=us-acentos
 FONT=default8x16
 EOF
 
 # Cedilla support (' + c -> ç) for en_US.UTF-8 with US International dead keys
-cat > /etc/skel/.XCompose <<'EOF'
+cat >/etc/skel/.XCompose <<'EOF'
 include "%L"
 <dead_acute> <C> : "Ç" Ccedilla
 <dead_acute> <c> : "ç" ccedilla
@@ -86,7 +86,7 @@ EOF
 chmod 0644 /etc/skel/.XCompose
 
 mkdir -p /etc/X11/xorg.conf.d
-cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<'EOF'
+cat >/etc/X11/xorg.conf.d/00-keyboard.conf <<'EOF'
 Section "InputClass"
         Identifier "system-keyboard"
         MatchIsKeyboard "on"
@@ -97,7 +97,7 @@ EOF
 
 # 3. Kitty config + xdg-terminals.list
 mkdir -p /etc/skel/.config/kitty
-cat > /etc/skel/.config/kitty/kitty.conf <<'EOF'
+cat >/etc/skel/.config/kitty/kitty.conf <<'EOF'
 font_family      JetBrainsMono Nerd Font
 bold_font        auto
 italic_font      auto
@@ -109,11 +109,11 @@ background_opacity 0.94
 include themes/noctalia.conf
 EOF
 
-printf 'kitty.desktop\n' > /etc/skel/.config/xdg-terminals.list
+printf 'kitty.desktop\n' >/etc/skel/.config/xdg-terminals.list
 
 # 4. Umbriel main configuration + safe outputs.toml baseline + optional local override template
 nox_atomic_install 0644 "${NOX_ROOT}/configs/umbriel/config.toml" /etc/skel/.config/umbriel/config.toml
-cat > /etc/skel/.config/umbriel/outputs.local.toml <<'EOF'
+cat >/etc/skel/.config/umbriel/outputs.local.toml <<'EOF'
 # Optional manual monitor overrides (loaded after outputs.toml, preserved across updates/logins).
 # Uncomment and adjust if you need a fine vertical offset on physical hardware:
 # [output."HDMI-A-1"]
@@ -126,8 +126,8 @@ chmod 0644 /etc/skel/.config/umbriel/outputs.local.toml
 
 # Validate Umbriel TOML config directly with umbriel binary
 if command -v umbriel >/dev/null 2>&1; then
-  umbriel config validate -c /etc/skel/.config/umbriel/config.toml \
-    || nox_die "Falha na validacao sintatica do config.toml do Umbriel!"
+  umbriel config validate -c /etc/skel/.config/umbriel/config.toml ||
+    nox_die "Falha na validacao sintatica do config.toml do Umbriel!"
 fi
 
 # Deploy configs to existing human users without overwriting unrelated files
@@ -148,7 +148,7 @@ while IFS=: read -r uname uid gid uhome _shell; do
     nox_atomic_install 0644 /etc/skel/.config/kitty/kitty.conf "${uhome}/.config/kitty/kitty.conf"
     chown "${uid}:${gid}" "${uhome}/.config/kitty/kitty.conf"
   elif ! grep -qx 'include themes/noctalia.conf' "${uhome}/.config/kitty/kitty.conf"; then
-    printf '\ninclude themes/noctalia.conf\n' >> "${uhome}/.config/kitty/kitty.conf"
+    printf '\ninclude themes/noctalia.conf\n' >>"${uhome}/.config/kitty/kitty.conf"
     chown "${uid}:${gid}" "${uhome}/.config/kitty/kitty.conf"
   fi
   nox_atomic_install 0644 /etc/skel/.config/xdg-terminals.list "${uhome}/.config/xdg-terminals.list"
@@ -165,13 +165,13 @@ for dm in sddm gdm lightdm lxdm; do
 done
 
 id -u greeter >/dev/null 2>&1 || nox_die "Usuario de sistema 'greeter' nao encontrado."
-grep -q '^Exec=start-umbriel' /usr/share/wayland-sessions/umbriel.desktop \
-  || nox_die "Session file /usr/share/wayland-sessions/umbriel.desktop invalido ou ausente."
+grep -q '^Exec=start-umbriel' /usr/share/wayland-sessions/umbriel.desktop ||
+  nox_die "Session file /usr/share/wayland-sessions/umbriel.desktop invalido ou ausente."
 
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-greeter-session" "${NOX_LIBEXEC_DIR}/nox-greeter-session"
 nox_atomic_install 0755 "${NOX_ROOT}/configs/bin/nox-noctalia-layout" "${NOX_LIBEXEC_DIR}/nox-noctalia-layout"
 
-cat > /etc/greetd/config.toml <<'EOF'
+cat >/etc/greetd/config.toml <<'EOF'
 [terminal]
 vt = 1
 
@@ -182,7 +182,7 @@ EOF
 chmod 0644 /etc/greetd/config.toml
 
 mkdir -p /etc/tmpfiles.d
-cat > /etc/tmpfiles.d/noctalia-greeter.conf <<'EOF'
+cat >/etc/tmpfiles.d/noctalia-greeter.conf <<'EOF'
 d /var/lib/noctalia-greeter 0750 greeter greeter -
 EOF
 systemd-tmpfiles --create /etc/tmpfiles.d/noctalia-greeter.conf || true
@@ -197,7 +197,7 @@ if [[ -f "${NOX_ROOT}/configs/greeter/sync.toml" ]]; then
 fi
 FIRST_HUMAN_USER="$(nox_list_human_users | head -n1 | cut -d: -f1 || true)"
 if [[ -n "$FIRST_HUMAN_USER" ]]; then
-  printf '\n[user]\ndefault = "%s"\n' "$FIRST_HUMAN_USER" >> /var/lib/noctalia-greeter/greeter.toml
+  printf '\n[user]\ndefault = "%s"\n' "$FIRST_HUMAN_USER" >>/var/lib/noctalia-greeter/greeter.toml
 fi
 # 6. Prevent systemd-logind automatic idle suspend/power-off (manual suspend/power still work)
 install -d -m 0755 /etc/systemd/logind.conf.d

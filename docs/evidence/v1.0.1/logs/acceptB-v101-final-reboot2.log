@@ -1,0 +1,50 @@
+[sudo] password for noxdev: === REBOOT 2 FINAL CHECKS ===
+KERNEL=7.3.5-2-cachyos
+linux-cachyos: 7843 total files, 0 missing files
+GUI_PROCS=755 /bin/sh /usr/bin/start-umbriel|798 /usr/bin/umbriel|846 noctalia|1196 mpvpaper --auto-pause --auto-mode FULL -o loop-file=inf panscan=1.0 no-audio hwdec=auto input-ipc-server=/home/noxdev/.local/state/noctalia/mpvpaper/ipc-Virtual-1.sock Virtual-1 /usr/share/nox-archinstall/wallpapers/nox-g5-runtime.webm|
+SYS_FAILED=0
+USR_FAILED=0
+ # │ Type   │ Cleanup │ Description
+───┼────────┼─────────┼─────────────────────────────
+ 0 │ single │         │ current
+ 1 │ single │         │ nox-manual-keep
+ 9 │ single │         │ nox-final-backup
+12 │ pre    │ number  │ pacman -Rns --noconfirm tree
+13 │ post   │ number  │ tree
+
+ ID │ Date                │ Description                  
+────┼─────────────────────┼──────────────────────────────
+ 1  │ 2026-11-20 18:29:59 │ nox-manual-keep              
+ 9  │ 2026-11-20 18:30:06 │ nox-final-backup             
+ 12 │ 2026-11-20 18:31:03 │ pacman -Rns --noconfirm tree 
+ 13 │ 2026-11-20 18:31:03 │ tree                         
+JOURNAL_REBOOT2_ERRORS=0
+[PASS] Stage 1 (Key Preparation): sbctl per-install private keys present
+[PASS] Stage 3 (Transaction State): no dirty Limine transaction marker
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/limine/limine_x64.efi is signed
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/6969529263ff402aaddc177677186276/limine_history/vmlinuz_xxh_86c02590e73113e4 is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/6969529263ff402aaddc177677186276/linux-cachyos/vmlinuz is signed
+[PASS] Stage 3 (Limine Policy): /etc/default/limine enables verification + config enrollment
+[PASS] Stage 3 (Config Syntax): /boot/limine.conf all kernel/initramfs paths carry BLAKE2 checksums
+[PASS] Stage 3 (Asset Integrity): all boot():/ files referenced in /boot/limine.conf match their BLAKE2B hashes on disk
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (6ec4ffc8d23ec8d4...) enrolled in /boot/EFI/limine/limine_x64.efi
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (6ec4ffc8d23ec8d4...) enrolled in /boot/EFI/BOOT/BOOTX64.EFI
+[PASS] Stage 4 (Firmware Key Enrollment): Keys enrolled in UEFI NVRAM (User Mode; Setup Mode Disabled)
+[PASS] Stage 5 (UEFI Enforcement): UEFI Secure Boot is actively enforced by firmware
+[NOX SECUREBOOT] OK: chaves verificadas, Limine/kernel assinados, hash BLAKE2B de limine.conf inscrito e estado do firmware valido.
+[PASS] Stage 1 (Key Preparation): sbctl per-install private keys present
+[PASS] Stage 3 (Transaction State): no dirty Limine transaction marker
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/limine/limine_x64.efi is signed
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/6969529263ff402aaddc177677186276/limine_history/vmlinuz_xxh_86c02590e73113e4 is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/6969529263ff402aaddc177677186276/linux-cachyos/vmlinuz is signed
+[PASS] Stage 3 (Limine Policy): /etc/default/limine enables verification + config enrollment
+[PASS] Stage 3 (Config Syntax): /boot/limine.conf all kernel/initramfs paths carry BLAKE2 checksums
+[PASS] Stage 3 (Asset Integrity): all boot():/ files referenced in /boot/limine.conf match their BLAKE2B hashes on disk
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (6ec4ffc8d23ec8d4...) enrolled in /boot/EFI/limine/limine_x64.efi
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (6ec4ffc8d23ec8d4...) enrolled in /boot/EFI/BOOT/BOOTX64.EFI
+[PASS] Stage 4 (Firmware Key Enrollment): Keys enrolled in UEFI NVRAM (User Mode; Setup Mode Disabled)
+[PASS] Stage 5 (UEFI Enforcement): UEFI Secure Boot is actively enforced by firmware
+[NOX SECUREBOOT] OK: chaves verificadas, Limine/kernel assinados, hash BLAKE2B de limine.conf inscrito e estado do firmware valido.
+__NOX_EXIT=0

@@ -1,4 +1,4 @@
-# Guia Geral e Didático de Secure Boot — Project Nox (`v1.0.0`)
+# Guia Geral e Didático de Secure Boot — Nox Archinstall (`v1.0.0` / `v1.0.1`)
 
 Este documento explica, passo a passo e sem exigir conhecimento prévio de criptografia ou firmware, como o **UEFI Secure Boot** funciona no **Project Nox**, como ele se integra ao bootloader **Limine**, ao **`sbctl`** e ao **Snapper**, e como ativá-lo utilizando o **Método A (Procedimento Geral Simples)**.
 
@@ -255,7 +255,7 @@ Depois que o Secure Boot estiver ativo, **você não precisa assinar arquivos ma
    - Os hooks do `mkinitcpio`, `limine-mkinitcpio-hook`, `sbctl` e `95-nox-sbctl-fallback` atualizam `/boot/limine.conf`, recalculam o hash BLAKE2B e re-assinam automaticamente `vmlinuz`, `limine_x64.efi` e `BOOTX64.EFI`.
 2. **Criação automática de snapshots (`snap-pac` / `nox-topgrade`):**
    - O `limine-snapper-sync` adiciona o novo snapshot ao menu do Limine e os hooks de pós-execução normalizam o menu, inscrevem o novo hash BLAKE2B e re-assinam os binários EFI automaticamente.
-3. **Restauração de um snapshot anterior (`nox-limine-snapper-restore`):**
+3. **Restauração de um snapshot anterior (`limine-snapper-restore`):**
    - Ao abrir `Limine Snapshot Restore` (via `/tools` no launcher ou `sudo /usr/local/bin/limine-snapper-restore` no Kitty), o wrapper exibe a lista de snapshots e só altera `/boot` após a sua confirmação, re-assinando toda a cadeia ao concluir.
    - **Nota sobre queda de energia durante restauração:** evite desligar o computador à força durante os poucos segundos em que o `limine-snapper-restore` estiver copiando o kernel do snapshot para `/boot`. Caso ocorra falta de luz exatamente nesse instante (~1,5s medidos em laboratório), basta seguir o reparo rápido via `arch-chroot` em [`docs/RECOVERY.md`](RECOVERY.md).
 

@@ -1,0 +1,56 @@
+=== NOX-LIMINE-INTEGRITY DRY-RUN ===
+=== NOX-SECUREBOOT-ENROLL ===
+Enrolling keys to EFI variables...
+With vendor keys from microsoft...✓ 
+Enrolled keys to the EFI variables!
+Updating Limine fallback EFI...
+Limine EFI install completed successfully.
+Config file BLAKE2B successfully enrolled.
+✓ Signed /boot/EFI/limine/limine_x64.efi
+Config file BLAKE2B successfully enrolled.
+Config file BLAKE2B successfully enrolled.
+✓ Signed /boot/EFI/limine/limine_x64.efi
+Config file BLAKE2B successfully enrolled.
+[PASS] Stage 1 (Key Preparation): sbctl per-install private keys present
+[PASS] Stage 3 (Transaction State): no dirty Limine transaction marker
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/limine/limine_x64.efi is signed
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/ee2397ec1a1d41228abf12fa4d3f0a5a/linux-cachyos/vmlinuz is signed
+[PASS] Stage 3 (Limine Policy): /etc/default/limine enables verification + config enrollment
+[PASS] Stage 3 (Config Syntax): /boot/limine.conf all kernel/initramfs paths carry BLAKE2 checksums
+[PASS] Stage 3 (Asset Integrity): all boot():/ files referenced in /boot/limine.conf match their BLAKE2B hashes on disk
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (cc7cd169245f92db...) enrolled in /boot/EFI/limine/limine_x64.efi
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (cc7cd169245f92db...) enrolled in /boot/EFI/BOOT/BOOTX64.EFI
+[PASS] Stage 4 (Firmware Key Enrollment): Keys enrolled in UEFI NVRAM (User Mode; Setup Mode Disabled)
+[INFO] Stage 5 (UEFI Enforcement): UEFI Secure Boot is Disabled in firmware (offline signing & BLAKE2B verified; NOT actively enforced)
+[NOX SECUREBOOT] OK: chaves verificadas, Limine/kernel assinados, hash BLAKE2B de limine.conf inscrito e estado do firmware valido.
+Stage 1-4 OK: Secure Boot keys generated and enrolled in UEFI NVRAM (User Mode confirmed); Limine, kernels, and BLAKE2B config verified.
+Stage 5 PENDING: UEFI Secure Boot is still DISABLED in BIOS/UEFI setup (keys are enrolled, NOT yet enforced).
+Next step: enable Secure Boot in UEFI/BIOS settings and reboot, then run: sudo nox-secureboot-verify --require-active
+Installed:	✓ sbctl is installed
+Owner GUID:	0b661124-6dd8-4188-b816-6bc207a9d8fb
+Setup Mode:	✓ Disabled
+Secure Boot:	✗ Disabled
+Vendor Keys:	microsoft
+ENROLL_EXIT=0
+=== POST-ENROLL STATUS (PRE-REBOOT) ===
+Installed:	✓ sbctl is installed
+Owner GUID:	0b661124-6dd8-4188-b816-6bc207a9d8fb
+Setup Mode:	✓ Disabled
+Secure Boot:	✗ Disabled
+Vendor Keys:	microsoft
+[PASS] Stage 1 (Key Preparation): sbctl per-install private keys present
+[PASS] Stage 3 (Transaction State): no dirty Limine transaction marker
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/limine/limine_x64.efi is signed
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/ee2397ec1a1d41228abf12fa4d3f0a5a/linux-cachyos/vmlinuz is signed
+[PASS] Stage 3 (Limine Policy): /etc/default/limine enables verification + config enrollment
+[PASS] Stage 3 (Config Syntax): /boot/limine.conf all kernel/initramfs paths carry BLAKE2 checksums
+[PASS] Stage 3 (Asset Integrity): all boot():/ files referenced in /boot/limine.conf match their BLAKE2B hashes on disk
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (cc7cd169245f92db...) enrolled in /boot/EFI/limine/limine_x64.efi
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (cc7cd169245f92db...) enrolled in /boot/EFI/BOOT/BOOTX64.EFI
+[PASS] Stage 4 (Firmware Key Enrollment): Keys enrolled in UEFI NVRAM (User Mode; Setup Mode Disabled)
+[INFO] Stage 5 (UEFI Enforcement): UEFI Secure Boot is Disabled in firmware (offline signing & BLAKE2B verified; NOT actively enforced)
+[NOX SECUREBOOT] OK: chaves verificadas, Limine/kernel assinados, hash BLAKE2B de limine.conf inscrito e estado do firmware valido.
+VERIFY_EXIT=0
+__NOX_EXIT=0

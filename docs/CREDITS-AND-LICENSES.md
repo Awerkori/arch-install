@@ -1,6 +1,6 @@
-# Créditos, Atribuições e Licenças — Project Nox (`v1.0.0`)
+# Créditos, Atribuições e Licenças — Nox Archinstall (`v1.0.0` / `v1.0.1`)
 
-O **Project Nox** é um projeto pessoal de automação e configuração que integra diversos softwares livres e projetos de código aberto da comunidade Linux. Este documento distingue claramente o que faz parte da automação própria deste repositório e o que pertence aos respectivos projetos upstream.
+O **Nox Archinstall (Project Nox)** é um projeto pessoal de automação e configuração que integra diversos softwares livres e projetos de código aberto da comunidade Linux. Este documento distingue claramente o que faz parte da automação própria deste repositório e o que pertence aos respectivos projetos upstream.
 
 ---
 

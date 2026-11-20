@@ -2,9 +2,13 @@ name: Nox Archinstall CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "hardening/**"
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - "hardening/**"
 
 permissions:
   contents: read
@@ -14,26 +18,57 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (Node.js 24)
+        with:
+          fetch-depth: 0
 
-      - name: Install shellcheck and shfmt
+      - name: Install shellcheck, shfmt, jq, and test dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends shellcheck shfmt jq python3-cairo python3-pil python3-numpy
 
-      - name: Bash syntax and ShellCheck
+      - name: Bash/POSIX syntax, ShellCheck, and shfmt formatting
         run: |
-          mapfile -t sh_files < <(find . -maxdepth 4 -type f \( -name '*.sh' -o -path './configs/bin/nox-fuxi-h3-fix' -o -path './configs/bin/nox-first-boot' -o -path './configs/bin/nox-session-init' -o -path './configs/boot-hooks/*' \) | sort)
+          mapfile -t candidate_files < <(find . -maxdepth 4 -type f \( -name '*.sh' -o -path './i' -o -path './configs/bin/*' -o -path './configs/boot-hooks/*' \) ! -path '*/__pycache__/*' ! -name '*.pyc' | sort)
+          sh_files=()
+          posix_files=()
+          for f in "${candidate_files[@]}"; do
+            first_line="$(head -n1 "$f")"
+            case "$first_line" in
+              "#!/usr/bin/env bash"*|"#!/bin/bash"*)
+                sh_files+=("$f")
+                ;;
+              "#!/usr/bin/env sh"*|"#!/bin/sh"*)
+                sh_files+=("$f")
+                posix_files+=("$f")
+                ;;
+            esac
+          done
+          echo "Auditing ${#sh_files[@]} shell scripts (${#posix_files[@]} POSIX sh)..."
+          test "${#sh_files[@]}" -ge 30
           for f in "${sh_files[@]}"; do
             bash -n "$f"
           done
+          for f in "${posix_files[@]}"; do
+            sh -n "$f"
+          done
           shellcheck -x -P . "${sh_files[@]}"
+          shfmt -i 2 -ci -d "${sh_files[@]}"
 
-      - name: Run unit and contract tests
+      - name: Verify JSON configurations and release manifest integrity
         run: |
-          python3 -m unittest discover -s tests/unit -p 'test_*.py' -v
+          for jf in user_configuration.json manifests/release.json profiles/hardware.json configs/noctalia/palettes/ObsidianPurple.json; do
+            test -s "$jf"
+            jq empty "$jf"
+          done
+          ./scripts/build-release.sh --verify-only
+          (cd docs/evidence/v1.0.1 && sha256sum -c MANIFEST.sha256)
+
+      - name: Run unit, contract, security, and documentation tests
+        run: |
+          python3 -B -m unittest discover -s tests/unit -p 'test_*.py' -v
 
       - name: Secret and private data scan
         run: |
-          ! grep -rnE '[g]hp_|[g]ho_|[g]ithub_pat_|BEGIN (OPENSSH|RSA|EC) PRIVATE KEY' \
-            --exclude-dir=.git --exclude-dir=.github --exclude-dir=dist --exclude-dir=reports .
+          ! grep -rnE '[g]hp_|[g]ho_|[g]ithub_pat_|[A]KIA[0-9A-Z]{16}|BEGIN[[:space:]]+(OPENSSH|RSA|EC|DSA|PGP|PRIVATE)[[:space:]]+(PRIVATE[[:space:]]+)?KEY' \
+            --binary-files=without-match --exclude-dir=.git --exclude-dir=dist --exclude-dir=reports --exclude-dir=__pycache__ .

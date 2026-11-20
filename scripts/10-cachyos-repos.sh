@@ -18,10 +18,10 @@ nox_wait_pacman_lock
 # 1. Import and verify FULL fingerprint of CachyOS GPG key
 if ! pacman-key --finger "$CACHYOS_KEY_ID" 2>/dev/null | tr -d ' ' | grep -qF "$CACHYOS_KEY_FP"; then
   nox_info "Importando chave GPG CachyOS (${CACHYOS_KEY_ID})..."
-  pacman-key --recv-keys "$CACHYOS_KEY_ID" --keyserver hkps://keyserver.ubuntu.com \
-    || pacman-key --recv-keys "$CACHYOS_KEY_ID" --keyserver hkps://keys.openpgp.org \
-    || pacman-key --recv-keys "$CACHYOS_KEY_ID" --keyserver hkps://pgp.mit.edu \
-    || nox_die "Falha ao importar chave GPG do CachyOS."
+  pacman-key --recv-keys "$CACHYOS_KEY_ID" --keyserver hkps://keyserver.ubuntu.com ||
+    pacman-key --recv-keys "$CACHYOS_KEY_ID" --keyserver hkps://keys.openpgp.org ||
+    pacman-key --recv-keys "$CACHYOS_KEY_ID" --keyserver hkps://pgp.mit.edu ||
+    nox_die "Falha ao importar chave GPG do CachyOS."
 fi
 
 ACTUAL_FP="$(pacman-key --finger "$CACHYOS_KEY_ID" 2>/dev/null | tr -d ' ' | grep -oE '[0-9A-F]{40}' | head -n1 || true)"
@@ -31,8 +31,8 @@ pacman-key --lsign-key "$CACHYOS_KEY_ID"
 # 2. Discover current keyring, mirrorlists, and pacman fork packages dynamically (IPv4 + cdn77 fallback)
 INDEX_HTML=""
 for base_candidate in "https://mirror.cachyos.org/repo/x86_64/cachyos" "https://cdn77.cachyos.org/repo/x86_64/cachyos"; do
-  if INDEX_HTML="$(curl --proto '=https' --tlsv1.2 -fsSL --connect-timeout 8 --retry 3 --retry-delay 2 --max-time 25 "${base_candidate}/" 2>/dev/null)" \
-     || INDEX_HTML="$(curl -4 --proto '=https' --tlsv1.2 -fsSL --connect-timeout 8 --retry 3 --retry-delay 2 --max-time 25 "${base_candidate}/" 2>/dev/null)"; then
+  if INDEX_HTML="$(curl --proto '=https' --tlsv1.2 -fsSL --connect-timeout 8 --retry 3 --retry-delay 2 --max-time 25 "${base_candidate}/" 2>/dev/null)" ||
+    INDEX_HTML="$(curl -4 --proto '=https' --tlsv1.2 -fsSL --connect-timeout 8 --retry 3 --retry-delay 2 --max-time 25 "${base_candidate}/" 2>/dev/null)"; then
     if [[ -n "$INDEX_HTML" ]]; then
       CACHYOS_BASE_URL="$base_candidate"
       break

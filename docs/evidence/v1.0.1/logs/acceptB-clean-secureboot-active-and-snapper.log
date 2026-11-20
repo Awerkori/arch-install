@@ -1,0 +1,82 @@
+=== 1. ACTIVE UEFI SECURE BOOT ENFORCEMENT AFTER REBOOT ===
+[sudo] password for noxdev: Installed:	✓ sbctl is installed
+Owner GUID:	0b661124-6dd8-4188-b816-6bc207a9d8fb
+Setup Mode:	✓ Disabled
+Secure Boot:	✓ Enabled
+Vendor Keys:	microsoft
+      Firmware: n/a (n/a)
+   Secure Boot: enabled (user)
+  Current Entry: Arch-Linux.Project-Nox
+[PASS] Stage 1 (Key Preparation): sbctl per-install private keys present
+[PASS] Stage 3 (Transaction State): no dirty Limine transaction marker
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/limine/limine_x64.efi is signed
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/ee2397ec1a1d41228abf12fa4d3f0a5a/linux-cachyos/vmlinuz is signed
+[PASS] Stage 3 (Limine Policy): /etc/default/limine enables verification + config enrollment
+[PASS] Stage 3 (Config Syntax): /boot/limine.conf all kernel/initramfs paths carry BLAKE2 checksums
+[PASS] Stage 3 (Asset Integrity): all boot():/ files referenced in /boot/limine.conf match their BLAKE2B hashes on disk
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (cc7cd169245f92db...) enrolled in /boot/EFI/limine/limine_x64.efi
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (cc7cd169245f92db...) enrolled in /boot/EFI/BOOT/BOOTX64.EFI
+[PASS] Stage 4 (Firmware Key Enrollment): Keys enrolled in UEFI NVRAM (User Mode; Setup Mode Disabled)
+[PASS] Stage 5 (UEFI Enforcement): UEFI Secure Boot is actively enforced by firmware
+[NOX SECUREBOOT] OK: chaves verificadas, Limine/kernel assinados, hash BLAKE2B de limine.conf inscrito e estado do firmware valido.
+REQUIRE_ACTIVE_AFTER_REBOOT_EXIT=0
+LIMINE_INTEGRITY_EXIT=0
+=== 2. SNAPPER PAIR 1 (PRE+POST) + CLEANUP + SYNC + NORMALIZE ===
+Created Pair 1: PRE=1 POST=2
+[1;32mUpdated:[0m /boot/limine.conf
+Config file BLAKE2B successfully enrolled.
+✓ Signed /boot/EFI/limine/limine_x64.efi
+Config file BLAKE2B successfully enrolled.
+bash: line 7: nox-limine-normalize: command not found
+Config file BLAKE2B successfully enrolled.
+✓ Signed /boot/EFI/limine/limine_x64.efi
+# │ Type   │ Pre # │ Date                        │ User │ Cleanup │ Description       │ Userdata
+──┼────────┼───────┼─────────────────────────────┼──────┼─────────┼───────────────────┼─────────
+0 │ single │       │                             │ root │         │ current           │
+1 │ pre    │       │ Fri 20 Nov 2026 09:27:03 AM │ root │ number  │ nox-clean-audit-1 │
+2 │ post   │     1 │ Fri 20 Nov 2026 09:27:03 AM │ root │ number  │ nox-clean-audit-1 │
+=== 3. SNAPPER PAIR 2 (PRE+POST) + MAX-2 PRUNING VERIFICATION ===
+Created Pair 2: PRE=3 POST=4
+[1;32mUpdated:[0m /boot/limine.conf
+Config file BLAKE2B successfully enrolled.
+✓ Signed /boot/EFI/limine/limine_x64.efi
+Config file BLAKE2B successfully enrolled.
+bash: line 7: nox-limine-normalize: command not found
+Config file BLAKE2B successfully enrolled.
+✓ Signed /boot/EFI/limine/limine_x64.efi
+--- snapper list (must retain strictly <= 2 snapshots: latest pair only) ---
+# │ Type   │ Pre # │ Date                        │ User │ Cleanup │ Description       │ Userdata
+──┼────────┼───────┼─────────────────────────────┼──────┼─────────┼───────────────────┼─────────
+0 │ single │       │                             │ root │         │ current           │
+1 │ pre    │       │ Fri 20 Nov 2026 09:27:03 AM │ root │ number  │ nox-clean-audit-1 │
+2 │ post   │     1 │ Fri 20 Nov 2026 09:27:03 AM │ root │ number  │ nox-clean-audit-1 │
+3 │ pre    │       │ Fri 20 Nov 2026 09:27:03 AM │ root │ number  │ nox-clean-audit-2 │
+4 │ post   │     3 │ Fri 20 Nov 2026 09:27:03 AM │ root │ number  │ nox-clean-audit-2 │
+--- limine-snapper-list ---
+bash: line 12: nox-limine-snapper-restore: command not found
+
+ ID │ Date                │ Description       
+────┼─────────────────────┼───────────────────
+ 1  │ 2026-11-20 09:27:03 │ nox-clean-audit-1 
+ 2  │ 2026-11-20 09:27:03 │ nox-clean-audit-1 
+--- post-pruning Secure Boot & Integrity check ---
+POST_PRUNE_INTEGRITY_EXIT=0
+[PASS] Stage 1 (Key Preparation): sbctl per-install private keys present
+[PASS] Stage 3 (Transaction State): no dirty Limine transaction marker
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/limine/limine_x64.efi is signed
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/ee2397ec1a1d41228abf12fa4d3f0a5a/limine_history/vmlinuz_xxh_1e68f16c2e7455d9 is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/ee2397ec1a1d41228abf12fa4d3f0a5a/linux-cachyos/vmlinuz is signed
+[PASS] Stage 3 (Limine Policy): /etc/default/limine enables verification + config enrollment
+[PASS] Stage 3 (Config Syntax): /boot/limine.conf all kernel/initramfs paths carry BLAKE2 checksums
+[PASS] Stage 3 (Asset Integrity): all boot():/ files referenced in /boot/limine.conf match their BLAKE2B hashes on disk
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (016d2697dc6df11f...) enrolled in /boot/EFI/limine/limine_x64.efi
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (016d2697dc6df11f...) enrolled in /boot/EFI/BOOT/BOOTX64.EFI
+[PASS] Stage 4 (Firmware Key Enrollment): Keys enrolled in UEFI NVRAM (User Mode; Setup Mode Disabled)
+[PASS] Stage 5 (UEFI Enforcement): UEFI Secure Boot is actively enforced by firmware
+[NOX SECUREBOOT] OK: chaves verificadas, Limine/kernel assinados, hash BLAKE2B de limine.conf inscrito e estado do firmware valido.
+POST_PRUNE_REQUIRE_ACTIVE_EXIT=0
+=== 4. SPAWN KITTY STATUS CARD FOR SCREENSHOT ===
+2742 kitty --hold sh -c cat /tmp/nox-clean-shot-card.txt; sleep 120
+__NOX_EXIT=0

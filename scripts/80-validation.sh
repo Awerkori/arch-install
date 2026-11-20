@@ -16,7 +16,8 @@ fi
 
 FAILS=0
 check() {
-  local name="$1"; shift
+  local name="$1"
+  shift
   if "$@"; then
     nox_info "[PASS] $name"
   else
@@ -51,6 +52,7 @@ check "limine.conf contem Arch Linux -> Project Nox (kernel-id=linux-cachyos), t
 check "hook btrfs-overlayfs presente em /etc/mkinitcpio.conf" bash -c "grep -Eq '^HOOKS=.*(btrfs-overlayfs|sd-btrfs-overlayfs)' /etc/mkinitcpio.conf"
 check "/.snapshots montado como subvolume Btrfs" bash -c "mountpoint -q /.snapshots && btrfs subvolume show /.snapshots >/dev/null"
 check "cadeia criptografica Limine + sbctl validada (nox-secureboot-verify)" /usr/local/bin/nox-secureboot-verify
+check "estado limpo e integro do Limine (nox-limine-integrity --verify)" /usr/local/libexec/nox/nox-limine-integrity --verify
 
 # 1b. System language (en_CA.UTF-8 + en_US fallback), timezone (America/Sao_Paulo), keyboard + cedilla, performance configs
 check "idioma padrao en_CA.UTF-8 com fallback en_US configurado e gerado" bash -c "grep -qx 'LANG=en_CA.UTF-8' /etc/locale.conf && grep -qx 'LANGUAGE=en_CA:en_US:en' /etc/locale.conf && locale -a | grep -qiE '^en_CA\.utf-?8\$' && locale -a | grep -qiE '^en_US\.utf-?8\$'"
@@ -106,7 +108,7 @@ while IFS=: read -r uname _uid _gid _home ushell; do
   check "permissoes .local, ProtonPlus visivel e overlays launcher para $uname" bash -c "test \"\$(stat -c '%U' '${_home}/.local')\" = '$uname' && test \"\$(stat -c '%U' '${_home}/.local/share')\" = '$uname' && grep -qx 'NoDisplay=true' '${_home}/.local/share/applications/limine-snapper-restore.desktop' && test ! -e '${_home}/.local/share/applications/com.vysp3r.ProtonPlus.desktop'"
 done < <(nox_list_human_users)
 
-if (( FAILS > 0 )); then
+if ((FAILS > 0)); then
   nox_die "Validacao offline falhou com ${FAILS} erro(s)."
 fi
 nox_info "Todas as checagens offline de 80-validation passaram!"

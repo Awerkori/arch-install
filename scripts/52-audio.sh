@@ -90,8 +90,8 @@ while IFS=: read -r uname _uid _gid uhome _shell; do
   [[ -n "$uname" && -d "$uhome" ]] || continue
   rm -rf "${uhome}/.config/hushmic"
   rm -f "${uhome}/.config/autostart"/hushmic*.desktop
-  if [[ -f "${uhome}/.local/state/wireplumber/default-nodes" ]] && \
-     grep -q 'hushmic_source' "${uhome}/.local/state/wireplumber/default-nodes"; then
+  if [[ -f "${uhome}/.local/state/wireplumber/default-nodes" ]] &&
+    grep -q 'hushmic_source' "${uhome}/.local/state/wireplumber/default-nodes"; then
     sed -i '/hushmic_source/d' "${uhome}/.local/state/wireplumber/default-nodes"
   fi
 done < <(nox_list_human_users)

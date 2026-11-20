@@ -19,7 +19,10 @@ evidence/raw/
 *.der
 sbctl-keys/
 *.log
+!docs/evidence/**/*.log
 __pycache__/
+*.pyc
+*.pyo
 .pytest_cache/
 tests/vm/work/
 dist/

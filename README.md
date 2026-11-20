@@ -1,143 +1,103 @@
 <p align="center">
-  <img src="configs/icons/nox-emblem.png" alt="Emblema Nox Archinstall" width="112" />
+  <img src="configs/icons/nox-emblem.png" alt="Nox Archinstall" width="132" />
 </p>
 
 <h1 align="center">Nox Archinstall</h1>
 
 <p align="center">
-  <strong>Minha instalação pessoal do Arch Linux</strong>
+  <em>Instalação pessoal automatizada de Arch Linux · Kernel CachyOS znver4, Limine, Btrfs Snapper, Secure Boot e Umbriel / Noctalia</em>
 </p>
 
 <p align="center">
-  <a href="#sobre">Sobre</a> ·
-  <a href="#desktop-e-interface">Desktop</a> ·
-  <a href="#sistema-e-aplicativos">Sistema e aplicativos</a> ·
-  <a href="#armazenamento-e-boot">Armazenamento e boot</a> ·
-  <a href="#hardware-utilizado">Hardware</a> ·
-  <a href="#instalação">Instalação</a> ·
-  <a href="#secure-boot-e-documentação">Secure Boot</a> ·
-  <a href="#créditos-e-licença">Créditos</a>
+  <a href="https://github.com/Awerkori/arch-install/actions/workflows/ci.yml"><img src="https://github.com/Awerkori/arch-install/actions/workflows/ci.yml/badge.svg?branch=hardening%2Fv1.0.1" alt="Nox Archinstall CI" /></a>
+  <a href="https://github.com/Awerkori/arch-install/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/release-v1.0.0%20est%C3%A1vel-7c3aed?style=flat-square" alt="Release estável v1.0.0" /></a>
+  <img src="https://img.shields.io/badge/arch-x86--64--v4%20%C2%B7%20linux--cachyos-5b21b6?style=flat-square" alt="Arquitetura x86-64-v4 e linux-cachyos" />
+  <img src="https://img.shields.io/badge/boot-Limine%20%C2%B7%20BLAKE2B%20%C2%B7%20sbctl-a855f7?style=flat-square" alt="Limine BLAKE2B e sbctl" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-1f1635?style=flat-square" alt="Licença AGPL-3.0" /></a>
 </p>
 
-O **Nox Archinstall** é meu projeto pessoal de instalação automatizada do Arch Linux. Criei este repositório para conseguir reinstalar meu computador com os programas, atalhos, aparência e ajustes de sistema que uso no dia a dia, sem precisar refazer tudo manualmente a cada formatação.
+<p align="center">
+  <img src="docs/screenshots/03-desktop-showcase.png" alt="Nox Archinstall — Desktop Umbriel + Noctalia Shell + Kitty/Fastfetch (Obsidian Purple)" width="100%" />
+</p>
 
-O projeto roda diretamente a partir da ISO oficial do Arch Linux e foi feito sob medida para a minha máquina. Deixei o código aberto para quem quiser estudar, adaptar ou aproveitar partes da configuração, mas ele não foi testado em outros computadores físicos.
+**Nox Archinstall** (internamente *Project Nox*) é o instalador pessoal e reproduzível do meu próprio desktop Arch Linux — não uma distribuição genérica — projetado especificamente para plataforma **AMD Zen 4/5 (`x86-64-v4`)**, placa-mãe **MSI PRO B650M-P**, **Ryzen 5 7500F**, **Radeon RX 9060 XT** e **Intel AX210**.
 
-![Desktop principal — Umbriel e Noctalia Shell](docs/screenshots/03-desktop-first-login.png)
-
----
-
-## Sobre
-
-Sempre que eu formatava o PC, precisava repetir a mesma rotina: particionar o SSD em Btrfs, criar subvolumes, adicionar os repositórios do CachyOS, configurar o Limine, instalar o ambiente Wayland, alinhar os dois monitores, acertar o volume do headset USB e aplicar temas escuros em cada programa.
-
-Para resolver isso de forma simples, montei um assistente no terminal (`bootstrap/nox-install.py`) que faz apenas três perguntas — qual SSD será formatado, qual será o nome de usuário e qual será a senha. A partir daí, a instalação particiona o disco, baixa os pacotes oficiais e entrega o sistema pronto logo no primeiro boot.
+Ele parte da **ISO oficial do Arch Linux** (`archinstall 4.5`) para garantir base limpa e auditável, automatizando em seguida todo o pós-instalação: repositório CachyOS `znver4`, kernel único **`linux-cachyos`**, compositor Wayland **`Umbriel`** com **`Noctalia Shell`** (`Obsidian Purple`), layout Btrfs resiliente com **snapshots PRE/POST automáticos** (`Snapper` + `snap-pac` + `limine-snapper-sync`) e **restauração assistida** (`Limine` / `limine-snapper-restore`), além de cadeia UEFI **`sbctl`** com verificação **BLAKE2B** do `limine.conf`.
 
 ---
 
-## Desktop e interface
+## Galeria do Sistema
 
-O ambiente gráfico usa o compositor Wayland **Umbriel** (configurado no layout `dwindle`) junto com o **Noctalia Shell**, o **Noctalia Greeter** (`greetd`) e a **Noctalia Lock Screen**. Toda a interface segue o tema escuro **Obsidian Purple**, com fundo escuro (`#09080d`) e detalhes em roxo e dourado que se mantêm do menu de boot até o terminal, aplicativos GTK/Qt e navegador.
+| Bootloader Limine (`Project Nox`) | Login Gráfico (`Noctalia Greeter`) |
+| :---: | :---: |
+| ![Boot Limine](docs/screenshots/01-limine-boot.png) | ![Noctalia Greeter](docs/screenshots/02-noctalia-greeter.png) |
+| **Launcher Minimalista (`Obsidian Purple`)** | **Bloqueio de Sessão (`Noctalia Lock Screen`)** |
+| ![Noctalia Launcher](docs/screenshots/04-noctalia-launcher.png) | ![Noctalia Lock Screen](docs/screenshots/05-noctalia-lockscreen.png) |
 
-Nos dois monitores, o `mpvpaper` reproduz wallpapers animados sincronizados entre a tela principal horizontal e a tela secundária vertical. O menu de aplicativos do Noctalia (`Super`) foi configurado para mostrar inicialmente apenas os programas de uso diário, deixando utilitários técnicos de configuração acessíveis pela busca ou pelo comando `/tools`.
+---
 
-| Menu de boot (Limine) | Tela de login (Noctalia Greeter) |
+## Recursos Instalados
+
+| Camada | Especificação Técnica |
 |---|---|
-| ![Menu Limine](docs/screenshots/01-limine-boot.png) | ![Noctalia Greeter](docs/screenshots/02-noctalia-greeter.png) |
-
-| Launcher de aplicativos | Tela de bloqueio (Lock Screen) |
-|---|---|
-| ![Launcher Noctalia](docs/screenshots/04-noctalia-launcher.png) | ![Noctalia Lock Screen](docs/screenshots/05-noctalia-lockscreen.png) |
-
----
-
-## Sistema e aplicativos
-
-Sobre a base oficial do **Arch Linux**, o sistema utiliza o kernel **`linux-cachyos`** (como único kernel instalado) e os repositórios do **CachyOS** compilados para processadores **AMD Zen 4 (`x86-64-v4`)**, com o gerenciador `pacman` do CachyOS e o `paru`. A parte gráfica roda sobre a pilha aberta **AMD Mesa/RADV** (64 e 32 bits), acompanhada do escalonador `scx_lavd` (`scx_loader`), `ananicy-cpp`, `irqbalance`, `GameMode`, `NetworkManager` (`iwd`) e controle de congestionamento TCP `BBR` com fila `fq`.
-
-Programas incluídos por padrão:
-
-- **Dia a dia:** **Firefox** (`firefox-pure` do CachyOS, exibido como Firefox), **Kitty** (terminal principal com `bash`) e **Luciole** (`luciole-git`, gerenciador de arquivos).
-- **Monitoramento e atualização:** **Fastfetch** (resumo do sistema ao abrir o terminal), **btop** e **Topgrade** (atualização geral integrada aos snapshots do Snapper e ao ProtonPlus).
-- **Jogos:** **ProtonPlus** com a camada **`proton-cachyos-slr`** pré-instalada.
+| **Sistema Base** | Arch Linux oficial (`en_CA.UTF-8`, `America/Sao_Paulo`, `sudo` via `wheel`, `root` bloqueado) |
+| **Kernel** | `linux-cachyos` único otimizado para `x86-64-v4` (`znver4`), sem kernels concorrentes após instalação |
+| **Armazenamento** | GPT UEFI (`/boot` 4 GiB FAT32 + Btrfs `zstd:3`: `@`, `@home`, `@log`, `@pkg`, `@.snapshots`, `@swap` + `zram0`) |
+| **Boot** | **Limine** com verificação **BLAKE2B** de kernel/initramfs/`limine.conf` (`nox-limine-integrity`) |
+| **Segurança** | Chaves locais individuais via **`sbctl`**, `UMASK 022` isolado no alvo e verificações fail-closed |
+| **Snapshots** | **Snapshots PRE/POST automáticos** (`Snapper` `root` máx. 2 + `snap-pac` + `limine-snapper-sync`) e **restauração assistida** (`Limine` / `limine-snapper-restore`) |
+| **Desktop** | **Umbriel** (`dwindle`), **Noctalia Shell / Greeter / Lock Screen**, **Obsidian Purple** e `mpvpaper` |
+| **Aplicativos** | **Kitty**, **Bash**, **Luciole**, **Firefox Pure** (`CachyOS`), **btop**, **fastfetch**, `nox-topgrade` + **ProtonPlus** |
 
 ---
 
-## Armazenamento e boot
+## Como Instalar (`v1.0.0` Estável Publicada)
 
-O SSD é formatado em **Btrfs** com compressão `zstd:3` e dividido em subvolumes independentes (`@`, `@home`, `@log`, `@pkg`, `@.snapshots` e `@swap`), separando o sistema raiz dos arquivos pessoais em `/home`. Para memória virtual, o sistema combina **ZRAM** comprimida em RAM (`zstd`, prioridade alta) com um **swapfile Btrfs NOCOW** dedicado em disco e proteção `systemd-oomd`.
+> **Estado das versões:** a release atualmente **publicada e disponível para uso imediato** é a **[`v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0)**. A revisão **`v1.0.1`** permanece em homologação no [PR #1](https://github.com/Awerkori/arch-install/pull/1) (branch `hardening/v1.0.1`, ainda **não publicada**; sua cadeia determinística para o futuro lançamento está em [`manifests/release.json`](manifests/release.json)).
 
-Antes e depois de atualizações de pacotes ou execuções do Topgrade, o **Snapper** cria snapshots automáticos (`PRE`/`POST`) e os envia para o menu do bootloader **Limine**, permitindo iniciar o sistema diretamente em um snapshot anterior se algo der errado. O Limine também verifica o hash **BLAKE2B** do arquivo `/boot/limine.conf` e já deixa os binários EFI e o kernel assinados com chaves locais geradas pelo **`sbctl`** durante a instalação.
+> **AVISO DESTRUTIVO:** O disco selecionado durante a instalação será **formatado integralmente** e **todos os dados existentes serão apagados permanentemente**. Faça backup antes de continuar.
 
----
-
-## Hardware utilizado
-
-**O Nox Archinstall foi desenvolvido especificamente para o computador pessoal abaixo. A instalação foi testada em máquinas virtuais, mas seu funcionamento em outros computadores físicos ainda não foi comprovado.**
-
-| Componente | Modelo |
-|---|---|
-| Processador | AMD Ryzen 5 7500F |
-| Placa-mãe | MSI PRO B650M-P |
-| Placa de vídeo | Radeon RX 9060 XT |
-| Wi-Fi / Bluetooth | Intel AX210 |
-| Monitor principal | Samsung Odyssey G5 |
-| Monitor secundário | AOC 24B35 |
-| Headset | Havit Fuxi H3 |
-| Teclado | AULA F75 |
-
-Vários ajustes do repositório foram pensados especificamente para essas peças: repositórios que exigem instruções `x86-64-v4` (Zen 4), drivers AMD RADV, posição automática do Samsung Odyssey G5 (`2560x1440@165Hz` em `DP-1`) ao lado do AOC vertical (`1920x1080@100Hz` rotacionado a 90° em `HDMI-A-1`), correção de volume digital ao conectar o receptor USB do Havit Fuxi H3 e layout de teclado `us-intl` com `ç` para o AULA F75. Os pré-requisitos obrigatórios estão descritos em [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
-
----
-
-## Instalação
-
-> **Atenção: o disco selecionado será formatado e seus dados serão apagados. Faça backup antes de continuar.**
-
-O assistente pergunta qual SSD será utilizado, o nome do seu usuário e a senha (que também autoriza o `sudo`, mantendo a conta `root` bloqueada e configurando o hostname padrão `Nox-Device-PC`). Todo o restante da instalação acontece automaticamente.
-
-1. Baixe a ISO oficial do Arch Linux compatível (`archlinux-2026.11.01-x86_64.iso`, com `archinstall 4.5`).
-2. Inicie o computador pelo pendrive em modo **UEFI** (com o **Secure Boot desativado** na BIOS).
-3. Conecte-se à internet (por cabo de rede ou pelo Wi-Fi usando `iwctl`).
-4. No terminal da ISO, execute o **comando curto** abaixo para baixar o iniciador oficial do repositório, validar o SHA-256 do instalador e abrir o assistente:
+Na **ISO oficial do Arch Linux** (`archlinux-2026.11.01-x86_64.iso`, modo UEFI 64 bits, Secure Boot temporariamente desativado na BIOS e conexão de rede ativa), execute este **único comando público oficial da release publicada `v1.0.0`**:
 
 ```bash
-curl -fsSL https://github.com/Awerkori/arch-install/raw/main/i | sh
+sh -c 'set -eu; d=$(umask 077; mktemp -d); trap "rm -rf \"$d\"" EXIT INT TERM; \
+curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-install.py -o "$d/nox-install.py"; \
+printf "%s  %s/nox-install.py\n" "fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10" "$d" | sha256sum -c -; \
+curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/user_configuration.json -o "$d/nox-cfg.json"; \
+printf "%s  %s/nox-cfg.json\n" "6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c" "$d" | sha256sum -c -; \
+umask 022; python3 "$d/nox-install.py" --config "$d/nox-cfg.json"'
 ```
 
-Se preferir baixar o script Python manualmente em duas etapas sem usar o atalho `/raw/main/i`, utilize o **comando completo original** (ambos iniciam exatamente o mesmo instalador):
-
-```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/main/bootstrap/nox-install.py -o /tmp/nox-install.py && python3 /tmp/nox-install.py
-```
-
-5. Escolha o SSD na lista, digite o nome do dispositivo para confirmar, informe usuário e senha e aguarde a conclusão antes de reiniciar.
-
-Para instruções passo a passo sobre preparação do pendrive, conexão Wi-Fi e primeiro boot, consulte o **[Guia de Instalação (`docs/INSTALLATION.md`)](docs/INSTALLATION.md)**.
+O assistente exibe **4 etapas numeradas** (`[1/4]` seleção do disco → `[2/4]` confirmação exata do dispositivo → `[3/4]` usuário → `[4/4]` senha e confirmação) seguidas pela **confirmação destrutiva final (`[s/N]`)** antes de alterar qualquer partição. Ao concluir, execute `reboot`, remova a mídia USB e consulte [`docs/INSTALLATION.md`](docs/INSTALLATION.md) para detalhes completos (Wi-Fi `iwctl`, primeiro boot e inspeção passo a passo).
 
 ---
 
-## Secure Boot e documentação
+## Documentação
 
-As chaves locais do `sbctl` e a assinatura do Limine e do kernel já são preparadas durante a instalação, mas a ativação do Secure Boot exige configuração posterior na BIOS da placa-mãe.
-
-- **Guia geral de Secure Boot — [`docs/SECURE-BOOT.md`](docs/SECURE-BOOT.md)**  
-  Explica o funcionamento das chaves UEFI (`PK`, `KEK`, `db`, `dbx`, Setup Mode, Option ROM e BLAKE2B) e o procedimento geral simplificado do projeto.
-
-- **Guia específico para MSI PRO B650M-P — [`docs/SECURE-BOOT-MSI.md`](docs/SECURE-BOOT-MSI.md)**  
-  Detalha o procedimento para a placa-mãe MSI PRO B650M-P com o Ryzen 5 7500F (sem vídeo integrado) e a Radeon RX 9060 XT, incluindo chaves Microsoft/OEM, Setup Mode, proteção da Option ROM da GPU e correção do alerta `FQ0001`.
-
-- **Guia de recuperação — [`docs/RECOVERY.md`](docs/RECOVERY.md)**  
-  Procedimentos passo a passo para recuperar o boot pela ISO oficial, restaurar snapshots do Snapper/Limine, ressincronizar assinaturas EFI e resetar o CMOS.
-
-Outros documentos do repositório:
-- **Checklist pós-instalação no hardware físico:** [`docs/POST_INSTALL_CHECKS.md`](docs/POST_INSTALL_CHECKS.md)
-- **Mapa de atalhos de teclado:** [`docs/KEYBINDS_MIGRATION.md`](docs/KEYBINDS_MIGRATION.md)
+| Guia | Assunto |
+|---|---|
+| [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Guia passo a passo na ISO, Wi-Fi `iwctl` e hashes congelados da `v1.0.0` |
+| [`docs/KEYBINDS_MIGRATION.md`](docs/KEYBINDS_MIGRATION.md) | Atalhos completos do compositor **Umbriel** e launcher **Noctalia** |
+| [`docs/SECURE-BOOT-MSI.md`](docs/SECURE-BOOT-MSI.md) | Guia físico para **MSI PRO B650M-P** (`FQ0001`, `--microsoft`, `JBAT1`, Fases A–F) |
+| [`docs/SECURE-BOOT.md`](docs/SECURE-BOOT.md) | Arquitetura geral de **Secure Boot**, `sbctl` e fluxo de 5 estágios |
+| [`docs/RECOVERY.md`](docs/RECOVERY.md) | Manual de recuperação em 10 cenários (snapshots, `limine.conf`, `arch-chroot`) |
+| [`docs/POST_INSTALL_CHECKS.md`](docs/POST_INSTALL_CHECKS.md) | Checklist físico pós-instalação (`RX 9060 XT`, monitores, `AX210`, `Fuxi H3`) |
+| [`docs/INSTALLED-COMPONENTS.md`](docs/INSTALLED-COMPONENTS.md) | Inventário de pacotes ([`INSTALLED-PACKAGES.tsv`](docs/INSTALLED-PACKAGES.tsv)) e unidades `systemd` |
+| [`docs/TOPGRADE-PROTON-INTEGRATION.md`](docs/TOPGRADE-PROTON-INTEGRATION.md) | Atualizações unificadas (`nox-topgrade` + `paru` + `ProtonPlus` + Proton-CachyOS) |
+| [`docs/FINAL-AUDIT-REPORT.md`](docs/FINAL-AUDIT-REPORT.md) | Relatório técnico de auditoria, testes de contrato e homologação em VMs limpas |
+| [`docs/CREDITS-AND-LICENSES.md`](docs/CREDITS-AND-LICENSES.md) | Autoria própria (`AGPL-3.0`) e créditos dos projetos upstream |
 
 ---
 
-## Créditos e licença
+## Limitações Conhecidas
 
-Este projeto utiliza e configura softwares desenvolvidos pelas comunidades do **Arch Linux**, **`archinstall`**, **CachyOS**, **Limine**, **`sbctl`**, **Snapper**, **Umbriel**, **Noctalia**, **Luciole**, **Kitty**, **Firefox**, **`mpvpaper`**, **btop**, **Fastfetch**, **Topgrade** e **ProtonPlus**. Os créditos detalhados e as licenças de cada componente estão em [`docs/CREDITS-AND-LICENSES.md`](docs/CREDITS-AND-LICENSES.md).
+- **Hardware-alvo específico:** exige CPU **`x86-64-v4`** (AMD Zen 4 / Zen 5) e **UEFI 64 bits**; perfis calibrados para **MSI PRO B650M-P (`MS-7E27`)**, **Ryzen 5 7500F**, **Radeon RX 9060 XT**, **Intel AX210** e monitores Samsung Odyssey G5 (`DP-1`) + AOC 24B35 (`HDMI-A-1`).
+- **ISO homologada:** validado exclusivamente sobre a ISO oficial **`archlinux-2026.11.01-x86_64.iso`** com **`archinstall 4.5`**.
+- **Validação física pendente:** toda a validação ponta a ponta (incluindo Secure Boot ativo e rollback durável PRE com preservação de `@home`) foi comprovada em VMs QEMU/KVM OVMF; testes presenciais em hardware real (`RX 9060 XT`, monitores DP/HDMI, Wi-Fi/Bluetooth `AX210`, headset `Fuxi H3`, teclado `AULA F75` e política `FQ0001` na BIOS MSI PRO B650M-P) permanecem pendentes em [`docs/POST_INSTALL_CHECKS.md`](docs/POST_INSTALL_CHECKS.md).
+- **Modelo de confiança:** sem chave PGP offline pré-instalada na ISO do Arch Linux, a integridade baseia-se em HTTPS/TLSv1.2+ sem downgrade e verificação SHA-256 explícita antes da execução.
 
-Os scripts e configurações próprios deste repositório são distribuídos sob a licença **[GNU AGPLv3](LICENSE)**.
+---
+
+## Créditos e Licença
+
+Scripts, hooks, assistente e identidade visual originais deste repositório são licenciados sob **[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE)**. Créditos integrais dos componentes upstream pertencem aos projetos **Arch Linux**, **CachyOS**, **Limine**, **Umbriel**, **Noctalia Shell**, **sbctl**, **Snapper**, **snap-pac**, **limine-snapper-sync**, **Topgrade** e **ProtonPlus** ([`docs/CREDITS-AND-LICENSES.md`](docs/CREDITS-AND-LICENSES.md)).

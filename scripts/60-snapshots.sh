@@ -10,7 +10,8 @@ if $NOX_DRY_RUN; then
 fi
 
 nox_wait_pacman_lock
-pacman -S --needed --noconfirm snapper snap-pac limine-snapper-sync inotify-tools xxhash
+# Skip pre/post snap-pac hooks during initial installation before root snapper config and /etc/snap-pac.ini exist.
+SNAP_PAC_SKIP=y pacman -S --needed --noconfirm snapper snap-pac limine-snapper-sync inotify-tools xxhash
 
 BOOT_MP="/boot"
 if ! findmnt /boot >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
@@ -34,7 +35,7 @@ if ! snapper --no-dbus -c root get-config >/dev/null 2>&1; then
     mkdir -p /.snapshots
     SNAP_UUID="$(blkid -s UUID -o value "$SNAP_DEV" 2>/dev/null || true)"
     if [[ "$SNAP_SUBVOL" =~ ^/?@\.snapshots$ ]] && [[ -n "$SNAP_UUID" ]] && ! awk '$2 == "/.snapshots" {found=1} END{exit !found}' /etc/fstab 2>/dev/null; then
-      printf 'UUID=%s\t/.snapshots\tbtrfs\trw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvol=/@.snapshots\t0 0\n' "$SNAP_UUID" >> /etc/fstab
+      printf 'UUID=%s\t/.snapshots\tbtrfs\trw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvol=/@.snapshots\t0 0\n' "$SNAP_UUID" >>/etc/fstab
     fi
     mount /.snapshots 2>/dev/null || mount -o "subvol=${SNAP_SUBVOL}" "$SNAP_DEV" /.snapshots
   else
@@ -44,13 +45,19 @@ if ! snapper --no-dbus -c root get-config >/dev/null 2>&1; then
     ROOT_DEV="$(findmnt -no SOURCE / | sed 's/\[.*\]//')"
     ROOT_UUID="$(blkid -s UUID -o value "$ROOT_DEV" 2>/dev/null || true)"
     TOP_MNT="$(mktemp -d)"
+    cleanup_top_mnt() {
+      umount "$TOP_MNT" 2>/dev/null || true
+      rmdir "$TOP_MNT" 2>/dev/null || true
+    }
+    trap cleanup_top_mnt EXIT INT TERM HUP
     if [[ -n "$ROOT_DEV" ]] && mount -o subvolid=5 "$ROOT_DEV" "$TOP_MNT" 2>/dev/null; then
       [[ -e "${TOP_MNT}/@.snapshots" ]] || btrfs subvolume create "${TOP_MNT}/@.snapshots"
       umount "$TOP_MNT"
     fi
     rmdir "$TOP_MNT" 2>/dev/null || true
+    trap - EXIT INT TERM HUP
     if ! awk '$2 == "/.snapshots" {found=1} END{exit !found}' /etc/fstab 2>/dev/null && [[ -n "$ROOT_UUID" ]]; then
-      printf 'UUID=%s\t/.snapshots\tbtrfs\trw,noatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvol=/@.snapshots\t0 0\n' "$ROOT_UUID" >> /etc/fstab
+      printf 'UUID=%s\t/.snapshots\tbtrfs\trw,noatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvol=/@.snapshots\t0 0\n' "$ROOT_UUID" >>/etc/fstab
     fi
     mount /.snapshots 2>/dev/null || { [[ -n "$ROOT_DEV" ]] && mount -o "subvol=/@.snapshots" "$ROOT_DEV" /.snapshots; }
   fi
@@ -59,7 +66,7 @@ fi
 # Inform limine-snapper-sync when /.snapshots is backed by top-level /@.snapshots
 if findmnt -no OPTIONS /.snapshots 2>/dev/null | tr ',' '\n' | grep -qE '^subvol=/?@\.snapshots$'; then
   sed -i '/^ROOT_SNAPSHOTS_PATH=/d' /etc/default/limine
-  printf 'ROOT_SNAPSHOTS_PATH="/@.snapshots"\n' >> /etc/default/limine
+  printf 'ROOT_SNAPSHOTS_PATH="/@.snapshots"\n' >>/etc/default/limine
 fi
 
 # 2. Enforce retention policy on root: max 2 number snapshots (PRE+POST), no timeline
@@ -110,18 +117,22 @@ systemctl enable limine-snapper-sync.service
 
 # Ensure //Snapshots placeholder exists under OS block in limine.conf if not added yet
 if [[ -f "${BOOT_MP}/limine.conf" ]] && ! grep -qE '^[[:space:]]*/+Snapshots' "${BOOT_MP}/limine.conf"; then
-  printf '  //Snapshots\n' >> "${BOOT_MP}/limine.conf"
-  command -v limine-enroll-config >/dev/null 2>&1 && limine-enroll-config >/dev/null 2>&1 || true
-  [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true
+  printf '  //Snapshots\n' >>"${BOOT_MP}/limine.conf"
 fi
 
 # 8. Prune any excess initial snapshots left by base installation
-"${NOX_LIBEXEC_DIR}/nox-snapper-cleanup" || true
+"${NOX_LIBEXEC_DIR}/nox-snapper-cleanup"
 
-# 9. Sync Limine snapshot entries cleanly offline/target & keep config enrollment + EFI signatures updated
+# 9. Sync Limine snapshot entries cleanly offline/target & keep config enrollment + EFI signatures converged fail-closed
 limine-snapper-sync || nox_warn "limine-snapper-sync retornou aviso na sincronizacao inicial (sem snapshots iniciais ainda)."
-command -v limine-enroll-config >/dev/null 2>&1 && limine-enroll-config >/dev/null 2>&1 || true
-[[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true
+if [[ -f "${BOOT_MP}/limine.conf" ]]; then
+  if [[ -d /sys/firmware/efi ]]; then
+    ESP_PATH="${BOOT_MP}" "${NOX_LIBEXEC_DIR}/nox-limine-integrity" --force || nox_die "Falha na sincronizacao/assinatura Limine apos 60-snapshots."
+  else
+    limine-enroll-config
+    /etc/boot/hooks/post.d/95-nox-sbctl-fallback
+  fi
+fi
 
 # 10. Sync launcher XDG user overlays now that limine-snapper-restore.desktop is installed
 nox_sync_hidden_tech_desktops

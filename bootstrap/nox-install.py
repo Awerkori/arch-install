@@ -12,25 +12,50 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
+import hmac
+import http.client
 import json
 import os
 import re
+import socket
+import ssl
 import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
 
-DEFAULT_CONFIG_URL = "https://raw.githubusercontent.com/Awerkori/arch-install/main/user_configuration.json"
+NOX_RELEASE_VERSION = "v1.0.1"
+OFFICIAL_CONFIG_COMMIT = "83624813f3f32fd8608ee881b21b7ab6ec92cf3e"
+DEFAULT_CONFIG_URL = (
+    f"https://raw.githubusercontent.com/Awerkori/arch-install/{OFFICIAL_CONFIG_COMMIT}/user_configuration.json"
+)
+OFFICIAL_CONFIG_SHA256 = "9cb32121cb9a87b54b7c07749a92d3b8cb6cffcf6e4dadc502f3fa9a3da3a867"
+OFFICIAL_PAYLOAD_URL = (
+    "https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz"
+)
+OFFICIAL_PAYLOAD_SHA256 = "52008f9c454c8b39c91d6e51b3546f6a76546f021c3c6a0850dc7a55d5bf92b2"
+
 LEGACY_RC_TAG = "v1.0.0-rc10"
+LEGACY_RC_PREFIX = "v1.0.0-rc"
 HOMOLOGATED_ARCHINSTALL_SERIES = "4.5"
 REQUIRED_ARCHINSTALL_FLAGS = ("--silent", "--config", "--creds", "--skip-version-check", "--skip-wifi-check")
 MIN_DISK_BYTES = 20 * 1024 * 1024 * 1024  # 20 GiB safety floor
 ESP_SIZE_MIB = 4096
 ESP_START_MIB = 1
 BTRFS_START_MIB = ESP_START_MIB + ESP_SIZE_MIB
+
+SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+UNSAFE_URL_CHARS_RE = re.compile(r'[\s"\';|&$`<>\\\x00-\x1f]')
+MUTABLE_BRANCH_URL_RE = re.compile(
+    r"^https?://(?:raw\.githubusercontent\.com/[^/]+/[^/]+/(?:refs/heads/)?(?:main|master)/|"
+    r"github\.com/[^/]+/[^/]+/(?:raw|blob)/(?:refs/heads/)?(?:main|master)/)",
+    re.IGNORECASE,
+)
 
 RESERVED_USERS = {
     "root",
@@ -63,6 +88,82 @@ RESERVED_USERS = {
 USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 
 
+class SafeHTTPSRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject any HTTP redirect downgrade or unsupported scheme."""
+
+    def __init__(self, allow_insecure_http: bool = False) -> None:
+        super().__init__()
+        self.allow_insecure_http = allow_insecure_http
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        parsed = urllib.parse.urlparse(newurl)
+        scheme = (parsed.scheme or "").lower()
+        if scheme == "http" and not self.allow_insecure_http:
+            raise ValueError(f"Redirecionamento inseguro recusado (downgrade HTTPS->HTTP): {newurl}")
+        if scheme not in ("https", "http") or not parsed.netloc:
+            raise ValueError(f"Alvo de redirecionamento invalido ou esquema nao suportado: {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def verify_sha256_bytes(data: bytes, expected_sha256: str, label: str = "artefato") -> str:
+    """Verify SHA-256 of raw bytes before parsing or executing content."""
+    if not SHA256_RE.fullmatch(expected_sha256 or ""):
+        raise ValueError(f"Formato de SHA-256 esperado invalido para {label}: {expected_sha256!r}")
+    actual = hashlib.sha256(data).hexdigest()
+    if not hmac.compare_digest(actual.lower(), expected_sha256.lower()):
+        raise ValueError(
+            f"Falha na verificacao SHA-256 de {label}: esperado={expected_sha256.lower()}, obtido={actual.lower()}"
+        )
+    return actual
+
+
+def _fetch_url_bytes(url: str, allow_insecure_http: bool = False, timeout: int = 30) -> tuple[bytes, str]:
+    """Download URL bytes over validated HTTPS with redirect protection and truncation detection."""
+    if UNSAFE_URL_CHARS_RE.search(url or ""):
+        raise ValueError(f"URL contem caracteres invalidos ou inseguros: {url!r}")
+    parsed = urllib.parse.urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme == "http" and not allow_insecure_http:
+        raise ValueError(f"URL insegura recusada (use https://): {url}")
+    if scheme not in ("https", "http") or not parsed.netloc:
+        raise ValueError(f"URL invalida ou esquema nao suportado: {url}")
+
+    opener = urllib.request.build_opener(SafeHTTPSRedirectHandler(allow_insecure_http=allow_insecure_http))
+    req = urllib.request.Request(url, headers={"User-Agent": f"nox-install/{NOX_RELEASE_VERSION}"})
+    try:
+        with opener.open(req, timeout=timeout) as resp:
+            final_url = resp.geturl() or url
+            final_scheme = (urllib.parse.urlparse(final_url).scheme or "").lower()
+            if final_scheme == "http" and not allow_insecure_http:
+                raise ValueError(f"URL final apos redirecionamento usa HTTP inseguro: {final_url}")
+            expected_len_hdr = resp.headers.get("Content-Length") if resp.headers else None
+            raw_bytes = resp.read()
+    except ValueError:
+        raise
+    except http.client.IncompleteRead as exc:
+        raise RuntimeError(f"Download incompleto de {url}: {exc}") from exc
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"Erro HTTP {exc.code} ao baixar {url}") from exc
+    except ssl.SSLError as exc:
+        raise RuntimeError(f"Erro TLS/SSL ao acessar {url}: {exc}") from exc
+    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+        raise RuntimeError(f"Falha de rede/DNS/timeout ao acessar {url}: {exc}") from exc
+
+    if expected_len_hdr is not None:
+        try:
+            exp_len = int(expected_len_hdr.strip())
+        except ValueError as exc:
+            raise RuntimeError(f"Cabecalho Content-Length invalido em {url}: {expected_len_hdr!r}") from exc
+        if len(raw_bytes) != exp_len:
+            raise RuntimeError(
+                f"Download truncado/incompleto de {url}: esperado={exp_len} bytes, recebido={len(raw_bytes)} bytes."
+            )
+
+    if not raw_bytes or not raw_bytes.strip():
+        raise ValueError(f"Resposta vazia recebida de {url}.")
+    return raw_bytes, final_url
+
+
 def ensure_interactive_tty() -> None:
     """Ensure stdin reads from the interactive controlling TTY even if invoked via pipe."""
     if sys.stdin.isatty():
@@ -77,13 +178,54 @@ def ensure_interactive_tty() -> None:
         ) from exc
 
 
-def list_candidate_disks() -> list[dict[str, Any]]:
-    """Query lsblk and return eligible disks (>= 20 GiB), excluding live archiso media."""
-    raw = subprocess.check_output(
-        ["lsblk", "-d", "-b", "-J", "-o", "NAME,PATH,SIZE,MODEL,SERIAL,TRAN,TYPE,RM,MOUNTPOINTS"],
+def ensure_arch_iso_environment(
+    euid: int | None = None,
+    efi_dir: Path = Path("/sys/firmware/efi"),
+    archiso_dir: Path = Path("/run/archiso"),
+) -> None:
+    """Refuse execution outside the official UEFI Arch Linux live ISO environment."""
+    actual_euid = os.geteuid() if euid is None else euid
+    if actual_euid != 0:
+        raise RuntimeError("execute o instalador como root na ISO oficial do Arch Linux.")
+    if not efi_dir.is_dir():
+        raise RuntimeError("sistema nao inicializado em modo UEFI.")
+    if not archiso_dir.is_dir():
+        raise RuntimeError(
+            "este instalador deve ser executado na ISO live oficial do Arch Linux (/run/archiso)."
+        )
+
+
+def _lsblk_mounts_for_device(path: str) -> list[str]:
+    """Query mountpoints for a block device and its partitions (fail-closed on error)."""
+    res = subprocess.run(
+        ["lsblk", "-nr", "-o", "MOUNTPOINT", path],
+        capture_output=True,
         text=True,
+        check=False,
     )
-    data = json.loads(raw)
+    if res.returncode != 0:
+        raise RuntimeError(
+            f"Falha ao consultar lsblk MOUNTPOINT para '{path}' (exit={res.returncode}): {res.stderr.strip()}"
+        )
+    return sorted({m.strip() for m in res.stdout.splitlines() if m.strip()})
+
+
+def list_candidate_disks() -> list[dict[str, Any]]:
+    """Query lsblk and return eligible disks (>= 20 GiB), excluding live archiso media (fail-closed)."""
+    res = subprocess.run(
+        ["lsblk", "-d", "-b", "-J", "-o", "NAME,PATH,SIZE,MODEL,SERIAL,TRAN,TYPE,RM,MOUNTPOINTS"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if res.returncode != 0:
+        raise RuntimeError(f"Falha ao listar discos via lsblk (exit={res.returncode}): {res.stderr.strip()}")
+    try:
+        data = json.loads(res.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Saida JSON invalida de lsblk ao listar discos: {exc}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("blockdevices"), list):
+        raise RuntimeError("Saida JSON invalida de lsblk ao listar discos.")
     disks: list[dict[str, Any]] = []
     by_id_map: dict[str, str] = {}
     by_id_dir = Path("/dev/disk/by-id")
@@ -104,13 +246,7 @@ def list_candidate_disks() -> list[dict[str, Any]]:
         size = int(dev.get("size") or 0)
         if not path or size < MIN_DISK_BYTES:
             continue
-        children_raw = subprocess.run(
-            ["lsblk", "-nr", "-o", "MOUNTPOINT", path],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        mounts = sorted({m.strip() for m in children_raw.stdout.splitlines() if m.strip()})
+        mounts = _lsblk_mounts_for_device(path)
         if any(m.startswith("/run/archiso") for m in mounts):
             continue
         rm_raw = dev.get("rm")
@@ -133,29 +269,171 @@ def list_candidate_disks() -> list[dict[str, Any]]:
     return disks
 
 
+def _collect_lsblk_tree(nodes: list[dict[str, Any]]) -> tuple[set[str], list[str]]:
+    """Collect all device paths and mountpoints recursively from lsblk JSON blockdevices."""
+    dev_paths: set[str] = set()
+    mounts: list[str] = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            raise RuntimeError("Estrutura JSON invalida em lsblk blockdevices (no nao e objeto).")
+        npath = node.get("path")
+        nname = node.get("name")
+        if isinstance(npath, str) and npath.strip():
+            p = npath.strip()
+            dev_paths.add(p)
+            dev_paths.add(os.path.realpath(p))
+        elif isinstance(nname, str) and nname.strip():
+            p = f"/dev/{nname.strip()}"
+            dev_paths.add(p)
+            dev_paths.add(os.path.realpath(p))
+        else:
+            raise RuntimeError("Estrutura JSON incompleta em lsblk (ausente path/name).")
+        mps = node.get("mountpoints")
+        if mps is not None:
+            if not isinstance(mps, list):
+                raise RuntimeError("Campo mountpoints invalido no JSON do lsblk.")
+            for mp in mps:
+                if isinstance(mp, str) and mp.strip():
+                    mounts.append(mp.strip())
+        children = node.get("children")
+        if children is not None:
+            if not isinstance(children, list):
+                raise RuntimeError("Campo children invalido no JSON do lsblk.")
+            c_paths, c_mounts = _collect_lsblk_tree(children)
+            dev_paths.update(c_paths)
+            mounts.extend(c_mounts)
+    return dev_paths, mounts
+
+
 def verify_disk_safe_to_wipe(disk: dict[str, Any]) -> None:
-    """Re-verify selected device path, persistent by-id target, and absence of active mounts."""
-    disk_path = Path(disk["path"])
+    """Fail-closed safety validation of target disk identity, mounts, and active swap before wipe."""
+    raw_path = str(disk.get("path") or "").strip()
+    if not raw_path:
+        raise RuntimeError("Caminho do disco selecionado vazio.")
+    disk_path = Path(raw_path)
     if not disk_path.exists():
-        raise RuntimeError(f"Disco selecionado '{disk['path']}' nao esta mais presente.")
+        raise RuntimeError(f"Disco selecionado '{raw_path}' nao esta mais presente.")
+
+    canonical_disk = os.path.realpath(raw_path)
     if disk.get("by_id"):
-        by_id_path = Path(disk["by_id"])
-        if not by_id_path.exists() or str(by_id_path.resolve()) != str(disk_path.resolve()):
+        by_id_path = Path(str(disk["by_id"]))
+        if not by_id_path.exists() or os.path.realpath(str(by_id_path)) != canonical_disk:
             raise RuntimeError(
-                f"Identificador persistente '{disk['by_id']}' nao aponta mais para '{disk['path']}'. Abortando."
+                f"Identificador persistente '{disk['by_id']}' nao aponta mais para '{raw_path}' ({canonical_disk}). Abortando."
             )
-    mounts_out = subprocess.run(
-        ["lsblk", "-nr", "-o", "MOUNTPOINT", str(disk_path)],
+
+    # 1. Re-identify selected device via lsblk -b -J (mandatory exit=0 and valid schema)
+    lsblk_json_proc = subprocess.run(
+        ["lsblk", "-b", "-J", "-o", "NAME,PATH,SIZE,MODEL,SERIAL,TRAN,TYPE,RM,MOUNTPOINTS", raw_path],
         capture_output=True,
         text=True,
         check=False,
     )
-    active_mounts = [m.strip() for m in mounts_out.stdout.splitlines() if m.strip()]
-    if active_mounts:
+    if lsblk_json_proc.returncode != 0:
         raise RuntimeError(
-            f"O disco '{disk['path']}' possui pontos montados ativos ({', '.join(active_mounts)}). "
+            f"Falha ao reidentificar '{raw_path}' via lsblk (exit={lsblk_json_proc.returncode}): "
+            f"{lsblk_json_proc.stderr.strip()}"
+        )
+    try:
+        lsblk_data = json.loads(lsblk_json_proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Saida JSON invalida de lsblk para '{raw_path}': {exc}") from exc
+
+    if not isinstance(lsblk_data, dict) or not isinstance(lsblk_data.get("blockdevices"), list) or not lsblk_data["blockdevices"]:
+        raise RuntimeError(f"Estrutura JSON incompleta de lsblk ao verificar '{raw_path}'.")
+
+    top_dev = lsblk_data["blockdevices"][0]
+    if not isinstance(top_dev, dict) or top_dev.get("type") != "disk":
+        raise RuntimeError(f"Dispositivo '{raw_path}' nao e reconhecido como disco ('type=disk').")
+
+    actual_path = str(top_dev.get("path") or "")
+    actual_name = str(top_dev.get("name") or "")
+    try:
+        actual_size = int(top_dev.get("size"))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"Tamanho invalido retornado pelo lsblk para '{raw_path}'.") from exc
+
+    if not actual_path or os.path.realpath(actual_path) != canonical_disk:
+        raise RuntimeError(f"Caminho canonico divergente para '{raw_path}': obtido '{actual_path}'.")
+    if disk.get("name") and actual_name != disk["name"]:
+        raise RuntimeError(f"Nome do disco mudou entre selecao e formatacao: '{disk['name']}' -> '{actual_name}'.")
+    if disk.get("size_bytes") is not None and int(disk["size_bytes"]) != actual_size:
+        raise RuntimeError(
+            f"Tamanho do disco '{raw_path}' mudou entre selecao e formatacao ({disk['size_bytes']} -> {actual_size})."
+        )
+    actual_model = str(top_dev.get("model") or "Desconhecido").strip()
+    if disk.get("model") and actual_model != str(disk["model"]).strip():
+        raise RuntimeError(
+            f"Modelo do disco '{raw_path}' mudou entre selecao e formatacao ('{disk['model']}' -> '{actual_model}')."
+        )
+    actual_serial = str(top_dev.get("serial") or "").strip()
+    if disk.get("serial") is not None and actual_serial != str(disk["serial"]).strip():
+        raise RuntimeError(
+            f"Serial do disco '{raw_path}' mudou entre selecao e formatacao ('{disk['serial']}' -> '{actual_serial}')."
+        )
+    actual_tran = str(top_dev.get("tran") or "disk").strip().lower()
+    if disk.get("tran") and actual_tran != str(disk["tran"]).strip().lower():
+        raise RuntimeError(
+            f"Transporte do disco '{raw_path}' mudou entre selecao e formatacao ('{disk['tran']}' -> '{actual_tran}')."
+        )
+
+    dev_paths, json_mounts = _collect_lsblk_tree(lsblk_data["blockdevices"])
+
+    # 2. Cross-check lsblk flat mount list (mandatory exit=0)
+    flat_mounts = _lsblk_mounts_for_device(raw_path)
+    all_mounts = sorted({*json_mounts, *flat_mounts})
+    if any(m.startswith("/run/archiso") for m in all_mounts):
+        raise RuntimeError(f"BLOQUEIO: '{raw_path}' contem ponto de montagem da midia Arch ISO (/run/archiso).")
+    if all_mounts:
+        raise RuntimeError(
+            f"O disco '{raw_path}' possui pontos montados ou alvos ativos ({', '.join(all_mounts)}). "
             "Desmonte-os manualmente antes de prosseguir."
         )
+
+    # 3. Cross-check findmnt (fail-closed if findmnt fails or finds any mount sourced from disk or partitions)
+    findmnt_proc = subprocess.run(
+        ["findmnt", "-rn", "-o", "SOURCE,TARGET"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if findmnt_proc.returncode != 0:
+        raise RuntimeError(
+            f"Falha ao consultar findmnt antes de formatar '{raw_path}' (exit={findmnt_proc.returncode}): "
+            f"{findmnt_proc.stderr.strip()}"
+        )
+    for line in findmnt_proc.stdout.splitlines():
+        parts = line.split(None, 1)
+        if not parts:
+            continue
+        src = parts[0].split("[", 1)[0].strip()
+        target = parts[1].strip() if len(parts) > 1 else "?"
+        if src in dev_paths or (src.startswith("/dev/") and os.path.realpath(src) in dev_paths):
+            raise RuntimeError(
+                f"Particao ou dispositivo '{src}' pertencente a '{raw_path}' esta montado em '{target}' via findmnt."
+            )
+
+    # 4. Verify no active swap resides on the selected disk or any descendant partition (fail-closed)
+    swapon_proc = subprocess.run(
+        ["swapon", "--noheadings", "--raw", "--show=NAME"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if swapon_proc.returncode != 0:
+        raise RuntimeError(
+            f"Falha ao consultar swap ativo via swapon (exit={swapon_proc.returncode}): "
+            f"{swapon_proc.stderr.strip()}"
+        )
+    for line in swapon_proc.stdout.splitlines():
+        sw_dev = line.strip()
+        if not sw_dev:
+            continue
+        if sw_dev in dev_paths or (sw_dev.startswith("/dev/") and os.path.realpath(sw_dev) in dev_paths):
+            raise RuntimeError(
+                f"Swap ativo detectado no disco/particao '{sw_dev}' (pertencente a '{raw_path}'). "
+                "Execute 'swapoff' antes de continuar."
+            )
 
 
 def validate_username(name: str) -> tuple[bool, str]:
@@ -253,22 +531,54 @@ def hash_password_sha512(password: str) -> str:
     ).strip()
 
 
-def load_base_config(source: str, allow_insecure_http: bool = False) -> dict[str, Any]:
-    if source.startswith("http://") and not allow_insecure_http:
-        raise ValueError(f"URL insegura recusada (use https://): {source}")
-    if source.startswith(("http://", "https://")):
-        req = urllib.request.Request(source, headers={"User-Agent": "nox-install/1.0"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            raw_text = resp.read().decode("utf-8")
-    else:
-        raw_text = Path(source).read_text(encoding="utf-8")
+def load_base_config(
+    source: str,
+    allow_insecure_http: bool = False,
+    expected_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Load and authenticate user_configuration.json before parsing JSON."""
+    if not source or not source.strip():
+        raise ValueError("Fonte de configuracao vazia.")
 
-    data = json.loads(raw_text)
+    is_official_source = source == DEFAULT_CONFIG_URL
+    if is_official_source and MUTABLE_BRANCH_URL_RE.match(source):
+        raise ValueError(f"Configuracao oficial nao pode apontar para branch mutavel: {source}")
+
+    effective_sha256 = expected_sha256
+    if is_official_source and effective_sha256 is None:
+        effective_sha256 = OFFICIAL_CONFIG_SHA256
+
+    if source.startswith(("http://", "https://")):
+        if MUTABLE_BRANCH_URL_RE.match(source) and not effective_sha256 and not allow_insecure_http:
+            raise ValueError(
+                f"Configuracao remota em branch mutavel recusada sem --config-sha256: {source}"
+            )
+        raw_bytes, _final_url = _fetch_url_bytes(source, allow_insecure_http=allow_insecure_http, timeout=30)
+    else:
+        cfg_path = Path(source)
+        if not cfg_path.is_file():
+            raise FileNotFoundError(f"Arquivo de configuracao nao encontrado: {source}")
+        raw_bytes = cfg_path.read_bytes()
+        if not raw_bytes or not raw_bytes.strip():
+            raise ValueError(f"Arquivo de configuracao vazio: {source}")
+
+    if effective_sha256 is not None:
+        verify_sha256_bytes(raw_bytes, effective_sha256, label="user_configuration.json")
+
+    try:
+        raw_text = raw_bytes.decode("utf-8")
+        data = json.loads(raw_text)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"user_configuration.json malformado ou JSON invalido: {exc}") from exc
+
     if not isinstance(data, dict) or not data.get("custom_commands"):
         raise ValueError("user_configuration.json invalido ou sem 'custom_commands'.")
     for req_key in ("bootloader_config", "locale_config", "network_config"):
         if req_key not in data:
             raise ValueError(f"user_configuration.json incompleto (ausente: '{req_key}').")
+    for forbidden_key in ("disk_config", "auth_config", "users", "root_enc_password", "encryption_password"):
+        if forbidden_key in data:
+            raise ValueError(f"user_configuration.json contem chave proibida na base publica: '{forbidden_key}'.")
     return data
 
 
@@ -278,9 +588,12 @@ def override_payload_cmd(
     payload_sha: str | None,
     allow_insecure_http: bool = False,
 ) -> None:
-    if payload_url and payload_url.startswith("http://") and not allow_insecure_http:
-        raise ValueError(f"Payload URL HTTP recusada sem --allow-insecure-http: {payload_url}")
-    if payload_sha and not re.fullmatch(r"[0-9a-fA-F]{64}", payload_sha):
+    if payload_url:
+        if UNSAFE_URL_CHARS_RE.search(payload_url):
+            raise ValueError(f"Payload URL contem caracteres invalidos: {payload_url!r}")
+        if payload_url.startswith("http://") and not allow_insecure_http:
+            raise ValueError(f"Payload URL HTTP recusada sem --allow-insecure-http: {payload_url}")
+    if payload_sha and not SHA256_RE.fullmatch(payload_sha):
         raise ValueError(f"SHA-256 de payload invalido: {payload_sha}")
     if not payload_url and not payload_sha:
         return
@@ -291,7 +604,7 @@ def override_payload_cmd(
         if payload_url:
             updated = re.sub(r'URL=\\?"[^"]+\\?"', f'URL="{payload_url}"', updated)
             if payload_url.startswith("http://") and allow_insecure_http:
-                updated = updated.replace('--proto "=https" ', "")
+                updated = updated.replace('--proto "=https" ', "").replace('--proto-redir "=https" ', "")
         if payload_sha:
             updated = re.sub(r'SHA=\\?"[0-9a-fA-F]{64}\\?"', f'SHA="{payload_sha}"', updated)
         new_cmds.append(updated)
@@ -300,8 +613,8 @@ def override_payload_cmd(
 
 def extract_payload_spec(cfg: dict[str, Any]) -> tuple[str, str]:
     joined = "\n".join(cfg.get("custom_commands") or [])
-    m_url = re.search(r'URL="([^"]+)"', joined)
-    m_sha = re.search(r'SHA="([0-9a-fA-F]{64})"', joined)
+    m_url = re.search(r'URL="([^"]*)"', joined)
+    m_sha = re.search(r'SHA="([^"]*)"', joined)
     return (m_url.group(1) if m_url else "", m_sha.group(1) if m_sha else "")
 
 
@@ -309,17 +622,35 @@ def validate_payload_spec(
     cfg: dict[str, Any],
     allow_insecure_http: bool = False,
     allow_legacy_rc: bool = False,
+    enforce_official_payload: bool = False,
 ) -> tuple[str, str]:
     url, sha = extract_payload_spec(cfg)
     if not url or not sha:
         raise ValueError("Nao foi possivel extrair URL/SHA-256 validos do payload em custom_commands.")
-    if url.startswith("http://") and not allow_insecure_http:
+    if UNSAFE_URL_CHARS_RE.search(url):
+        raise ValueError(f"URL do payload contem caracteres invalidos: {url!r}")
+    if not SHA256_RE.fullmatch(sha):
+        raise ValueError(f"Formato de SHA-256 do payload invalido em custom_commands: {sha!r}")
+
+    parsed = urllib.parse.urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme == "http" and not allow_insecure_http:
         raise ValueError(f"Payload deve usar HTTPS: {url}")
-    if LEGACY_RC_TAG in url and not allow_legacy_rc:
+    if scheme not in ("https", "http") or not parsed.netloc:
+        raise ValueError(f"URL do payload invalida: {url}")
+    if MUTABLE_BRANCH_URL_RE.match(url) and not allow_insecure_http:
+        raise ValueError(f"Payload oficial nao pode apontar para branch mutavel: {url}")
+    if (LEGACY_RC_TAG in url or LEGACY_RC_PREFIX in url) and not allow_legacy_rc:
         raise ValueError(
-            f"Configuracao base aponta para o payload antigo '{LEGACY_RC_TAG}' ({url}). "
-            "Atualize user_configuration.json antes da publicacao v1.0.0 ou passe --payload-url/--payload-sha256."
+            f"Configuracao base aponta para payload RC legado ({url}). "
+            "Utilize a configuracao vinculada a release oficial ou passe --payload-url/--payload-sha256."
         )
+    if enforce_official_payload:
+        if url != OFFICIAL_PAYLOAD_URL or not hmac.compare_digest(sha.lower(), OFFICIAL_PAYLOAD_SHA256.lower()):
+            raise ValueError(
+                "Configuracao incompativel com esta versao do bootstrap: URL ou SHA-256 do payload "
+                f"diverge do manifesto oficial ({NOX_RELEASE_VERSION})."
+            )
     return url, sha
 
 
@@ -343,11 +674,11 @@ def detect_archinstall_version(allow_untested: bool = False) -> str:
     return ver
 
 
-def select_tmpfs_dir() -> str:
+def select_tmpfs_dir(mounts_file: Path = Path("/proc/mounts")) -> str:
     """Return a verified in-memory tmpfs directory (/dev/shm, /run, or /tmp) for temporary credentials."""
     mounts: dict[str, str] = {}
     try:
-        for line in Path("/proc/mounts").read_text(encoding="utf-8").splitlines():
+        for line in mounts_file.read_text(encoding="utf-8").splitlines():
             parts = line.split()
             if len(parts) >= 3:
                 mounts[parts[1]] = parts[2]
@@ -359,9 +690,11 @@ def select_tmpfs_dir() -> str:
     raise RuntimeError("Nenhum filesystem temporario em RAM (tmpfs) disponivel para armazenar credenciais temporarias.")
 
 
-def scrub_persisted_archinstall_credentials() -> None:
+def scrub_persisted_archinstall_credentials(
+    log_dirs: tuple[Path, ...] = (Path("/var/log/archinstall"), Path("/mnt/var/log/archinstall")),
+) -> None:
     """Ensure archinstall log directories never retain user_credentials.json or world-readable logs."""
-    for log_dir in (Path("/var/log/archinstall"), Path("/mnt/var/log/archinstall")):
+    for log_dir in log_dirs:
         if not log_dir.is_dir():
             continue
         try:
@@ -377,11 +710,20 @@ def scrub_persisted_archinstall_credentials() -> None:
                     pass
 
 
-def verify_network_preflight(payload_url: str) -> None:
+def verify_network_preflight(payload_url: str, allow_insecure_http: bool = False) -> None:
+    opener = urllib.request.build_opener(SafeHTTPSRedirectHandler(allow_insecure_http=allow_insecure_http))
     for test_url in (payload_url, "https://archlinux.org"):
-        req = urllib.request.Request(test_url, method="HEAD", headers={"User-Agent": "nox-install/1.0"})
+        req = urllib.request.Request(
+            test_url,
+            method="HEAD",
+            headers={"User-Agent": f"nox-install/{NOX_RELEASE_VERSION}"},
+        )
         try:
-            with urllib.request.urlopen(req, timeout=12) as resp:
+            with opener.open(req, timeout=12) as resp:
+                final_url = resp.geturl() or test_url
+                final_scheme = (urllib.parse.urlparse(final_url).scheme or "").lower()
+                if final_scheme == "http" and not allow_insecure_http:
+                    raise RuntimeError(f"Redirecionamento inseguro para HTTP detectado em {test_url} -> {final_url}")
                 if resp.status >= 400:
                     raise RuntimeError(f"Falha HTTP {resp.status} ao verificar {test_url}")
         except urllib.error.HTTPError as exc:
@@ -439,23 +781,31 @@ def interactive_main(args: argparse.Namespace) -> int:
 
     archinstall_ver = "dry-run"
     if not args.dry_run:
-        if os.geteuid() != 0:
-            print("ERRO: execute o instalador como root na ISO oficial do Arch Linux.", file=sys.stderr)
-            return 1
-        if not Path("/sys/firmware/efi").is_dir():
-            print("ERRO: sistema nao inicializado em modo UEFI.", file=sys.stderr)
-            return 1
-        if not Path("/run/archiso").exists():
-            print("ERRO: este instalador deve ser executado na ISO live oficial do Arch Linux (/run/archiso).", file=sys.stderr)
-            return 1
         try:
+            ensure_arch_iso_environment()
             archinstall_ver = detect_archinstall_version()
         except RuntimeError as exc:
             print(f"ERRO: {exc}", file=sys.stderr)
             return 1
 
+    is_official_config = (
+        args.config == DEFAULT_CONFIG_URL
+        and args.config_sha256 is None
+        and not args.payload_url
+        and not args.payload_sha256
+    )
+    config_mode_label = (
+        f"OFICIAL AUTENTICADA ({NOX_RELEASE_VERSION}, SHA-256 verificado)"
+        if is_official_config
+        else "PERSONALIZADA PELO OPERADOR (--config / override)"
+    )
+
     try:
-        base_cfg = load_base_config(args.config, allow_insecure_http=args.allow_insecure_http)
+        base_cfg = load_base_config(
+            args.config,
+            allow_insecure_http=args.allow_insecure_http,
+            expected_sha256=args.config_sha256,
+        )
         override_payload_cmd(
             base_cfg,
             args.payload_url,
@@ -466,9 +816,10 @@ def interactive_main(args: argparse.Namespace) -> int:
             base_cfg,
             allow_insecure_http=args.allow_insecure_http,
             allow_legacy_rc=args.allow_legacy_rc,
+            enforce_official_payload=is_official_config,
         )
         if not args.dry_run and not args.skip_net_check:
-            verify_network_preflight(payload_url)
+            verify_network_preflight(payload_url, allow_insecure_http=args.allow_insecure_http)
     except Exception as exc:
         print(f"ERRO DE PRE-VALIDACAO: {exc}", file=sys.stderr)
         return 1
@@ -476,7 +827,10 @@ def interactive_main(args: argparse.Namespace) -> int:
     print("=" * 68)
     print("  PROJECT NOX ARCHINSTALL — Instalacao Guiada Simplificada")
     print("=" * 68)
+    if not is_official_config:
+        print("  [AVISO] Utilizando configuracao ou payload personalizado pelo operador.")
     print("Configuracoes aplicadas automaticamente:")
+    print(f"  * Configuracao    : {config_mode_label}")
     print("  * Particionamento : GPT | /boot 4 GiB FAT32 + Btrfs compress=zstd")
     print("  * Subvolumes      : @ (/), @home, @log, @pkg, @.snapshots, @swap")
     print("  * Kernel & Boot   : linux-cachyos + Limine (Project Nox + sbctl)")
@@ -613,17 +967,30 @@ def interactive_main(args: argparse.Namespace) -> int:
         ]
         if args.dry_run:
             cmd.append("--dry-run")
+        try:
+            verify_disk_safe_to_wipe(chosen)
+        except RuntimeError as exc:
+            print(f"ERRO CRITICO (revalidacao final antes de archinstall): {exc}", file=sys.stderr)
+            return 1
         print("\nIniciando archinstall com configuracao Project Nox automatica...")
+        # Restore standard 0022 umask before spawning archinstall so target /etc, pacstrap, and systemd-nspawn get 0755/0644 instead of inheriting caller 0077.
+        prev_umask = os.umask(0o022)
         try:
             proc = subprocess.run(cmd, check=False)
             return proc.returncode
         finally:
+            os.umask(prev_umask)
             scrub_persisted_archinstall_credentials()
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Project Nox simplified Arch ISO installer")
     parser.add_argument("--config", default=DEFAULT_CONFIG_URL, help="Path or URL to user_configuration.json")
+    parser.add_argument(
+        "--config-sha256",
+        default=None,
+        help="Expected SHA-256 for custom --config (defaults to pinned OFFICIAL_CONFIG_SHA256 for official config)",
+    )
     parser.add_argument("--payload-url", default=None, help="Optional override payload URL for lab testing")
     parser.add_argument("--payload-sha256", default=None, help="Optional override payload SHA-256")
     parser.add_argument("--allow-insecure-http", action="store_true", help="Allow http:// URLs for local lab HTTP servers")

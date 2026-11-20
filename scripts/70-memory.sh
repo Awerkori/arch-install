@@ -19,21 +19,27 @@ fi
 
 # 2. Calculate proportional or physical swapfile size in dedicated @swap subvolume (outside @ and @.snapshots)
 RAM_KIB="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
-RAM_GIB=$(( (RAM_KIB + 524288) / 1048576 ))
-ROOT_AVAIL_GIB=$(( $(df -BG --output=avail / | awk 'NR==2 {gsub(/G/,""); print $1}') ))
+RAM_GIB=$(((RAM_KIB + 524288) / 1048576))
+ROOT_AVAIL_GIB=$(($(df -BG --output=avail / | awk 'NR==2 {gsub(/G/,""); print $1}')))
 
 SWAP_SIZE_G=0
-if (( RAM_GIB >= 24 && ROOT_AVAIL_GIB >= 64 )); then
+if ((RAM_GIB >= 24 && ROOT_AVAIL_GIB >= 64)); then
   SWAP_SIZE_G=32
-elif (( ROOT_AVAIL_GIB >= 20 )); then
+elif ((ROOT_AVAIL_GIB >= 20)); then
   # VM / constrained disk proportional swapfile (e.g. 2G-4G)
   SWAP_SIZE_G=2
 fi
 
-if (( SWAP_SIZE_G > 0 )); then
+if ((SWAP_SIZE_G > 0)); then
   ROOT_SRC="$(findmnt -no SOURCE /)"
   ROOT_DEV="${ROOT_SRC%%\[*}"
   TOP_MNT="/var/tmp/nox-btrfs-top.$$"
+  cleanup_swap_mounts() {
+    umount "$TOP_MNT" 2>/dev/null || true
+    rmdir "$TOP_MNT" 2>/dev/null || true
+    umount /nox-swap 2>/dev/null || true
+  }
+  trap cleanup_swap_mounts EXIT INT TERM HUP
   mkdir -p "$TOP_MNT" /nox-swap
   chmod 700 /nox-swap
 
@@ -61,14 +67,15 @@ if (( SWAP_SIZE_G > 0 )); then
   UUID="$(blkid -s UUID -o value "$ROOT_DEV")"
   touch /etc/fstab
   if ! grep -qE '[[:space:]]/nox-swap[[:space:]]' /etc/fstab; then
-    printf 'UUID=%s /nox-swap btrfs rw,noatime,subvol=/@swap 0 0\n' "$UUID" >> /etc/fstab
+    printf 'UUID=%s /nox-swap btrfs rw,noatime,subvol=/@swap 0 0\n' "$UUID" >>/etc/fstab
   fi
   if ! grep -qF '/nox-swap/swapfile ' /etc/fstab; then
-    printf '/nox-swap/swapfile none swap defaults,pri=10 0 0\n' >> /etc/fstab
+    printf '/nox-swap/swapfile none swap defaults,pri=10 0 0\n' >>/etc/fstab
   fi
 
   # Unmount temporary chroot mountpoint so post-command genfstab() will not emit duplicate /nox-swap lines
   umount /nox-swap || true
+  trap - EXIT INT TERM HUP
 else
   nox_warn "Espaco insuficiente (${ROOT_AVAIL_GIB}G) para swapfile Btrfs; mantendo apenas ZRAM."
 fi
@@ -78,7 +85,7 @@ while IFS=: read -r uname uid _gid _home _shell; do
   [[ -n "$uname" ]] || continue
   slice_dir="/etc/systemd/system/user-${uid}.slice.d"
   mkdir -p "$slice_dir"
-  cat > "${slice_dir}/90-oom-protection.conf" <<'EOF'
+  cat >"${slice_dir}/90-oom-protection.conf" <<'EOF'
 [Slice]
 ManagedOOMSwap=auto
 ManagedOOMMemoryPressure=auto

@@ -19,7 +19,7 @@ Este documento é o manual técnico e didático preparado especificamente para o
 3. [Comparação profunda: `--microsoft` versus `--firmware-builtin` no `sbctl`](#3-comparação-profunda---microsoft-versus---firmware-builtin-no-sbctl)
 4. [Proteção crítica de vídeo para a Radeon RX 9060 XT (Por que o Ryzen 5 7500F exige cuidado redobrado)](#4-proteção-crítica-de-vídeo-para-a-radeon-rx-9060-xt-por-que-o-ryzen-5-7500f-exige-cuidado-redobrado)
 5. [Investigação e solução documentada do alerta `FQ0001` na MSI](#5-investigação-e-solução-documentada-do-alerta-fq0001-na-msi)
-6. [Relatos reais de usuários Linux em placas MSI / AM5 (Pesquisa Comunitária)](#6-relatos-reais-de-usuários-linux-em-placas-msi--am5-pesquisa-comunitária)
+6. [Cenários técnicos documentados em placas MSI / AM5 (Upstream e Wikis Oficiais)](#6-cenários-técnicos-documentados-em-placas-msi--am5-upstream-e-wikis-oficiais)
 7. [Preparação segura, backup e pontos de parada antes de modificar o firmware](#7-preparação-segura-backup-e-pontos-de-parada-antes-de-modificar-o-firmware)
 8. [Procedimento físico passo a passo na MSI PRO B650M-P (Fases A a F)](#8-procedimento-físico-passo-a-passo-na-msi-pro-b650m-p-fases-a-a-f)
 
@@ -77,7 +77,7 @@ O utilitário `sbctl enroll-keys` possui dois parâmetros frequentemente citados
 
 Abaixo está a análise técnica exata do que cada parâmetro faz nas variáveis UEFI e por que essa distinção é crítica:
 
-| Aspecto Técnico | `sbctl enroll-keys --microsoft` *(Padrão do `nox-secureboot-enroll`)* | `sbctl enroll-keys --microsoft --firmware-builtin` | `sbctl enroll-keys` *(ou `nox-secureboot-enroll --custom-only`)* |
+| Aspecto Técnico | `sbctl enroll-keys --microsoft` *(Padrão do `nox-secureboot-enroll`)* | `sbctl enroll-keys --microsoft --firmware-builtin` | `sbctl enroll-keys` *(ou `nox-secureboot-enroll --no-microsoft`)* |
 |---|---|---|---|
 | **O que inscreve na `PK`** | Somente a chave pública `PK` local gerada pelo `sbctl` no seu PC (`/var/lib/sbctl/keys/PK/PK.pem`). | Somente a chave pública `PK` local gerada pelo `sbctl` (**não** mantém a `PK` original da MSI, pois só pode existir 1 `PK` no UEFI). | Somente a chave pública `PK` local gerada pelo `sbctl`. |
 | **O que inscreve na `KEK`** | Chave `KEK` local do `sbctl` + certificado `Microsoft Corporation KEK CA`. | Chave `KEK` local do `sbctl` + certificado `Microsoft Corporation KEK CA` + cópia de todas as entradas presentes em `KEKDefault` do firmware. | Somente a chave `KEK` local do `sbctl`. |
@@ -104,10 +104,10 @@ Preste muita atenção a esta característica específica do seu computador fís
    - Durante o POST (logo que você liga o PC), a BIOS da MSI PRO B650M-P lê o módulo **UEFI GOP (Option ROM)** gravado na memória flash VBIOS (`113-APM7842CL-102`) da sua RX 9060 XT.
    - Se o Secure Boot estiver ativo e com política restrita (`Deny Execute` para Option ROM), a BIOS da MSI verifica a assinatura digital desse driver GOP da RX 9060 XT contra a base **`db`** da placa-mãe.
    - Se o certificado **`Microsoft Corporation UEFI CA`** estiver presente na `db` (o que é garantido pelo padrão `--microsoft` do `nox-secureboot-enroll`), a assinatura da Option ROM da RX 9060 XT é validada com sucesso e o vídeo funciona normalmente desde o primeiro segundo do boot.
-   - Se alguém executasse `nox-secureboot-enroll --custom-only` (sem `--microsoft`) **e** ativasse a verificação estrita de Option ROM, a placa-mãe recusaria o driver GOP da RX 9060 XT. Como o Ryzen 5 7500F não tem vídeo integrado de reserva na placa-mãe, o PC ligaria com **tela preta** (sem exibir nem a tela da BIOS!).
+   - Se alguém executasse `nox-secureboot-enroll --no-microsoft` (sem `--microsoft`) **e** ativasse a verificação estrita de Option ROM, a placa-mãe recusaria o driver GOP da RX 9060 XT. Como o Ryzen 5 7500F não tem vídeo integrado de reserva na placa-mãe, o PC ligaria com **tela preta** (sem exibir nem a tela da BIOS!).
 
 ### Regras obrigatórias de segurança para a sua RX 9060 XT
-1. **Sempre utilize o modo padrão do `nox-secureboot-enroll` (que inclui `--microsoft`).** Nunca use `--custom-only` nesta máquina.
+1. **Sempre utilize o modo padrão do `nox-secureboot-enroll` (que inclui `--microsoft`).** Nunca use `--no-microsoft` nesta máquina.
 2. **Nunca utilize flags do `sbctl` que tentem contornar ou desabilitar verificações de Option ROM de forma improvisada.**
 3. **Saiba onde fica o jumper `JBAT1` (Clear CMOS) antes de ativar o Secure Boot:** caso qualquer configuração de BIOS deixe o PC sem vídeo durante um teste, desligar a fonte e fechar contato nos 2 pinos do jumper **`JBAT1`** da MSI PRO B650M-P por 5 a 10 segundos reseta as configurações da BIOS para o padrão de fábrica (desativando o Secure Boot imediatamente e devolvendo a imagem da RX 9060 XT no próximo boot).
 
@@ -178,81 +178,81 @@ Para ter **100% de certeza física** de que a sua MSI PRO B650M-P está realment
 
 ---
 
-## 6. Relatos reais de usuários Linux em placas MSI / AM5 (Pesquisa Comunitária)
+## 6. Cenários técnicos documentados em placas MSI / AM5 (Upstream e Wikis Oficiais)
 
-Para complementar a documentação oficial do `sbctl`, Arch Wiki, CachyOS Wiki e MSI, compilamos seis casos reais e reproduzíveis da comunidade Linux envolvendo placas MSI (incluindo B650/AM5), `sbctl`, `FQ0001` e GPUs AMD Radeon:
+Para complementar a documentação oficial do `sbctl`, Arch Wiki, CachyOS Wiki e MSI, consolidamos seis cenários técnicos documentados nas referências oficiais upstream envolvendo placas MSI (incluindo B650/AM5), `sbctl`, `FQ0001` e GPUs AMD Radeon:
 
-### Caso 1 — Firmware MSI Desktop com `FQ0001` permitindo boot não assinado por padrão
-1. **Modelo da placa-mãe:** Placas desktop MSI UEFI Aptio V (séries Intel e AMD AM4/AM5, documentado originalmente por Morten Linderud / Foxboron).
+### Cenário Técnico 1 — Firmware MSI Desktop com `FQ0001` permitindo boot não assinado por padrão
+1. **Plataforma documentada:** Placas desktop MSI UEFI Aptio V (séries Intel e AMD AM4/AM5, documentado originalmente por Morten Linderud / Foxboron).
 2. **Versão da BIOS:** Múltiplas versões de fábrica lançadas com o padrão *Always Execute*.
 3. **Distribuição:** Arch Linux.
-4. **Estado inicial das chaves:** Chaves de fábrica MSI + Microsoft presentes; usuário ativou `Secure Boot = Enabled` achando que estava protegido.
-5. **Problema:** Mesmo com `Secure Boot: Enabled`, o firmware iniciava imagens EFI sem assinatura válida porque `Image Execution Policy` para `Removable Media` e `Fixed Media` vinha em `Always Execute`.
-6. **Método utilizado:** Mudança de `Secure Boot Mode` para `Custom`, ajuste de `Secure Boot Preset` para `Maximum Security` (ou `Image Execution Policy → Deny Execute` em `Option ROM`, `Removable Media` e `Fixed Media`), seguido de inscrição das chaves com `sbctl enroll-keys --microsoft`.
-7. **Resultado:** O firmware passou a bloquear binários EFI não assinados com `Secure Boot Violation`, mantendo o boot normal dos binários assinados pelo `sbctl`.
-8. **Aplicação ao Project Nox:** É a base direta da **Fase D** do procedimento físico deste guia para a MSI PRO B650M-P.
-9. **Limitações da comparação:** O nome do menu varia entre `Secure Boot Preset` e `Image Execution Policy` conforme a revisão da BIOS MSI.
-10. **Links originais:** [Foxboron/sbctl Wiki — FQ0001](https://github.com/Foxboron/sbctl/wiki/FQ0001) · [MSI Official Statement on Secure Boot](https://us.msi.com/blog/statement-on-secure-boot)
+4. **Estado inicial das chaves:** Chaves de fábrica MSI + Microsoft presentes; `Secure Boot = Enabled` ativado no firmware sem ajuste de política de execução.
+5. **Comportamento documentado:** Mesmo com `Secure Boot: Enabled`, o firmware iniciava imagens EFI sem assinatura válida porque `Image Execution Policy` para `Removable Media` e `Fixed Media` vinha em `Always Execute`.
+6. **Correção técnica documentada:** Mudança de `Secure Boot Mode` para `Custom`, ajuste de `Secure Boot Preset` para `Maximum Security` (ou `Image Execution Policy → Deny Execute` em `Option ROM`, `Removable Media` e `Fixed Media`), seguido de inscrição das chaves com `sbctl enroll-keys --microsoft`.
+7. **Efeito esperado:** O firmware passa a bloquear binários EFI não assinados com `Secure Boot Violation`, mantendo o boot normal dos binários assinados pelo `sbctl`.
+8. **Aplicação ao Nox Archinstall:** É a base direta da **Fase D** do procedimento físico deste guia para a MSI PRO B650M-P.
+9. **Limitações da referência:** O nome do menu varia entre `Secure Boot Preset` e `Image Execution Policy` conforme a revisão da BIOS MSI.
+10. **Referências upstream:** [Foxboron/sbctl Wiki — FQ0001](https://github.com/Foxboron/sbctl/wiki/FQ0001) · [MSI Official Statement on Secure Boot](https://us.msi.com/blog/statement-on-secure-boot)
 
-### Caso 2 — Auto-reprovisionamento de chaves de fábrica na MSI ao tentar entrar em Setup Mode
-1. **Modelo da placa-mãe:** MSI B650 (Click BIOS 5, plataforma AM5).
+### Cenário Técnico 2 — Auto-reprovisionamento de chaves de fábrica na MSI ao tentar entrar em Setup Mode
+1. **Plataforma documentada:** Placas MSI B650 (Click BIOS 5, plataforma AM5).
 2. **Versão da BIOS:** Revisões Click BIOS 5 AM5.
 3. **Distribuição:** CachyOS / Arch Linux.
 4. **Estado inicial das chaves:** `Setup Mode: Disabled`, `Secure Boot: Disabled`, chaves de fábrica MSI/Microsoft presentes.
-5. **Problema:** O usuário apagava as chaves na BIOS para entrar em `Setup Mode`, mas ao salvar e reiniciar a placa-mãe restaurava automaticamente as chaves de fábrica ou exibia um pop-up perguntando se desejava instalar as chaves padrão, voltando para `Setup Mode: Disabled` no Linux.
-6. **Método utilizado:** Em `Settings → Security → Secure Boot` (`Secure Boot Mode: Custom`), verificar que o auto-provisionamento (*Factory Default Key Provisioning*) não esteja forçado e, ao apagar todas as variáveis de Secure Boot (*Delete all Secure Boot variables*) e salvar com `F10`, escolher **não** recarregar as chaves de fábrica quando o firmware perguntar se deseja inicializar sem chaves / entrar em Setup Mode.
-7. **Resultado:** `sbctl status` passou a reportar `Setup Mode: ✓ Enabled`, permitindo rodar `sbctl enroll-keys --microsoft`.
-8. **Aplicação ao Project Nox:** Documentado na **Fase B** deste guia para evitar que o proprietário fique em ciclo tentando ativar o `Setup Mode`.
-9. **Limitações da comparação:** Algumas revisões perguntam *"Enroll Factory Defaults?"* ao sair do menu; basta responder **No / Cancel** à restauração de fábrica após deletar as variáveis.
-10. **Links originais:** [CachyOS Wiki — Secure Boot Setup (MSI)](https://wiki.cachyos.org/configuration/secure_boot_setup/) · [Arch Wiki — Secure Boot: Putting firmware in Setup Mode](https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot#Putting_firmware_in_%22Setup_Mode%22)
+5. **Comportamento documentado:** Ao apagar as chaves na BIOS para entrar em `Setup Mode`, se o firmware restaurar automaticamente as chaves padrão ao salvar/sair ou receber confirmação no prompt *"Enroll Factory Defaults?"*, o sistema retorna com `Setup Mode: Disabled`.
+6. **Correção técnica documentada:** Em `Settings → Security → Secure Boot` (`Secure Boot Mode: Custom`), garantir que *Factory Default Key Provisioning* não permaneça ativo e, ao apagar todas as variáveis de Secure Boot (*Delete all Secure Boot variables*) e salvar com `F10`, responder **No / Cancel** caso o firmware pergunte se deseja recarregar as chaves de fábrica.
+7. **Efeito esperado:** `sbctl status` passa a reportar `Setup Mode: Enabled`, permitindo executar `sbctl enroll-keys --microsoft`.
+8. **Aplicação ao Nox Archinstall:** Documentado na **Fase B** deste guia para evitar ciclos de re-provisionamento automático antes da inscrição das chaves.
+9. **Limitações da referência:** A redação exata do aviso (*"Enroll Factory Defaults?"* vs *"Initialize without keys"*) varia conforme a versão do Click BIOS 5.
+10. **Referências upstream:** [CachyOS Wiki — Secure Boot Setup (MSI)](https://wiki.cachyos.org/configuration/secure_boot_setup/) · [Arch Wiki — Secure Boot: Putting firmware in Setup Mode](https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot#Putting_firmware_in_%22Setup_Mode%22)
 
-### Caso 3 — Tela preta no POST com GPU dedicada AMD Radeon ao omitir `--microsoft`
-1. **Modelo da placa-mãe:** Placa desktop UEFI em plataforma sem vídeo integrado (GPU dedicada AMD Radeon).
+### Cenário Técnico 3 — Tela preta no POST com GPU dedicada AMD Radeon ao omitir `--microsoft`
+1. **Plataforma documentada:** Placas desktop UEFI em plataformas sem vídeo integrado (GPU dedicada AMD Radeon).
 2. **Versão da BIOS:** UEFI Aptio V com verificação de Option ROM ativa.
 3. **Distribuição:** Arch Linux com `sbctl`.
-4. **Estado inicial das chaves:** Entrou em `Setup Mode` e executou `sbctl enroll-keys` puro (sem `--microsoft` e sem `--tpm-eventlog`).
-5. **Problema:** Ao reiniciar com Secure Boot e verificação de Option ROM ativos, o firmware rejeitou o driver GOP da Option ROM da placa de vídeo AMD Radeon (assinado pela `Microsoft Corporation UEFI CA`). O computador ligava, mas o monitor permanecia em **tela preta** sem nem mostrar a tela da BIOS.
-6. **Método utilizado:** Reset de CMOS via jumper na placa-mãe (`JBAT1`) para desativar o Secure Boot e recuperar vídeo, retorno ao Linux, limpeza das chaves para `Setup Mode` e nova inscrição usando `sbctl enroll-keys --microsoft`.
-7. **Resultado:** Com `--microsoft` incluído na `db`, a Option ROM da GPU Radeon passou na validação do POST e o vídeo funcionou normalmente com Secure Boot ativo.
-8. **Aplicação ao Project Nox:** Justifica por que o helper `nox-secureboot-enroll` usa `--microsoft` por padrão e por que documentamos o jumper `JBAT1` da MSI PRO B650M-P para o conjunto Ryzen 5 7500F (sem iGPU) + Radeon RX 9060 XT.
-9. **Limitações da comparação:** Se `Option ROM` na BIOS estivesse em `Always Execute`, a tela preta não ocorreria, mas ao endurecer o `FQ0001` (`Maximum Security` / `Deny Execute`) o certificado Microsoft UEFI CA torna-se indispensável para a GPU.
-10. **Links originais:** [Foxboron/sbctl Wiki — FAQ: Option ROMs](https://github.com/Foxboron/sbctl/wiki/FAQ#option-roms) · [Arch Wiki — Secure Boot: Microsoft Windows certificates / Option ROMs](https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot#Microsoft_Windows)
+4. **Estado inicial das chaves:** Firmware em `Setup Mode` com inscrição executada usando apenas chaves próprias (`sbctl enroll-keys` sem `--microsoft`).
+5. **Comportamento documentado:** Ao reiniciar com Secure Boot e verificação de Option ROM ativos, o firmware rejeita o driver GOP da Option ROM da GPU AMD Radeon (assinado pela `Microsoft Corporation UEFI CA`), resultando em **tela preta** sem exibição do POST ou da BIOS.
+6. **Correção técnica documentada:** Reset de CMOS via jumper (`JBAT1`) para desativar o Secure Boot e restaurar vídeo, limpeza para `Setup Mode` no Linux e nova inscrição com `sbctl enroll-keys --microsoft`.
+7. **Efeito esperado:** Com `--microsoft` incluído na `db`, a Option ROM da GPU Radeon passa na validação do POST com Secure Boot ativo.
+8. **Aplicação ao Nox Archinstall:** Fundamenta o uso padrão de `--microsoft` em `nox-secureboot-enroll` e a documentação preventiva do jumper `JBAT1` para o conjunto Ryzen 5 7500F (sem iGPU) + Radeon RX 9060 XT.
+9. **Limitações da referência:** Quando `Option ROM` está em `Always Execute`, a omissão não bloqueia vídeo, mas o endurecimento completo de `FQ0001` (`Maximum Security` / `Deny Execute`) exige o certificado Microsoft UEFI CA na `db`.
+10. **Referências upstream:** [Foxboron/sbctl Wiki — FAQ: Option ROMs](https://github.com/Foxboron/sbctl/wiki/FAQ#option-roms) · [Arch Wiki — Secure Boot: Microsoft Windows certificates / Option ROMs](https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface/Secure_Boot#Microsoft_Windows)
 
-### Caso 4 — Duplicidade de chaves e `Secure Boot Violation` ao usar `--firmware-builtin`
-1. **Modelo da placa-mãe:** Placas desktop documentadas pela equipe do CachyOS (ASUS, Gigabyte e testes comunitários AM5).
-2. **Versão da BIOS:** Firmwares UEFI modernos com `dbDefault` contendo certificados Microsoft.
+### Cenário Técnico 4 — Duplicidade de chaves e `Secure Boot Violation` ao usar `--firmware-builtin`
+1. **Plataforma documentada:** Placas desktop documentadas pela equipe do CachyOS (ASUS, Gigabyte e placas AM5).
+2. **Versão da BIOS:** Firmwares UEFI com `dbDefault` contendo certificados Microsoft.
 3. **Distribuição:** CachyOS.
 4. **Estado inicial das chaves:** `Setup Mode: Enabled`.
-5. **Problema:** Ao executar `sudo sbctl enroll-keys --microsoft --firmware-builtin`, entradas da variável `db` (`builtin-db` / certificados Microsoft já presentes em `dbDefault`) foram inscritas em duplicidade, gerando `Secure Boot Violation` ou erro de escrita na variável EFI ao ativar o Secure Boot.
-6. **Método utilizado:** Retornar à BIOS, apagar as chaves para voltar ao `Setup Mode` e executar exclusivamente `sudo sbctl enroll-keys --microsoft` (sem `--firmware-builtin`).
-7. **Resultado:** A inscrição concluiu sem duplicidade e o Secure Boot funcionou normalmente no primeiro boot.
-8. **Aplicação ao Project Nox:** Confirma a decisão técnica da [Seção 3](#3-comparação-profunda---microsoft-versus---firmware-builtin-no-sbctl) de manter `sbctl enroll-keys --microsoft` (sem `--firmware-builtin`) no helper `nox-secureboot-enroll`.
-9. **Limitações da comparação:** Nem toda placa falha com `--firmware-builtin`, mas omiti-lo em favor de `--microsoft` evita o problema em todas as placas sem perder suporte à Option ROM da GPU.
-10. **Link original:** [CachyOS Wiki —Configuração de Secure Boot (Seção sbctl / Aviso sobre `--firmware-builtin`)](https://wiki.cachyos.org/pt/configuration/secure_boot_setup/)
+5. **Comportamento documentado:** Ao executar `sbctl enroll-keys --microsoft --firmware-builtin`, entradas da variável `db` (`builtin-db` / certificados Microsoft já presentes em `dbDefault`) podem ser gravadas em duplicidade, provocando erro de NVRAM ou `Secure Boot Violation` ao ativar o Secure Boot.
+6. **Correção técnica documentada:** Voltar ao `Setup Mode` na BIOS e executar exclusivamente `sbctl enroll-keys --microsoft` (sem `--firmware-builtin`).
+7. **Efeito esperado:** Inscrição limpa da PK/KEK/`db` sem entradas duplicadas.
+8. **Aplicação ao Nox Archinstall:** Confirma a decisão arquitetural da [Seção 3](#3-comparação-profunda---microsoft-versus---firmware-builtin-no-sbctl) de utilizar `sbctl enroll-keys --microsoft` em `nox-secureboot-enroll`.
+9. **Limitações da referência:** O comportamento depende da implementação de `dbDefault` do fabricante UEFI, mas omitir `--firmware-builtin` em favor de `--microsoft` evita a falha sem perder suporte à Option ROM da GPU.
+10. **Referência upstream:** [CachyOS Wiki — Configuração de Secure Boot (Aviso sobre `--firmware-builtin`)](https://wiki.cachyos.org/pt/configuration/secure_boot_setup/)
 
-### Caso 5 — `PANIC: CHECKSUM MISMATCH FOR CONFIG FILE` no Limine após editar `limine.conf` ou restaurar snapshot
-1. **Modelo da placa-mãe:** Qualquer placa UEFI com Limine compilado/configurado com `ENABLE_ENROLL_LIMINE_CONFIG=yes`.
+### Cenário Técnico 5 — `PANIC: CHECKSUM MISMATCH FOR CONFIG FILE` no Limine após alterar `limine.conf` ou restaurar snapshot
+1. **Plataforma documentada:** Sistemas UEFI com Limine compilado com `ENABLE_ENROLL_LIMINE_CONFIG=yes`.
 2. **Versão da BIOS:** Independente da BIOS (verificação realizada pelo próprio binário `limine_x64.efi`).
 3. **Distribuição:** Arch Linux / CachyOS com `limine-mkinitcpio-hook` e `limine-snapper-sync`.
-4. **Estado inicial das chaves:** Hash BLAKE2B inscrito no `limine_x64.efi` e assinado com `sbctl`.
-5. **Problema:** O arquivo `/boot/limine.conf` foi alterado (manualmente ou por uma sincronização de snapshot interrompida antes de `limine-enroll-config`). Ao ligar o PC, o `limine_x64.efi` passou pelo Secure Boot da placa-mãe, mas abortou ao ler `/boot/limine.conf` com `PANIC: CHECKSUM MISMATCH FOR CONFIG FILE` porque o hash BLAKE2B do texto não coincidia mais com o hash gravado dentro do `.efi`.
-6. **Método utilizado:** Iniciar pela ISO do Arch Linux (desativando o Secure Boot temporariamente na BIOS se necessário), montar a partição raiz e `/boot`, entrar em `arch-chroot` e executar `limine-enroll-config` (ou, no Project Nox, `/usr/local/libexec/nox/nox-limine-integrity --force`).
-7. **Resultado:** O novo hash BLAKE2B de `/boot/limine.conf` foi inscrito em `limine_x64.efi` e `BOOTX64.EFI`, ambos foram re-assinados pelo `sbctl` e o boot voltou ao normal.
-8. **Aplicação ao Project Nox:** O Project Nox automatiza essa prevenção via `nox-limine-integrity` (que agora verifica qualquer divergência real de BLAKE2B via `b2sum`, não apenas hash zerado) nos hooks de boot e shutdown.
-9. **Limitações da comparação:** Se ocorrer queda de energia exatamente durante a escrita em `/boot`, o reparo via ISO/chroot continua sendo o caminho seguro documentado em [`docs/RECOVERY.md`](RECOVERY.md).
-10. **Links originais:** [Arch Wiki — Limine: Configuration file verification (BLAKE2b)](https://wiki.archlinux.org/title/Limine#Configuration_file_verification) · [GitLab — Zesko/limine-mkinitcpio-hook (`limine-enroll-config`)](https://gitlab.com/Zesko/limine-mkinitcpio-hook)
+4. **Estado inicial das chaves:** Hash BLAKE2B inscrito em `limine_x64.efi` e assinado com `sbctl`.
+5. **Comportamento documentado:** Se `/boot/limine.conf` for modificado sem atualização subsequente de `limine-enroll-config` e assinatura `sbctl`, o bootloader `limine_x64.efi` aborta a inicialização com `PANIC: CHECKSUM MISMATCH FOR CONFIG FILE`.
+6. **Correção técnica documentada:** Iniciar pela ISO oficial do Arch Linux, montar a partição raiz e `/boot`, entrar em `arch-chroot` e executar `/usr/local/libexec/nox/nox-limine-integrity --force` (que normaliza `limine.conf`, atualiza `limine-enroll-config` e re-assina `BOOTX64.EFI` e `limine_x64.efi`).
+7. **Efeito esperado:** Novo hash BLAKE2B inscrito e assinaturas UEFI sincronizadas.
+8. **Aplicação ao Nox Archinstall:** Automatizado por `nox-limine-integrity` (modos `--repair-if-dirty`, `--force` e `--verify`, com preservação fail-closed do marcador `.dirty`) nos hooks e serviço `nox-limine-integrity-shutdown.service`.
+9. **Limitações da referência:** Queda abrupta de energia durante a escrita na ESP continua coberta pelo fluxo de recuperação offline via ISO em [`docs/RECOVERY.md`](RECOVERY.md).
+10. **Referências upstream:** [Arch Wiki — Limine: Configuration file verification (BLAKE2b)](https://wiki.archlinux.org/title/Limine#Configuration_file_verification) · [GitLab — Zesko/limine-mkinitcpio-hook (`limine-enroll-config`)](https://gitlab.com/Zesko/limine-mkinitcpio-hook)
 
-### Caso 6 — Congelamento de menu de BIOS em revisões antigas da MSI PRO B650M-P e recuperação via Flash BIOS Button
-1. **Modelo da placa-mãe:** **MSI PRO B650M-P (`MS-7E27`)**.
-2. **Versão da BIOS:** Revisões antigas da série `7E27v1x` anteriores às correções AGESA 2025/2026.
-3. **Distribuição:** Independente de SO (interface da própria BIOS MSI).
+### Cenário Técnico 6 — Travamentos de menu em revisões antigas da BIOS MSI PRO B650M-P e recuperação via Flash BIOS Button
+1. **Plataforma documentada:** **MSI PRO B650M-P (`MS-7E27`)**.
+2. **Versão da BIOS:** Revisões antigas da série `7E27v1x` anteriores às atualizações AGESA 2025/2026.
+3. **Distribuição:** Independente de sistema operacional (interface UEFI Click BIOS 5).
 4. **Estado inicial das chaves:** Padrão de fábrica.
-5. **Problema:** Alguns usuários de revisões antigas de BIOS da PRO B650M-P relataram travamentos na interface gráfica do Click BIOS 5 ao navegar repetidamente em submenus ou após configurações inválidas de memória/boot.
-6. **Método utilizado:** Uso do jumper **`JBAT1`** (Clear CMOS) para limpar a NVRAM de configuração ou atualização de firmware via **M-Flash** / botão físico traseiro **Flash BIOS Button** (arquivo renomeado para `MSI.ROM` em pendrive FAT32).
-7. **Resultado:** Estabilidade normalizada em versões recentes da BIOS (como a série `1.I` / `1.I2` de março de 2026).
-8. **Aplicação ao Project Nox:** Sua placa já está na revisão **`1.I2` (`20/03/2026`)**, que é recente. Além disso, a MSI PRO B650M-P conta tanto com o jumper `JBAT1` quanto com o **Flash BIOS Button** no painel traseiro, oferecendo recuperação física de hardware mesmo sem vídeo.
-9. **Limitações da comparação:** Atualizar a BIOS é opcional e fica a critério do proprietário; não é pré-requisito obrigatório se a BIOS `1.I2` já exibir `Secure Boot Preset` ou `Image Execution Policy`.
-10. **Link original:** [Página Oficial de Suporte e BIOS — MSI PRO B650M-P](https://www.msi.com/Motherboard/PRO-B650M-P/support)
+5. **Comportamento documentado:** As notas de suporte e documentação de recuperação da placa preveem instabilidade ou configurações inválidas de NVRAM em revisões antigas, com recuperação prevista por **Clear CMOS (`JBAT1`)**, **M-Flash** ou botão físico traseiro **Flash BIOS Button** (`MSI.ROM` em pendrive FAT32).
+6. **Correção técnica documentada:** Limpeza de CMOS em `JBAT1` para restaurar acesso ao firmware ou atualização via M-Flash / Flash BIOS Button para revisões recentes (`1.I2`, março de 2026 ou posterior).
+7. **Efeito esperado:** Acesso estável à configuração de `Secure Boot Mode` e políticas UEFI sem travamentos de interface.
+8. **Aplicação ao Nox Archinstall:** O ambiente físico de destino já utiliza revisão **`1.I2` (`20/03/2026`)**, mantendo `JBAT1` e **Flash BIOS Button** documentados como rede de segurança física caso uma configuração incorreta impeça o POST.
+9. **Limitações da referência:** Atualizar a BIOS além da versão já instalada não é pré-requisito caso `Secure Boot Preset` ou `Image Execution Policy` já estejam disponíveis no menu atual.
+10. **Referência upstream:** [Página Oficial de Suporte e BIOS — MSI PRO B650M-P](https://www.msi.com/Motherboard/PRO-B650M-P/support)
 
 ---
 

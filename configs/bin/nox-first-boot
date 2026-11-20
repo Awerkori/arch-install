@@ -17,10 +17,10 @@ sysctl --system >/dev/null 2>&1 || true
 # 2. Conditional Wi-Fi regulatory domain remediation (only if self-managed + country BR)
 if command -v iw >/dev/null 2>&1; then
   REG_OUT="$(iw reg get 2>/dev/null || true)"
-  if printf '%s\n' "$REG_OUT" | grep -q '(self-managed)' && \
-     printf '%s\n' "$REG_OUT" | grep -q 'country BR:'; then
-    if systemctl is-failed --quiet cachyos-iw-set-regdomain.service 2>/dev/null || \
-       systemctl list-unit-files cachyos-iw-set-regdomain.service >/dev/null 2>&1; then
+  if printf '%s\n' "$REG_OUT" | grep -q '(self-managed)' &&
+    printf '%s\n' "$REG_OUT" | grep -q 'country BR:'; then
+    if systemctl is-failed --quiet cachyos-iw-set-regdomain.service 2>/dev/null ||
+      systemctl list-unit-files cachyos-iw-set-regdomain.service >/dev/null 2>&1; then
       systemctl mask cachyos-iw-set-regdomain.service >/dev/null 2>&1 || true
       systemctl mask cachyos-iw-set-regdomain.path >/dev/null 2>&1 || true
       systemctl reset-failed cachyos-iw-set-regdomain.service >/dev/null 2>&1 || true
@@ -29,17 +29,19 @@ if command -v iw >/dev/null 2>&1; then
   fi
 fi
 
-# 3. Verify Limine configuration on booted target
+# 3. Verify and converge Limine configuration on booted target fail-closed
 if command -v limine-snapper-sync >/dev/null 2>&1 && [[ -f /boot/limine.conf ]]; then
   if ! grep -q 'linux-cachyos' /boot/limine.conf; then
-    limine-update || true
+    limine-update
   fi
   limine-snapper-sync || true
-  if [[ -x /usr/local/libexec/nox/nox-limine-normalize ]]; then
-    /usr/local/libexec/nox/nox-limine-normalize --post || true
+  if [[ -d /sys/firmware/efi ]]; then
+    /usr/local/libexec/nox/nox-limine-integrity --force
+  else
+    [[ -x /usr/local/libexec/nox/nox-limine-normalize ]] && /usr/local/libexec/nox/nox-limine-normalize --post
+    limine-enroll-config
+    [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback
   fi
-  command -v limine-enroll-config >/dev/null 2>&1 && limine-enroll-config >/dev/null 2>&1 || true
-  [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true
 fi
 
 # 4. Optimize Btrfs mount options in /etc/fstab (add noatime cleanly; deduplicate /nox-swap and /.snapshots)
@@ -75,5 +77,5 @@ os.replace(tmp, p)
 PY
 fi
 
-date -Iseconds > "$DONE_FILE"
+date -Iseconds >"$DONE_FILE"
 systemctl disable nox-first-boot.service >/dev/null 2>&1 || true

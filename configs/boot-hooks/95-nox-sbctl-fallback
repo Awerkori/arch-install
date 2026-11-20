@@ -2,29 +2,48 @@
 # Post-boot hook: keep fallback /EFI/BOOT/BOOTX64.EFI enrolled with limine.conf hash and signed via sbctl.
 set -Eeuo pipefail
 
-LIMINE_CONF="${ESP_PATH:-/boot}/limine.conf"
 ESP="${ESP_PATH:-/boot}"
+LIMINE_CONF="${ESP}/limine.conf"
+LIMINE_EFI="${ESP}/EFI/limine/limine_x64.efi"
 FALLBACK_EFI="${ESP}/EFI/BOOT/BOOTX64.EFI"
-SRC_EFI="/usr/share/limine/BOOTX64.EFI"
+SRC_EFI="${NOX_LIMINE_SRC_EFI:-/usr/share/limine/BOOTX64.EFI}"
+LIMINE_DEFAULT="${NOX_LIMINE_DEFAULT:-/etc/default/limine}"
+DIRTY_MARKER="${NOX_DIRTY_MARKER:-/run/nox-limine-tx.dirty}"
+if [[ -n "${NOX_FALLBACK_LOCK:-}" ]]; then
+  LOCK_FILE="$NOX_FALLBACK_LOCK"
+elif ((EUID != 0)) && [[ -n "${ESP_PATH:-}" ]]; then
+  LOCK_FILE="${ESP}/.nox-sbctl-fallback.lock"
+else
+  LOCK_FILE="/run/lock/nox-sbctl-fallback.lock"
+fi
+SBCTL_BIN="${NOX_SBCTL_BIN:-sbctl}"
 
-[[ -d /sys/firmware/efi ]] || exit 0
+[[ -d /sys/firmware/efi || "${NOX_FORCE_EFI_HOOK:-0}" == "1" ]] || exit 0
 [[ -f "$LIMINE_CONF" && -f "$SRC_EFI" ]] || exit 0
-command -v sbctl >/dev/null 2>&1 || exit 0
+command -v "$SBCTL_BIN" >/dev/null 2>&1 || exit 0
 command -v limine >/dev/null 2>&1 || exit 0
 
-if ! sbctl setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
+if ! "$SBCTL_BIN" setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
   exit 0
 fi
 
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 201>"$LOCK_FILE"
+flock -w 30 201 || {
+  echo "95-nox-sbctl-fallback: timeout aguardando lock $LOCK_FILE" >&2
+  exit 1
+}
+
 ENROLL_FLAG="no"
-if [[ -f /etc/default/limine ]]; then
-  val="$(sed -n 's/^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=\(.*\)/\1/p' /etc/default/limine | tail -n1 | tr -d '"' | tr -d "'" | tr -d '[:space:]')"
+if [[ -f "$LIMINE_DEFAULT" ]]; then
+  val="$(sed -n 's/^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=\(.*\)/\1/p' "$LIMINE_DEFAULT" | tail -n1 | tr -d '"' | tr -d "'" | tr -d '[:space:]')"
   [[ -n "$val" ]] && ENROLL_FLAG="$val"
 fi
 
 mkdir -p "$(dirname "$FALLBACK_EFI")"
-TMP_EFI="${FALLBACK_EFI}.nox.tmp"
-trap 'rm -f "$TMP_EFI"' EXIT
+TMP_DIR="$(mktemp -d "$(dirname "$FALLBACK_EFI")/.nox-sbctl-fb.XXXXXX")"
+TMP_EFI="${TMP_DIR}/BOOTX64.EFI"
+trap 'rm -rf "$TMP_DIR"' EXIT INT TERM HUP
 cp -f "$SRC_EFI" "$TMP_EFI"
 
 if [[ "$ENROLL_FLAG" == "yes" ]]; then
@@ -32,7 +51,14 @@ if [[ "$ENROLL_FLAG" == "yes" ]]; then
   limine enroll-config "$TMP_EFI" "$CONF_HASH" >/dev/null
 fi
 
-sbctl sign "$TMP_EFI" >/dev/null
+"$SBCTL_BIN" sign "$TMP_EFI" >/dev/null
 mv -f "$TMP_EFI" "$FALLBACK_EFI"
+
+if [[ -f "$LIMINE_EFI" ]] && ! "$SBCTL_BIN" verify "$LIMINE_EFI" 2>/dev/null | grep -q 'is signed'; then
+  "$SBCTL_BIN" sign "$LIMINE_EFI" >/dev/null
+fi
+
 sync -f "$FALLBACK_EFI" 2>/dev/null || sync
-rm -f /run/nox-limine-tx.dirty
+if [[ "${NOX_PRESERVE_DIRTY_MARKER:-0}" != "1" ]]; then
+  rm -f "$DIRTY_MARKER"
+fi

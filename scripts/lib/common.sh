@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared logging, state tracking, context guards, and atomic file helpers.
 
-NOX_VERSION="1.0.0"
+NOX_VERSION="1.0.1"
 NOX_STATE_DIR="${NOX_STATE_DIR:-/var/lib/nox-archinstall}"
 NOX_LOG_DIR="${NOX_LOG_DIR:-/var/log/nox-archinstall}"
 NOX_CFG_DIR="${NOX_CFG_DIR:-/etc/nox-archinstall}"
@@ -14,18 +14,19 @@ nox_ts() {
 }
 
 nox_log() {
-  local level="$1"; shift
+  local level="$1"
+  shift
   local msg="$*"
   local line
   line="[$(nox_ts)] [$level] $msg"
   printf '%s\n' "$line" >&2
   if [[ -d "$NOX_LOG_DIR" && -w "$NOX_LOG_DIR" ]]; then
-    printf '%s\n' "$line" >> "${NOX_LOG_DIR}/install.log" 2>/dev/null || true
+    printf '%s\n' "$line" >>"${NOX_LOG_DIR}/install.log" 2>/dev/null || true
   fi
 }
 
-nox_info()  { nox_log "INFO" "$*"; }
-nox_warn()  { nox_log "WARN" "$*"; }
+nox_info() { nox_log "INFO" "$*"; }
+nox_warn() { nox_log "WARN" "$*"; }
 nox_error() { nox_log "ERROR" "$*"; }
 
 nox_die() {
@@ -80,7 +81,7 @@ nox_mark_stage_done() {
   local stage="$1"
   local checksum="${2:-}"
   printf '{"stage":"%s","status":"ok","timestamp":"%s","version":"%s","checksum":"%s"}\n' \
-    "$stage" "$(nox_ts)" "$NOX_VERSION" "$checksum" > "${NOX_STATE_DIR}/stages/${stage}.done"
+    "$stage" "$(nox_ts)" "$NOX_VERSION" "$checksum" >"${NOX_STATE_DIR}/stages/${stage}.done"
 }
 
 nox_write_status() {
@@ -122,7 +123,7 @@ nox_wait_pacman_lock() {
   local tries=0
   while [[ -e "$lock" ]]; do
     if pgrep -x pacman >/dev/null 2>&1 || pgrep -x paru >/dev/null 2>&1; then
-      if (( tries >= 30 )); then
+      if ((tries >= 30)); then
         nox_die "Transacao pacman/paru ainda ativa apos espera; /var/lib/pacman/db.lck ocupado. Nao removendo lock."
       fi
       nox_warn "Aguardando termino de transacao pacman ativa..."
@@ -184,7 +185,7 @@ nox_sync_hidden_tech_desktops() {
     [[ -f "$src" ]] || continue
     dname="$(grep -m1 '^Name=' "$src" | cut -d= -f2- || true)"
     [[ -n "$dname" ]] || dname="${dfile%.desktop}"
-    cat > "/etc/skel/.local/share/applications/${dfile}" <<EOF
+    cat >"/etc/skel/.local/share/applications/${dfile}" <<EOF
 [Desktop Entry]
 Type=Application
 Name=${dname}

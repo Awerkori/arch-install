@@ -12,7 +12,7 @@ fi
 DRY_OR_INFO=false
 for arg in "$@"; do
   case "$arg" in
-    -n|--dry-run|-h|--help|-V|--version|--config-reference|--edit-config)
+    -n | --dry-run | -h | --help | -V | --version | --config-reference | --edit-config)
       DRY_OR_INFO=true
       break
       ;;

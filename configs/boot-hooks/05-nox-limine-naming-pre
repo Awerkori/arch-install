@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 mkdir -p /run
-: > /run/nox-limine-tx.dirty || true
+: >/run/nox-limine-tx.dirty || true
 
 if [[ -x /usr/local/libexec/nox/nox-limine-normalize ]]; then
   /usr/local/libexec/nox/nox-limine-normalize --pre

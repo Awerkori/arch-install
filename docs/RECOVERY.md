@@ -1,4 +1,4 @@
-# Manual Completo de Recuperação — Project Nox (`v1.0.0`)
+# Manual Completo de Recuperação — Nox Archinstall (`v1.0.0` / `v1.0.1`)
 
 Este manual descreve, passo a passo, como recuperar o sistema **Project Nox** nos **10 cenários reais de falha ou manutenção** sem precisar formatar o SSD e sem perder seus arquivos pessoais em `/home`.
 
@@ -148,7 +148,7 @@ Agora você está executando comandos diretamente dentro do seu sistema Project 
   1. Conecte-se à internet na ISO oficial, siga o **[Procedimento Base](#procedimento-base-como-iniciar-pela-iso-oficial-do-arch-linux-e-entrar-no-arch-chroot)** e entre em `arch-chroot /mnt`.
   2. Reinstale o kernel `linux-cachyos` e regenere toda a cadeia de boot:
      ```bash
-     rm -f /var/lib/pacman/db.lck
+     pgrep -a pacman || rm -f /var/lib/pacman/db.lck
      pacman -Syyu --noconfirm linux-cachyos linux-cachyos-headers
      limine-update
      limine-snapper-sync || true
@@ -172,7 +172,7 @@ O Project Nox mantém snapshots automáticos do subvolume raiz `@` em `/.snapsho
    ```bash
    sudo /usr/local/bin/limine-snapper-restore
    ```
-4. O assistente `nox-limine-snapper-restore` exibirá a tabela de snapshots disponíveis (`limine-snapper-list`), pedirá que você informe o ID a restaurar, restaurará o subvolume `@` e o kernel correspondente em `/boot` e executará automaticamente `/usr/local/libexec/nox/nox-limine-integrity --force` para atualizar o hash BLAKE2B e re-assinar os binários EFI com `sbctl`.
+4. O assistente `/usr/local/bin/limine-snapper-restore` exibirá a tabela de snapshots disponíveis (`limine-snapper-list`), pedirá que você informe o ID a restaurar, restaurará o subvolume `@` e o kernel correspondente em `/boot` e executará automaticamente `/usr/local/libexec/nox/nox-limine-integrity --force` para atualizar o hash BLAKE2B e re-assinar os binários EFI com `sbctl`.
 5. Reinicie o computador ao concluir.
 
 ### Método 5.2 — Restauração manual de `@` via ISO oficial (Caso o sistema nem inicie e houve queda de energia)

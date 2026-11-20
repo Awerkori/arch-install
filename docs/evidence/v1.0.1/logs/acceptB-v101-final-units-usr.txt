@@ -1,0 +1,7 @@
+nox-fuxi-h3.path
+nox-session-setup.service
+p11-kit-server.socket
+pipewire-pulse.socket
+pipewire.socket
+wireplumber.service
+xdg-user-dirs.service

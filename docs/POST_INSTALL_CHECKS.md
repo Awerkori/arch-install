@@ -75,6 +75,7 @@ Os itens abaixo dependem de periféricos e GPU físicos (Tipo C) e não podem se
       ```bash
       sudo sbctl status
       sudo nox-secureboot-verify --require-active
+      sudo /usr/local/libexec/nox/nox-limine-integrity --verify
       ```
 
 10. **Topgrade, ProtonPlus, GE-Proton e DWProton (`PENDENTE-HARDWARE` após instalar Steam/launcher):**
