@@ -1,10 +1,10 @@
-# Guia de Instalação Passo a Passo — Project Nox (`v1.0.0`)
+# Guia de Instalação Passo a Passo — Project Nox (`v1.0.0` / Hardening `v1.0.1`)
 
-Este guia explica, do começo ao fim e sem exigir experiência avançada com o `archinstall`, como instalar o **Project Nox** a partir da mídia oficial do Arch Linux.
+Este guia explica, do começo ao fim e sem exigir experiência avançada com o `archinstall`, como instalar o **Project Nox / Nox Archinstall** a partir da mídia oficial do Arch Linux mantendo verificação criptográfica de integridade em todos os estágios.
 
 O fluxo completo resume-se a:
 
-> **ISO oficial do Arch Linux → Conexão com a Internet → Comando do Project Nox → Escolha do SSD → Nome de Usuário → Senha → Instalação Automática → Reinicialização.**
+> **ISO oficial do Arch Linux → Conexão com a Internet → Comando Oficial Verificado (SHA-256) → Escolha do SSD → Confirmação Destrutiva do Dispositivo → Nome de Usuário → Senha e Confirmação → Confirmação Final → Instalação Automática → Reinicialização.**
 
 ---
 
@@ -16,22 +16,22 @@ A instalação do Project Nox **formatará integralmente o SSD escolhido**, recr
 ### 1.2. Requisitos mínimos do computador
 - **Processador (CPU):** compatível com **`x86-64-v4`** (AMD Ryzen séries 7000/9000 — Zen 4 / Zen 5). O instalador verifica esse requisito automaticamente na etapa `00-preflight` porque utiliza os repositórios otimizados `cachyos-znver4`.
 - **Modo de inicialização da placa-mãe:** **UEFI 64 bits** (modo CSM / Legacy BIOS desativado).
-- **Espaço livre no SSD de destino:** mínimo técnico de **20 GiB** (recomendado **64 GiB ou mais**; em máquinas físicas com `>= 24 GiB` de RAM e disco amplo, o instalador dimensiona o swapfile Btrfs adequadamente).
-- **Conexão ativa com a internet:** necessária durante toda a instalação para baixar os pacotes oficiais do Arch Linux, do CachyOS e o payload verificado da release `v1.0.0`.
+- **Espaço livre no SSD de destino:** mínimo técnico de **20 GiB** (recomendado **64 GiB ou mais**; em máquinas físicas com `>= 24 GiB` de RAM e disco amplo, o instalador dimensiona o swapfile Btrfs de 32 GiB automaticamente).
+- **Conexão ativa com a internet:** necessária durante toda a instalação para baixar os pacotes oficiais do Arch Linux, do CachyOS e o payload verificado da versão.
 
 ### 1.3. ISO oficial homologada e versão do `archinstall`
 - O Project Nox **não** possui ISO própria: você deve usar a **ISO oficial do Arch Linux**.
-- Esta release (`v1.0.0`) foi homologada na ISO oficial **`archlinux-2026.11.01-x86_64.iso`**, que traz o **`archinstall 4.5`**.
-- Por segurança, o assistente `nox-install.py` verifica automaticamente se está rodando dentro da ISO oficial (`/run/archiso`) e se a versão do `archinstall` pertence à série homologada **`4.5`** (`4.5` ou `4.5.*`).
+- O instalador foi homologado na ISO oficial **`archlinux-2026.11.01-x86_64.iso`**, que traz o **`archinstall 4.5`**.
+- Por segurança, o assistente `nox-install.py` verifica automaticamente se está rodando como `root` em modo UEFI dentro da ISO oficial (`/run/archiso`) e se a versão do `archinstall` pertence à série homologada **`4.5`** (`4.5` ou `4.5.*`), bloqueando qualquer execução acidental no sistema hospedeiro.
 
 ### 1.4. Por que o Secure Boot deve estar desativado para iniciar a ISO oficial
-Em configurações padrão de fábrica, a ISO oficial do Arch Linux pode ser bloqueada caso o **Secure Boot** esteja ativo na placa-mãe (ou caso a política de execução de mídia removível esteja restrita).
+Em configurações padrão de fábrica, a ISO oficial do Arch Linux pode ser bloqueada caso o **Secure Boot** esteja ativo na placa-mãe.
 
 - **Recomendação obrigatória para a instalação:** antes de dar boot pelo pendrive da ISO do Arch Linux, entre na BIOS/UEFI (tecla `Del` na MSI PRO B650M-P) e confirme que **Secure Boot** está como **`Disabled`**.
-- **Não apague nem altere as chaves do firmware antes de instalar o sistema.** Toda a preparação criptográfica do Secure Boot será feita automaticamente durante a instalação e a ativação no firmware será realizada depois, com o sistema já instalado e funcionando, seguindo [`docs/SECURE-BOOT.md`](SECURE-BOOT.md) ou [`docs/SECURE-BOOT-MSI.md`](SECURE-BOOT-MSI.md).
+- **Não apague nem altere as chaves do firmware antes de instalar o sistema.** As etapas 1, 2 e 3 do Secure Boot (geração das chaves locais `sbctl`, assinatura dos binários EFI/kernel e inscrição do hash BLAKE2B em `/boot/limine.conf`) são preparadas automaticamente durante a instalação. As etapas 4 e 5 (inscrição das chaves na NVRAM e ativação do Secure Boot na BIOS) serão realizadas depois, com o sistema já instalado e funcionando, seguindo [`docs/SECURE-BOOT.md`](SECURE-BOOT.md) ou [`docs/SECURE-BOOT-MSI.md`](SECURE-BOOT-MSI.md).
 
 ### 1.5. Como confirmar que a ISO iniciou em modo UEFI
-Assim que o pendrive carregar e você cair no prompt `root@archiso ~ #`, pode confirmar que o sistema iniciou em modo UEFI executando:
+Assim que o pendrive carregar e você cair no prompt `root@archiso ~ #`, confirme que o sistema iniciou em modo UEFI executando:
 
 ```bash
 ls /sys/firmware/efi/efivars
@@ -73,67 +73,81 @@ curl -I https://archlinux.org
 
 - **Resultado esperado:** resposta contendo `HTTP/2 200` (ou `HTTP/1.1 200 OK`).
 - **Se DNS ou HTTPS falhar:**
-  - Verifique se o relógio do sistema na BIOS está com data coerente: `timedatectl status` (certificados HTTPS falham se o ano da BIOS estiver muito atrasado; ative a sincronização com `timedatectl set-ntp true`).
+  - Verifique se o relógio do sistema na BIOS está com data coerente: `timedatectl status` (ative a sincronização com `timedatectl set-ntp true`).
   - Confira se a interface recebeu endereço IP: `ip addr show`.
 
 ---
 
-## 3. Comando Definitivo de Instalação
+## 3. Cadeia de Confiança e Comando Oficial de Instalação
 
-O instalador baixa o script oficial `nox-install.py` em memória RAM (`/tmp`), valida sua integridade via **SHA-256** e conecta o terminal interativo (`/dev/tty`) para conduzir as perguntas do assistente.
+O Project Nox utiliza uma **única cadeia oficial de instalação** baseada em **referências imutáveis de commit** e **verificação SHA-256 independente em todos os estágios**, sem executar código remoto não verificado e sem depender de arquivos mutáveis da branch `main`:
 
-Você pode iniciar a instalação usando o **comando curto** (mais fácil de digitar manualmente no teclado da ISO) ou o **comando completo original**. Ambos iniciam exatamente o mesmo instalador e validam os mesmos hashes SHA-256.
+| Estágio | Artefato | Referência Imutável (`v1.0.1`) | SHA-256 Verificado antes do uso |
+|---|---|---|---|
+| **1. Iniciador** | [`i`](../i) | Commit `16f858e924a4565fca85bb36a75c873eeeba3778` | `dd439e6364a5d97e970d1c8ed62224fea2e7c9c38018724c1216eae1f4ca50de` |
+| **2. Bootstrap** | [`bootstrap/nox-install.py`](../bootstrap/nox-install.py) | Commit `5e1128cba9796a88c0d62e22963c67bd18ccd79a` | `bee5edb22d802fe82fa4727377172694f4b53fd81839c5774e9ebcd6eb39ab80` |
+| **3. Configuração** | [`user_configuration.json`](../user_configuration.json) | Commit `e2e84418d045b8856157265dd4f74f9172211e4e` | `aef4bdeb5268d1bbbebb42ad8de00cf7d98b71b687332bfab1f259cadb8311f9` |
+| **4. Payload** | `nox-archinstall-payload-v1.0.1.tar.gz` | Release `v1.0.1` | `660d6caa4a418a17a6a4138f2a1d61f10673718aeca775adca6bcf3fdbdd1ec3` |
 
-### Opção 1 — Comando curto (recomendado para digitar na ISO)
+> **Nota sobre o modelo de segurança e suas limitações:** Como o projeto não utiliza infraestrutura externa de chaves de assinatura digital pré-instaladas na ISO oficial do Arch Linux, a autenticidade da cadeia é estabelecida pela pinagem criptográfica de hashes SHA-256 combinada a URLs imutáveis por commit SHA sobre HTTPS/TLSv1.2+ (com bloqueio de downgrade HTTP em redirecionamentos). A raiz de confiança parte do comando e hash SHA-256 do Estágio 1 copiados pelo operador a partir desta documentação.
 
-```bash
-curl -fsSL https://github.com/Awerkori/arch-install/raw/main/i | sh
-```
-
-*(O script curto [`i`](../i), hospedado na raiz deste próprio repositório, baixa o `nox-install.py` oficial da release `v1.0.0` via HTTPS estrito, confere seu hash SHA-256 `fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10`, reconecta a entrada interativa ao `/dev/tty` e remove a pasta temporária ao sair).*
-
-### Opção 2 — Comando completo original (`Download-Then-Execute`)
-
-```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/main/bootstrap/nox-install.py -o /tmp/nox-install.py && python3 /tmp/nox-install.py
-```
-
-### Opção 3 — Em duas etapas separadas (útil para inspeção manual)
+### Opção 1 — Comando oficial verificado em linha única (Recomendado)
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/main/bootstrap/nox-install.py -o /tmp/nox-install.py
-python3 /tmp/nox-install.py
+sh -c 'set -eu; umask 077; f=$(mktemp /tmp/nox-i.XXXXXX); trap "rm -f \"$f\"" EXIT INT TERM; curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/16f858e924a4565fca85bb36a75c873eeeba3778/i -o "$f"; printf "%s  %s\n" "dd439e6364a5d97e970d1c8ed62224fea2e7c9c38018724c1216eae1f4ca50de" "$f" | sha256sum -c -; sh "$f"'
 ```
 
-### O que esse comando faz automaticamente antes de tocar no disco
-1. Verifica que você está em um terminal interativo dentro da ISO oficial do Arch Linux (`/run/archiso`) com **`archinstall 4.5`**.
-2. Baixa via HTTPS a configuração base pública (`user_configuration.json`) do repositório oficial.
-3. Valida a URL e o hash **SHA-256** do pacote da release (`nox-archinstall-payload-v1.0.0.tar.gz`) e testa a conectividade HTTPS com o GitHub Releases e com `https://archlinux.org`.
-4. Lista os discos disponíveis no computador para que você escolha o SSD com segurança.
+### Opção 2 — Download, verificação SHA-256 e inspeção manual passo a passo
+
+Se desejar inspecionar o iniciador antes de executá-lo, execute os passos abaixo na ordem exata (o arquivo nunca é executado antes da verificação `sha256sum -c -`):
+
+```bash
+umask 077
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/16f858e924a4565fca85bb36a75c873eeeba3778/i -o /tmp/nox-i
+printf '%s  /tmp/nox-i\n' 'dd439e6364a5d97e970d1c8ed62224fea2e7c9c38018724c1216eae1f4ca50de' | sha256sum -c -
+less /tmp/nox-i
+sh /tmp/nox-i
+rm -f /tmp/nox-i
+```
+
+### Referência da release estável publicada `v1.0.0` (Imutável)
+
+Caso deseje executar especificamente os artefatos congelados da release estável [`v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0), utilize a verificação explícita dos hashes publicados da `v1.0.0`:
+
+```bash
+umask 077
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-install.py -o /tmp/nox-install.py
+printf '%s  /tmp/nox-install.py\n' 'fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10' | sha256sum -c -
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/32c074ca3819d261a774b92ee4c7359411b963d5/user_configuration.json -o /tmp/nox-cfg.json
+printf '%s  /tmp/nox-cfg.json\n' '6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c' | sha256sum -c -
+python3 /tmp/nox-install.py --config /tmp/nox-cfg.json
+rm -f /tmp/nox-install.py /tmp/nox-cfg.json
+```
+
+### O que o assistente verifica automaticamente antes de tocar no disco
+1. Confirma que você está em um terminal interativo dentro da ISO oficial do Arch Linux (`/run/archiso`) em modo UEFI com **`archinstall 4.5`**.
+2. Baixa via HTTPS a configuração base oficial de commit imutável e **valida o SHA-256 dos bytes brutos antes de interpretar o JSON**.
+3. Valida o formato, esquema HTTPS e hash **SHA-256** do payload da versão e testa a conectividade HTTPS sem permitir downgrade para HTTP.
+4. Lista os discos elegíveis (`>= 20 GiB`, excluindo a mídia da ISO) para que você escolha o SSD com segurança.
 
 ---
 
-## 4. Escolha do SSD e Aviso Destrutivo
+## 4. As 5 Etapas Interativas do Assistente e Aviso Destrutivo
 
 > **AVISO CRÍTICO:** O disco selecionado na etapa `[1/4]` terá **todas as suas partições e dados apagados permanentemente**. Nunca tente adivinhar qual disco escolher.
 
-### 4.1. Como identificar o SSD correto na lista
+### 4.1. Como identificar o SSD correto na lista (`[1/4]`)
 O assistente exibe cada disco elegível com quatro informações claras:
 1. **Tipo e barramento:** `[INTERNO]` vs `[USB/REMOVIVEL]` e o protocolo (`[nvme]`, `[sata]`, `[usb]`). O pendrive da própria ISO do Arch Linux já é filtrado automaticamente para não aparecer como destino.
 2. **Caminho do dispositivo:** por exemplo, `/dev/nvme0n1` ou `/dev/sda`.
 3. **Capacidade total em GiB:** por exemplo, `(931.5 GiB)` para um SSD de 1 TB ou `(465.8 GiB)` para um SSD de 500 GB.
-4. **Modelo físico gravado no hardware:** por exemplo, `Kingston KC3000`, `WD Black SN770`, `Samsung SSD 980`, etc.
+4. **Modelo físico e identificador persistente (`by-id`):** por exemplo, `Kingston KC3000`, `WD Black SN770`, `Samsung SSD 980`.
 
-Se você tiver mais de um SSD instalado no PC e quiser conferir as partições atuais antes de rodar o assistente, execute `lsblk -o NAME,SIZE,MODEL,TRAN,FSTYPE,MOUNTPOINTS`.
-
-### 4.2. Dupla confirmação de segurança
+### 4.2. Dupla confirmação de segurança (`[1/4]`, `[2/4]` e confirmação final)
 Para evitar qualquer formatação acidental por erro de digitação:
-1. **Etapa `[1/4]`:** você digita o **número** correspondente ao SSD na lista (por exemplo, `1`) — nenhum disco é pré-selecionado automaticamente se você apenas apertar `Enter`.
-2. **Etapa `[2/4]`:** o assistente mostra o resumo completo do disco escolhido e exige que você **digite exatamente o nome curto do dispositivo** (por exemplo, `nvme0n1` ou `vda`). Se o texto digitado não coincidir, a instalação é cancelada imediatamente sem alterar nada.
-
-### 4.3. Como cancelar a qualquer momento antes da formatação
-- Na escolha do disco (`[1/4]`), digite `q` e pressione `Enter`.
-- Ou pressione `Ctrl + C` em qualquer etapa antes da confirmação final (`Confirmar e iniciar a instalacao agora? [s/N]:`). Nenhuma alteração em disco é feita até você responder `s` nessa última pergunta.
+1. **Escolha do SSD (`[1/4]`):** digite o **número** correspondente ao SSD na lista (por exemplo, `1`) — nenhum disco é selecionado automaticamente se você apenas apertar `Enter`.
+2. **Confirmação destrutiva do dispositivo (`[2/4]`):** o assistente mostra o resumo do disco escolhido e exige que você **digite exatamente o nome curto do dispositivo** (por exemplo, `nvme0n1` ou `vda`). Se o texto digitado não coincidir, a instalação é cancelada imediatamente sem alterar nada.
+3. **Confirmação final antes de formatar:** após informar usuário e senha, o assistente apresenta o quadro **`RESUMO FINAL ANTES DE FORMATAR`** e pergunta `Confirmar e iniciar a instalacao agora? [s/N]:`. Nenhuma partição é tocada antes de você responder `s` nessa última confirmação.
 
 ---
 
@@ -143,16 +157,14 @@ Nas etapas `[3/4]` e `[4/4]`:
 
 1. **Nome de usuário (`[3/4]`):**
    - Digite o nome do seu usuário principal em letras minúsculas (por exemplo, `awerkori`).
-   - O nome deve começar com letra minúscula e conter apenas letras minúsculas, números, `_` ou `-` (máximo de 32 caracteres). O nome `root` não é permitido como usuário comum.
-2. **Senha (`[4/4]`):**
+   - O nome deve começar com letra minúscula ou `_` e conter apenas letras minúsculas, números, `_` ou `-` (máximo de 32 caracteres). Contas reservadas como `root`, `greeter` ou `noxbuild` são recusadas.
+2. **Definição e confirmação da senha (`[4/4]`):**
    - Digite sua senha e pressione `Enter`; em seguida, digite a mesma senha novamente para confirmar.
-   - **Normal:** por segurança, **nenhum caractere ou asterisco aparece na tela** enquanto você digita a senha.
+   - Por segurança, **nenhum caractere ou asterisco aparece na tela** enquanto você digita a senha, e a senha em texto puro é convertida imediatamente em hash SHA-512 (`$6$`) dentro de `tmpfs` em RAM (`/dev/shm`, permissão `0700`/`0600`), sendo removida dos diretórios de log ao final da execução.
 3. **Como funcionam o `sudo` e a conta `root` no Project Nox:**
    - Seu usuário é adicionado automaticamente ao grupo `wheel`.
-   - Sempre que precisar executar comandos administrativos (`sudo ...`), você utilizará **a sua própria senha de usuário**.
-   - Não existe senha separada para `root`: a conta `root` permanece **bloqueada para login direto** (`passwd -S root` -> `L`), seguindo as boas práticas de segurança do projeto.
-
-Após confirmar o resumo final com `s`, o instalador executará o particionamento Btrfs, a instalação dos pacotes base, o download e verificação SHA-256 do payload da release `v1.0.0` e todas as 13 etapas de configuração até exibir a conclusão.
+   - Sempre que precisar executar comandos administrativos (`sudo ...`), você utilizará **a sua própria senha de usuário** (sem regras `NOPASSWD`).
+   - A conta `root` permanece **bloqueada para login direto** (`passwd -S root` → `L`).
 
 Quando o processo terminar e voltar ao prompt da ISO, reinicie o computador e remova o pendrive:
 
@@ -177,17 +189,18 @@ Nenhuma configuração manual é necessária após reiniciar:
    - O wallpaper animado entra em execução via `mpvpaper`.
    - Se os dois monitores de referência (Samsung Odyssey G5 em `DP-1` e AOC vertical em `HDMI-A-1`) estiverem conectados, o `nox-display-profile` aplica automaticamente as resoluções (`2560x1440@165Hz` e `1920x1080@100Hz` rotacionado a 90°) e sincroniza a animação entre ambos.
 4. **Atalhos principais para começar a usar:**
-   - `Super` (tecla Windows sozinha) ou `Super + R`: abre o **Launcher minimalista** do Noctalia (`Firefox`, `kitty`, `Luciole`, `ProtonPlus`, ou digite `/tools` para ferramentas técnicas).
-   - `Super + Q` ou `Super + T`: abre o terminal **Kitty** (exibindo o painel `nox-fastfetch`).
-   - `Super + E`: abre o gerenciador de arquivos **Luciole**.
-   - `Super + B`: abre o navegador **Firefox**.
+   - `Super` ou `Super + R`: abre o **Launcher minimalista** do Noctalia (`Firefox`, `kitty`, `Luciole`, `ProtonPlus`, ou digite `/tools` para ferramentas técnicas).
+   - `Super + Q`: abre o terminal **Kitty** (exibindo o painel `nox-fastfetch`).
+   - `Super + E` ou `Ctrl + E`: abre o gerenciador de arquivos **Luciole**.
+   - `Super + C`: fecha a janela focada.
    - `Super + L`: bloqueia a sessão com a **Noctalia Lock Screen**.
    - Consulte todos os atalhos em [`docs/KEYBINDS_MIGRATION.md`](KEYBINDS_MIGRATION.md).
-
 5. **Verificação rápida pós-instalação:**
-   Abra o terminal Kitty (`Super + Q`) e confirme que o status da instalação registrou sucesso e que nenhuma unidade do sistema falhou:
+   Abra o terminal Kitty (`Super + Q`) e confirme o status da instalação, a integridade criptográfica do boot e a ausência de unidades com falha:
    ```bash
    cat /var/lib/nox-archinstall/status.json
+   sudo nox-secureboot-verify
    systemctl --failed
+   systemctl --user --failed
    ```
    Para verificações adicionais de hardware físico (GPU, áudio Fuxi H3, Wi-Fi AX210, Topgrade) e ativação futura do Secure Boot, consulte [`docs/POST_INSTALL_CHECKS.md`](POST_INSTALL_CHECKS.md) e [`docs/SECURE-BOOT-MSI.md`](SECURE-BOOT-MSI.md).

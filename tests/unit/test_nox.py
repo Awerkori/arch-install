@@ -977,3 +977,803 @@ class TestCorrectiveAuditAdditions(unittest.TestCase):
         wrap = (REPO / "configs/bin/nox-limine-snapper-restore").read_text(encoding="utf-8")
         self.assertIn("/usr/bin/limine-snapper-list", wrap)
 
+
+class TestTrustChainHardening(unittest.TestCase):
+    @staticmethod
+    def _load_nox_install():
+        spec = importlib.util.spec_from_file_location("nox_install", REPO / "bootstrap/nox-install.py")
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_stage1_launcher_rejects_tampered_bootstrap_and_http(self) -> None:
+        import hashlib
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            fake_boot = tmp / "nox-install.py"
+            fake_boot.write_text("import sys\nprint('EXECUTED_UNVERIFIED')\nsys.exit(0)\n", encoding="utf-8")
+            wrong_sha = "a" * 64
+
+            # 1. Override without NOX_ALLOW_CUSTOM_BOOTSTRAP=1 must fail
+            env_no_flag = os.environ.copy()
+            env_no_flag["NOX_BOOTSTRAP_URL"] = "https://example.invalid/nox-install.py"
+            res_no_flag = subprocess.run(
+                ["sh", str(REPO / "i")],
+                env=env_no_flag,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(res_no_flag.returncode, 2)
+            self.assertIn("NOX_ALLOW_CUSTOM_BOOTSTRAP=1", res_no_flag.stderr)
+
+            # 2. HTTP URL must be rejected even with NOX_ALLOW_CUSTOM_BOOTSTRAP=1
+            env_http = os.environ.copy()
+            env_http["NOX_ALLOW_CUSTOM_BOOTSTRAP"] = "1"
+            env_http["NOX_BOOTSTRAP_URL"] = "http://127.0.0.1:9999/nox-install.py"
+            env_http["NOX_BOOTSTRAP_SHA256"] = wrong_sha
+            res_http = subprocess.run(
+                ["sh", str(REPO / "i")],
+                env=env_http,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(res_http.returncode, 2)
+            self.assertIn("HTTPS estrito", res_http.stderr)
+
+            # 3. Invalid SHA-256 format must be rejected
+            env_bad_sha = os.environ.copy()
+            env_bad_sha["NOX_ALLOW_CUSTOM_BOOTSTRAP"] = "1"
+            env_bad_sha["NOX_BOOTSTRAP_URL"] = "https://example.invalid/nox-install.py"
+            env_bad_sha["NOX_BOOTSTRAP_SHA256"] = "not-a-sha256"
+            res_bad_sha = subprocess.run(
+                ["sh", str(REPO / "i")],
+                env=env_bad_sha,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(res_bad_sha.returncode, 2)
+            self.assertIn("formato SHA-256", res_bad_sha.stderr)
+
+            # 4. Tampered bootstrap content must fail SHA-256 verification before python3 executes
+            mock_bin = tmp / "bin"
+            mock_bin.mkdir()
+            mock_curl = mock_bin / "curl"
+            mock_curl.write_text(
+                "#!/usr/bin/env sh\n"
+                "while [ $# -gt 0 ]; do\n"
+                "  if [ \"$1\" = \"-o\" ]; then cp '" + str(fake_boot) + "' \"$2\"; exit 0; fi\n"
+                "  shift\n"
+                "done\n"
+                "exit 1\n",
+                encoding="utf-8",
+            )
+            mock_curl.chmod(0o755)
+
+            env_tamper = os.environ.copy()
+            env_tamper["PATH"] = f"{mock_bin}:{env_tamper.get('PATH', '')}"
+            env_tamper["NOX_ALLOW_CUSTOM_BOOTSTRAP"] = "1"
+            env_tamper["NOX_BOOTSTRAP_URL"] = "https://raw.githubusercontent.com/Awerkori/arch-install/0000000/bootstrap/nox-install.py"
+            env_tamper["NOX_BOOTSTRAP_SHA256"] = wrong_sha
+            res_tamper = subprocess.run(
+                ["sh", str(REPO / "i")],
+                env=env_tamper,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(res_tamper.returncode, 0)
+            self.assertIn("falha na verificacao SHA-256", res_tamper.stderr)
+            self.assertNotIn("EXECUTED_UNVERIFIED", res_tamper.stdout)
+
+            # 5. Matching SHA-256 executes cleanly
+            good_sha = hashlib.sha256(fake_boot.read_bytes()).hexdigest()
+            env_good = env_tamper.copy()
+            env_good["NOX_BOOTSTRAP_SHA256"] = good_sha
+            res_good = subprocess.run(
+                ["sh", str(REPO / "i")],
+                env=env_good,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(res_good.returncode, 0)
+            self.assertIn("EXECUTED_UNVERIFIED", res_good.stdout)
+
+    def test_config_integrity_verified_before_json_parse_and_http_rejected(self) -> None:
+        import hashlib
+
+        mod = self._load_nox_install()
+        raw_cfg = (REPO / "user_configuration.json").read_bytes()
+        real_sha = hashlib.sha256(raw_cfg).hexdigest()
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            cfg_file = tmp / "user_configuration.json"
+            cfg_file.write_bytes(raw_cfg)
+
+            # Valid hash succeeds
+            loaded = mod.load_base_config(str(cfg_file), expected_sha256=real_sha)
+            self.assertEqual(loaded["bootloader_config"]["bootloader"], "Limine")
+
+            # Tampered config with mismatched SHA-256 fails before JSON interpretation
+            tampered = tmp / "tampered.json"
+            tampered.write_text("NOT EVEN JSON", encoding="utf-8")
+            with self.assertRaises(ValueError) as ctx:
+                mod.load_base_config(str(tampered), expected_sha256=real_sha)
+            self.assertIn("Falha na verificacao SHA-256", str(ctx.exception))
+
+            # Invalid SHA-256 format is rejected
+            with self.assertRaises(ValueError) as ctx2:
+                mod.load_base_config(str(cfg_file), expected_sha256="12345")
+            self.assertIn("Formato de SHA-256", str(ctx2.exception))
+
+            # HTTP URL rejected without allow_insecure_http
+            with self.assertRaises(ValueError) as ctx3:
+                mod.load_base_config("http://127.0.0.1:8080/user_configuration.json", allow_insecure_http=False)
+            self.assertIn("URL insegura recusada", str(ctx3.exception))
+
+            # Mutable branch URL rejected without explicit expected_sha256
+            with self.assertRaises(ValueError) as ctx4:
+                mod.load_base_config(
+                    "https://raw.githubusercontent.com/Awerkori/arch-install/main/user_configuration.json",
+                    allow_insecure_http=False,
+                    expected_sha256=None,
+                )
+            self.assertIn("branch mutavel", str(ctx4.exception))
+
+    def test_redirect_downgrade_and_incomplete_download_rejected(self) -> None:
+        import http.server
+        import threading
+
+        mod = self._load_nox_install()
+
+        class TestHandler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, format: str, *args) -> None:  # noqa: A002
+                pass
+
+            def do_GET(self) -> None:
+                if self.path == "/redirect-http":
+                    self.send_response(302)
+                    self.send_header("Location", "http://example.com/user_configuration.json")
+                    self.end_headers()
+                elif self.path == "/truncated":
+                    self.send_response(200)
+                    self.send_header("Content-Length", "500")
+                    self.end_headers()
+                    self.wfile.write(b'{"partial": true}')
+                elif self.path == "/empty":
+                    self.send_response(200)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), TestHandler)
+        port = server.server_port
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            # 1. SafeHTTPSRedirectHandler refuses redirect to http:// when allow_insecure_http=False
+            handler = mod.SafeHTTPSRedirectHandler(allow_insecure_http=False)
+            req = mod.urllib.request.Request("https://github.com/Awerkori/arch-install/raw/v1.0.1/user_configuration.json")
+            with self.assertRaises(ValueError) as r_ctx:
+                handler.redirect_request(req, None, 302, "Found", {}, "http://evil.example.com/cfg.json")
+            self.assertIn("downgrade HTTPS->HTTP", str(r_ctx.exception))
+
+            # 2. Truncated download (Content-Length mismatch) raises RuntimeError
+            with self.assertRaises(RuntimeError) as t_ctx:
+                mod._fetch_url_bytes(f"http://127.0.0.1:{port}/truncated", allow_insecure_http=True)
+            self.assertIn("incompleto", str(t_ctx.exception).lower())
+
+            # 3. Empty response raises ValueError
+            with self.assertRaises(ValueError) as e_ctx:
+                mod._fetch_url_bytes(f"http://127.0.0.1:{port}/empty", allow_insecure_http=True)
+            self.assertIn("Resposta vazia", str(e_ctx.exception))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_payload_validation_rejects_other_version_and_tampered_tarball(self) -> None:
+        import http.server
+        import tarfile
+        import threading
+
+        mod = self._load_nox_install()
+        base_cfg = json.loads((REPO / "user_configuration.json").read_text(encoding="utf-8"))
+
+        # 1. Config pointing to another version or wrong payload hash fails when enforce_official_payload=True
+        wrong_ver_cfg = json.loads(json.dumps(base_cfg))
+        mod.override_payload_cmd(
+            wrong_ver_cfg,
+            "https://github.com/Awerkori/arch-install/releases/download/v0.9.0/nox-archinstall-payload-v0.9.0.tar.gz",
+            "b" * 64,
+        )
+        with self.assertRaises(ValueError) as v_ctx:
+            mod.validate_payload_spec(wrong_ver_cfg, enforce_official_payload=True)
+        self.assertIn("incompativel com esta versao do bootstrap", str(v_ctx.exception))
+
+        # 2. Legacy RC payload URL rejected by default
+        rc_cfg = json.loads(json.dumps(base_cfg))
+        mod.override_payload_cmd(
+            rc_cfg,
+            "https://github.com/Awerkori/arch-install/releases/download/v1.0.0-rc10/nox-archinstall-payload-v1.0.0-rc10.tar.gz",
+            "c" * 64,
+        )
+        with self.assertRaises(ValueError) as rc_ctx:
+            mod.validate_payload_spec(rc_cfg, allow_legacy_rc=False)
+        self.assertIn("RC legado", str(rc_ctx.exception))
+
+        # 3. Tampered payload tarball is rejected by nox-bootstrap.sh before extraction
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            pkg_dir = tmp / "pkg"
+            pkg_dir.mkdir()
+            (pkg_dir / "install.sh").write_text("#!/usr/bin/env bash\necho PWNED\n", encoding="utf-8")
+            tar_file = tmp / "payload.tar.gz"
+            with tarfile.open(tar_file, "w:gz") as tf:
+                tf.add(pkg_dir / "install.sh", arcname="root/install.sh")
+
+            class TarHandler(http.server.BaseHTTPRequestHandler):
+                def log_message(self, format: str, *args) -> None:  # noqa: A002
+                    pass
+
+                def do_GET(self) -> None:
+                    data = tar_file.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+
+            srv = http.server.HTTPServer(("127.0.0.1", 0), TarHandler)
+            port = srv.server_port
+            th = threading.Thread(target=srv.serve_forever, daemon=True)
+            th.start()
+            try:
+                dest_dir = tmp / "dest"
+                env = os.environ.copy()
+                env["NOX_ALLOW_INSECURE_HTTP"] = "1"
+                env["NOX_ALLOW_TARGET_EXEC"] = "1"
+                env["NOX_PAYLOAD_DEST_DIR"] = str(dest_dir)
+                res = subprocess.run(
+                    [
+                        "bash",
+                        str(REPO / "bootstrap/nox-bootstrap.sh"),
+                        f"http://127.0.0.1:{port}/payload.tar.gz",
+                        "d" * 64,
+                    ],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(res.returncode, 0)
+                self.assertIn("Checksum SHA-256 divergente", res.stderr)
+                self.assertFalse(dest_dir.exists(), "Tampered payload must never be extracted")
+            finally:
+                srv.shutdown()
+                srv.server_close()
+
+
+class TestBootstrapAndHostSafetyHardening(unittest.TestCase):
+    @staticmethod
+    def _load_nox_install():
+        spec = importlib.util.spec_from_file_location("nox_install", REPO / "bootstrap/nox-install.py")
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_host_safety_guards_reject_execution_outside_iso_and_chroot(self) -> None:
+        mod = self._load_nox_install()
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            efi_dir = tmp / "efi"
+            efi_dir.mkdir()
+            missing_archiso = tmp / "no-archiso"
+
+            # 1. Non-root rejected
+            with self.assertRaises(RuntimeError) as e1:
+                mod.ensure_arch_iso_environment(euid=1000, efi_dir=efi_dir, archiso_dir=efi_dir)
+            self.assertIn("root", str(e1.exception))
+
+            # 2. Non-UEFI rejected
+            with self.assertRaises(RuntimeError) as e2:
+                mod.ensure_arch_iso_environment(euid=0, efi_dir=missing_archiso, archiso_dir=efi_dir)
+            self.assertIn("UEFI", str(e2.exception))
+
+            # 3. Missing /run/archiso rejected
+            with self.assertRaises(RuntimeError) as e3:
+                mod.ensure_arch_iso_environment(euid=0, efi_dir=efi_dir, archiso_dir=missing_archiso)
+            self.assertIn("/run/archiso", str(e3.exception))
+
+            # 4. nox-bootstrap.sh refuses execution on host when NOX_ALLOW_TARGET_EXEC is not set
+            env = os.environ.copy()
+            env.pop("NOX_ALLOW_TARGET_EXEC", None)
+            res = subprocess.run(
+                [
+                    "bash",
+                    str(REPO / "bootstrap/nox-bootstrap.sh"),
+                    "https://example.com/payload.tar.gz",
+                    "e" * 64,
+                ],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(res.returncode, 0)
+            self.assertIn("BLOQUEIO DE SEGURANCA", res.stderr)
+
+    def test_tmpfs_selection_and_credential_scrubbing(self) -> None:
+        mod = self._load_nox_install()
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            no_tmpfs_mounts = tmp / "mounts_no_tmpfs"
+            no_tmpfs_mounts.write_text("/dev/sda1 / ext4 rw 0 0\n", encoding="utf-8")
+            with self.assertRaises(RuntimeError) as ctx:
+                mod.select_tmpfs_dir(mounts_file=no_tmpfs_mounts)
+            self.assertIn("tmpfs", str(ctx.exception))
+
+            log1 = tmp / "var_log_archinstall"
+            log2 = tmp / "mnt_var_log_archinstall"
+            log1.mkdir(mode=0o755)
+            log2.mkdir(mode=0o755)
+            for d in (log1, log2):
+                (d / "user_credentials.json").write_text('{"secret": 1}', encoding="utf-8")
+                (d / "nox_creds.json").write_text('{"secret": 2}', encoding="utf-8")
+                (d / "creds.json").write_text('{"secret": 3}', encoding="utf-8")
+                (d / "install.log").write_text("normal log\n", encoding="utf-8")
+
+            mod.scrub_persisted_archinstall_credentials(log_dirs=(log1, log2))
+            for d in (log1, log2):
+                self.assertFalse((d / "user_credentials.json").exists())
+                self.assertFalse((d / "nox_creds.json").exists())
+                self.assertFalse((d / "creds.json").exists())
+                self.assertTrue((d / "install.log").exists())
+                self.assertEqual( d.stat().st_mode & 0o777, 0o700)
+
+    def test_verify_disk_safe_to_wipe_rejects_missing_or_mounted_or_broken_by_id(self) -> None:
+        from unittest import mock
+
+        mod = self._load_nox_install()
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            fake_disk = tmp / "nvme0n1"
+            fake_disk.write_text("", encoding="utf-8")
+            other_disk = tmp / "sda"
+            other_disk.write_text("", encoding="utf-8")
+            bad_symlink = tmp / "by-id-nvme"
+            bad_symlink.symlink_to(other_disk)
+
+            # 1. Missing disk rejected
+            with self.assertRaises(RuntimeError) as m_ctx:
+                mod.verify_disk_safe_to_wipe({"path": str(tmp / "nonexistent"), "by_id": ""})
+            self.assertIn("nao esta mais presente", str(m_ctx.exception))
+
+            # 2. Broken/redirected by-id symlink rejected
+            with self.assertRaises(RuntimeError) as id_ctx:
+                mod.verify_disk_safe_to_wipe({"path": str(fake_disk), "by_id": str(bad_symlink)})
+            self.assertIn("Identificador persistente", str(id_ctx.exception))
+
+            # 3. Active mounts rejected
+            fake_proc = subprocess.CompletedProcess(args=["lsblk"], returncode=0, stdout="/mnt\n", stderr="")
+            with mock.patch.object(mod.subprocess, "run", return_value=fake_proc):
+                with self.assertRaises(RuntimeError) as mnt_ctx:
+                    mod.verify_disk_safe_to_wipe({"path": str(fake_disk), "by_id": ""})
+                self.assertIn("pontos montados ativos", str(mnt_ctx.exception))
+
+    def test_interactive_tty_and_accidental_wipe_abort_guards(self) -> None:
+        from unittest import mock
+
+        mod = self._load_nox_install()
+
+        # 1. ensure_interactive_tty fails cleanly when stdin is not a TTY and /dev/tty is unavailable
+        with (
+            mock.patch.object(mod.sys.stdin, "isatty", return_value=False),
+            mock.patch("builtins.open", side_effect=OSError("no controlling tty")),
+        ):
+            with self.assertRaises(RuntimeError) as tty_ctx:
+                mod.ensure_interactive_tty()
+            self.assertIn("/dev/tty", str(tty_ctx.exception))
+
+        # 2. Mismatched disk name in [2/4] aborts with rc=130 without hashing password or running archinstall
+        fake_disks = [
+            {
+                "name": "nvme0n1",
+                "path": "/dev/nvme0n1",
+                "size_bytes": 100 * (1024**3),
+                "size_gib": 100.0,
+                "model": "Test NVMe",
+                "serial": "SN123",
+                "tran": "nvme",
+                "removable": False,
+                "mounts": [],
+                "by_id": "",
+            }
+        ]
+        args = mod.parse_args(["--config", str(REPO / "user_configuration.json"), "--dry-run", "--skip-net-check"])
+        with (
+            mock.patch.object(mod, "ensure_interactive_tty"),
+            mock.patch.object(mod, "list_candidate_disks", return_value=fake_disks),
+            mock.patch("builtins.input", side_effect=["1", "wrongdisk"]),
+            mock.patch.object(mod.subprocess, "run") as mock_run,
+        ):
+            rc = mod.interactive_main(args)
+            self.assertEqual(rc, 130)
+            mock_run.assert_not_called()
+
+        # 3. Declining final confirmation [s/N] aborts with rc=130 without calling archinstall
+        with (
+            mock.patch.object(mod, "ensure_interactive_tty"),
+            mock.patch.object(mod, "list_candidate_disks", return_value=fake_disks),
+            mock.patch("builtins.input", side_effect=["1", "nvme0n1", "awerkori", "n"]),
+            mock.patch.object(mod.getpass, "getpass", side_effect=["SecretPass123!", "SecretPass123!"]),
+            mock.patch.object(mod.subprocess, "run") as mock_run2,
+        ):
+            rc2 = mod.interactive_main(args)
+            self.assertEqual(rc2, 130)
+            mock_run2.assert_not_called()
+
+
+class TestSnapperConcurrencyAndEdgeCases(unittest.TestCase):
+    def test_concurrent_cleanup_invocations_are_serialized_by_flock(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            lock_file = root / "cleanup.lock"
+            state_file = root / "state.json"
+            trace_file = root / "trace.log"
+            entries = [
+                {"number": 0, "type": "single", "cleanup": ""},
+                {"number": 1, "type": "pre", "cleanup": "number"},
+                {"number": 2, "type": "post", "pre-number": 1, "cleanup": "number"},
+                {"number": 3, "type": "pre", "cleanup": "number"},
+                {"number": 4, "type": "post", "pre-number": 3, "cleanup": "number"},
+            ]
+            in_json = root / "entries.json"
+            in_json.write_text(json.dumps({"root": entries}), encoding="utf-8")
+
+            mock_snapper = root / "mock-snapper"
+            mock_snapper.write_text(
+                "#!/usr/bin/env bash\n"
+                f"echo \"START $$ $(date +%s%N)\" >> '{trace_file}'\n"
+                "sleep 0.35\n"
+                f"echo \"END $$ $(date +%s%N)\" >> '{trace_file}'\n",
+                encoding="utf-8",
+            )
+            mock_snapper.chmod(0o755)
+
+            cmd = [
+                "python3",
+                str(REPO / "configs/bin/nox-snapper-cleanup"),
+                "--input-json",
+                str(in_json),
+                "--session-id",
+                "",
+                "--state-file",
+                str(state_file),
+                "--lock-file",
+                str(lock_file),
+                "--snapper-bin",
+                str(mock_snapper),
+            ]
+            p1 = subprocess.Popen(cmd)
+            p2 = subprocess.Popen(cmd)
+            self.assertEqual(p1.wait(timeout=10), 0)
+            self.assertEqual(p2.wait(timeout=10), 0)
+
+            events = [line.split()[0] for line in trace_file.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(events, ["START", "END", "START", "END"])
+
+    def test_failed_consolidate_create_preserves_intermediate_pair_and_important_snapshots(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            state_file = root / "session.json"
+            state_file.write_text(
+                json.dumps({"session_id": "topgrade:99:1", "anchor_pre": 7, "latest_post": 8}),
+                encoding="utf-8",
+            )
+            log_file = root / "snapper.log"
+            entries = [
+                {"number": 0, "type": "single", "cleanup": ""},
+                {"number": 4, "type": "single", "cleanup": "number", "userdata": {"important": "yes"}},
+                {"number": 7, "type": "pre", "cleanup": "number"},
+                {"number": 8, "type": "post", "pre-number": 7, "cleanup": "number"},
+                {"number": 9, "type": "pre", "cleanup": "number"},
+                {"number": 10, "type": "post", "pre-number": 9, "cleanup": "number"},
+            ]
+            in_json = root / "in.json"
+            in_json.write_text(json.dumps({"root": entries}), encoding="utf-8")
+
+            # Mock snapper that succeeds on deleting old post 8, but FAILS on creating consolidated post
+            mock_snapper = root / "mock-snapper"
+            mock_snapper.write_text(
+                "#!/usr/bin/env bash\n"
+                f"echo \"$*\" >> '{log_file}'\n"
+                "if [[ \"$*\" == *\"create\"* ]]; then\n"
+                "  echo 'simulated create failure' >&2\n"
+                "  exit 1\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            mock_snapper.chmod(0o755)
+
+            subprocess.run(
+                [
+                    "python3",
+                    str(REPO / "configs/bin/nox-snapper-cleanup"),
+                    "--input-json",
+                    str(in_json),
+                    "--session-id",
+                    "topgrade:99:1",
+                    "--state-file",
+                    str(state_file),
+                    "--snapper-bin",
+                    str(mock_snapper),
+                ],
+                check=True,
+            )
+            ops = log_file.read_text(encoding="utf-8").splitlines()
+            # Must NOT delete 9 and 10 when create fails, and must never touch important=yes snapshot #4
+            self.assertEqual(len(ops), 2)
+            self.assertFalse(any("9 10" in op for op in ops))
+            self.assertFalse(any(" 4" in op for op in ops))
+            saved = json.loads(state_file.read_text(encoding="utf-8"))
+            self.assertEqual((saved["anchor_pre"], saved["latest_post"]), (9, 10))
+
+
+class TestLimineAndSecureBootHardening(unittest.TestCase):
+    def test_secureboot_verify_and_limine_integrity_detect_and_repair_failures(self) -> None:
+        import hashlib
+
+        def b2(data: bytes) -> str:
+            return hashlib.blake2b(data, digest_size=64).hexdigest()
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            esp = root / "boot"
+            (esp / "EFI/limine").mkdir(parents=True)
+            (esp / "EFI/BOOT").mkdir(parents=True)
+            (esp / "abc123/linux-cachyos").mkdir(parents=True)
+
+            wp_bytes = b"nox-wallpaper-bytes"
+            kern_bytes = b"nox-kernel-vmlinuz-bytes"
+            init_bytes = b"nox-initramfs-bytes"
+            (esp / "nox-limine-wallpaper.png").write_bytes(wp_bytes)
+            (esp / "abc123/linux-cachyos/vmlinuz").write_bytes(kern_bytes)
+            (esp / "abc123/linux-cachyos/initramfs-linux-cachyos.img").write_bytes(init_bytes)
+
+            conf_path = esp / "limine.conf"
+            conf_text = (
+                "timeout: 5\n"
+                "default_entry: Arch Linux/Project Nox\n"
+                "remember_last_entry: no\n"
+                f"wallpaper: boot():/nox-limine-wallpaper.png#{b2(wp_bytes)}\n"
+                "wallpaper_style: stretched\n"
+                "/+Arch Linux\n"
+                "  //Project Nox\n"
+                "  comment: kernel-id=linux-cachyos\n"
+                "  protocol: linux\n"
+                f"  path: boot():/abc123/linux-cachyos/vmlinuz#{b2(kern_bytes)}\n"
+                f"  module_path: boot():/abc123/linux-cachyos/initramfs-linux-cachyos.img#{b2(init_bytes)}\n"
+            )
+            conf_path.write_text(conf_text, encoding="utf-8")
+            conf_hash = b2(conf_path.read_bytes())
+
+            limine_efi = esp / "EFI/limine/limine_x64.efi"
+            fallback_efi = esp / "EFI/BOOT/BOOTX64.EFI"
+            src_efi = root / "BOOTX64.EFI.src"
+            src_efi.write_bytes(b"MZ-FAKE-EFI-BINARY-" + (b"0" * 128))
+            limine_efi.write_bytes(b"MZ-FAKE-EFI-" + conf_hash.encode("ascii") + b"-SIGNED\n")
+            fallback_efi.write_bytes(b"MZ-FAKE-EFI-" + conf_hash.encode("ascii") + b"-SIGNED\n")
+            (esp / "abc123/linux-cachyos/vmlinuz").write_bytes(kern_bytes)
+
+            limine_default = root / "default-limine"
+            limine_default.write_text(
+                "ENABLE_VERIFICATION=yes\nENABLE_ENROLL_LIMINE_CONFIG=yes\n",
+                encoding="utf-8",
+            )
+            dirty_marker = root / "nox-limine-tx.dirty"
+            unsigned_list = root / "unsigned.txt"
+            unsigned_list.write_text("", encoding="utf-8")
+
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            mock_sbctl = bin_dir / "sbctl"
+            mock_sbctl.write_text(
+                "#!/usr/bin/env bash\n"
+                "case \"$1\" in\n"
+                "  setup) echo '{\"installed\": true}' ;;\n"
+                "  status) echo '{\"installed\": true, \"setup_mode\": false, \"secure_boot\": false}' ;;\n"
+                "  verify)\n"
+                f"    if grep -qxF \"$2\" '{unsigned_list}' 2>/dev/null; then\n"
+                "      echo \"✗ $2 is not signed\"\n"
+                "      exit 1\n"
+                "    fi\n"
+                "    echo \"✓ $2 is signed\"\n"
+                "    ;;\n"
+                "  sign)\n"
+                "    target=\"${@: -1}\"\n"
+                "    real_target=\"${target%.nox.tmp}\"\n"
+                f"    sed -i \"\\|^${{real_target}}$|d\" '{unsigned_list}' 2>/dev/null || true\n"
+                "    echo \"✓ Signed $target\"\n"
+                "    ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            mock_sbctl.chmod(0o755)
+
+            mock_limine = bin_dir / "limine"
+            mock_limine.write_text(
+                "#!/usr/bin/env bash\n"
+                "if [[ \"$1\" == \"enroll-config\" ]]; then\n"
+                "  printf 'MZ-FAKE-EFI-%s-SIGNED\\n' \"$3\" > \"$2\"\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            mock_limine.chmod(0o755)
+
+            mock_enroll_cfg = bin_dir / "limine-enroll-config"
+            mock_enroll_cfg.write_text(
+                "#!/usr/bin/env bash\n"
+                f"h=\"$(b2sum '{conf_path}' | awk '{{print $1}}')\"\n"
+                f"printf 'MZ-FAKE-EFI-%s-SIGNED\\n' \"$h\" > '{limine_efi}'\n"
+                f"'{mock_sbctl}' sign '{limine_efi}' >/dev/null\n",
+                encoding="utf-8",
+            )
+            mock_enroll_cfg.chmod(0o755)
+
+            def run_verify(*extra: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [
+                        "bash",
+                        str(REPO / "configs/bin/nox-secureboot-verify"),
+                        "--esp-path",
+                        str(esp),
+                        "--limine-default",
+                        str(limine_default),
+                        "--dirty-marker",
+                        str(dirty_marker),
+                        "--sbctl-bin",
+                        str(mock_sbctl),
+                        *extra,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+            # 1. Clean state passes all offline checks
+            ok_res = run_verify()
+            self.assertEqual(ok_res.returncode, 0, ok_res.stderr + ok_res.stdout)
+            self.assertIn("[NOX SECUREBOOT] OK", ok_res.stdout)
+
+            # 2. --require-active fails when UEFI Secure Boot is disabled in firmware
+            req_res = run_verify("--require-active")
+            self.assertNotEqual(req_res.returncode, 0)
+            self.assertIn("UEFI Secure Boot is NOT active", req_res.stderr)
+
+            # 3. Partially updated config (dirty marker present) fails verification
+            dirty_marker.write_text("", encoding="utf-8")
+            dirty_res = run_verify()
+            self.assertNotEqual(dirty_res.returncode, 0)
+            self.assertIn("partially updated/interrupted", dirty_res.stderr)
+            dirty_marker.unlink()
+
+            # 4. Unsigned EFI binary fails verification
+            unsigned_list.write_text(f"{limine_efi}\n", encoding="utf-8")
+            unsig_res = run_verify()
+            self.assertNotEqual(unsig_res.returncode, 0)
+            self.assertIn("unsigned or missing EFI binary", unsig_res.stderr)
+            unsigned_list.write_text("", encoding="utf-8")
+
+            # 5. Missing EFI binary fails verification
+            fallback_efi.unlink()
+            miss_res = run_verify()
+            self.assertNotEqual(miss_res.returncode, 0)
+            self.assertIn("unsigned or missing EFI binary", miss_res.stderr)
+
+            # 6. Incorrect asset BLAKE2B hash in limine.conf fails verification
+            fallback_efi.write_bytes(b"MZ-FAKE-EFI-" + conf_hash.encode("ascii") + b"-SIGNED\n")
+            (esp / "abc123/linux-cachyos/vmlinuz").write_bytes(b"TAMPERED-KERNEL-BYTES")
+            bad_k_res = run_verify()
+            self.assertNotEqual(bad_k_res.returncode, 0)
+            self.assertIn("BLAKE2B mismatch", bad_k_res.stderr)
+            (esp / "abc123/linux-cachyos/vmlinuz").write_bytes(kern_bytes)
+
+            # 7. Adulterated limine.conf (mismatched config BLAKE2B in EFI + unnormalized //linux-cachyos)
+            #    fails nox-secureboot-verify, and is automatically repaired by nox-limine-integrity!
+            adulterated = conf_text.replace("  //Project Nox\n", "  //linux-cachyos\n")
+            conf_path.write_text(adulterated, encoding="utf-8")
+            dirty_marker.write_text("", encoding="utf-8")
+            unsigned_list.write_text(f"{limine_efi}\n{fallback_efi}\n", encoding="utf-8")
+
+            adult_res = run_verify()
+            self.assertNotEqual(adult_res.returncode, 0)
+            self.assertIn("NOT enrolled or mismatched", adult_res.stderr)
+
+            env = os.environ.copy()
+            env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+            env["ESP_PATH"] = str(esp)
+            env["NOX_DIRTY_MARKER"] = str(dirty_marker)
+            env["NOX_LIMINE_DEFAULT"] = str(limine_default)
+            env["NOX_NORMALIZE_BIN"] = str(REPO / "configs/bin/nox-limine-normalize")
+            env["NOX_FALLBACK_HOOK"] = str(REPO / "configs/boot-hooks/95-nox-sbctl-fallback")
+            env["NOX_LIMINE_SRC_EFI"] = str(src_efi)
+            env["NOX_SBCTL_BIN"] = str(mock_sbctl)
+            env["NOX_ALLOW_NONROOT_TEST"] = "1"
+            env["NOX_FORCE_EFI_HOOK"] = "1"
+
+            rep_res = subprocess.run(
+                ["bash", str(REPO / "configs/bin/nox-limine-integrity"), "--repair-if-dirty"],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(rep_res.returncode, 0, rep_res.stderr)
+            self.assertFalse(dirty_marker.exists())
+            self.assertIn("  //Project Nox\n", conf_path.read_text(encoding="utf-8"))
+
+            post_rep_verify = run_verify()
+            self.assertEqual(post_rep_verify.returncode, 0, post_rep_verify.stderr + post_rep_verify.stdout)
+
+
+class TestDocumentationAndManifestIntegrity(unittest.TestCase):
+    def test_all_markdown_relative_links_exist(self) -> None:
+        import re
+        import urllib.parse
+
+        link_re = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+        md_files = [REPO / "README.md", *sorted((REPO / "docs").rglob("*.md"))]
+        for md in md_files:
+            text = md.read_text(encoding="utf-8")
+            for raw_target in link_re.findall(text):
+                target = raw_target.strip().split()[0]
+                if target.startswith(("http://", "https://", "mailto:", "#")):
+                    continue
+                rel_path = urllib.parse.unquote(target.split("#", 1)[0])
+                if not rel_path:
+                    continue
+                resolved = (md.parent / rel_path).resolve()
+                self.assertTrue(
+                    resolved.exists(),
+                    f"Broken link in {md.relative_to(REPO)}: {raw_target!r} -> {resolved} does not exist",
+                )
+
+    def test_release_manifest_and_config_payload_consistency(self) -> None:
+        manifest = json.loads((REPO / "manifests/release.json").read_text(encoding="utf-8"))
+        cfg = json.loads((REPO / "user_configuration.json").read_text(encoding="utf-8"))
+        for req in ("version", "payload_commit", "payload_url", "payload_sha256"):
+            self.assertIn(req, manifest)
+            self.assertTrue(manifest[req])
+        joined_cmd = "\n".join(cfg.get("custom_commands") or [])
+        self.assertIn(manifest["payload_url"], joined_cmd)
+        self.assertIn(manifest["payload_sha256"], joined_cmd)
+
+    def test_documentation_has_no_unverified_mutable_install_commands(self) -> None:
+        import hashlib
+
+        launcher_sha = hashlib.sha256((REPO / "i").read_bytes()).hexdigest()
+        boot_sha = hashlib.sha256((REPO / "bootstrap/nox-install.py").read_bytes()).hexdigest()
+        cfg_sha = hashlib.sha256((REPO / "user_configuration.json").read_bytes()).hexdigest()
+
+        i_text = (REPO / "i").read_text(encoding="utf-8")
+        self.assertIn(f'DEFAULT_BOOTSTRAP_SHA256="{boot_sha}"', i_text)
+        self.assertNotIn("/main/", i_text)
+
+        boot_text = (REPO / "bootstrap/nox-install.py").read_text(encoding="utf-8")
+        self.assertIn(f'OFFICIAL_CONFIG_SHA256 = "{cfg_sha}"', boot_text)
+        self.assertNotIn("raw.githubusercontent.com/Awerkori/arch-install/main/", boot_text)
+
+        for doc_rel in ("README.md", "docs/INSTALLATION.md"):
+            doc_text = (REPO / doc_rel).read_text(encoding="utf-8")
+            self.assertNotIn("/raw/main/i", doc_text)
+            self.assertNotIn("raw.githubusercontent.com/Awerkori/arch-install/main/", doc_text)
+            self.assertIn(launcher_sha, doc_text)
+            self.assertIn("sha256sum -c -", doc_text)
+
+
+

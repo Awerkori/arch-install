@@ -1,138 +1,144 @@
-# Relatório Final de Auditoria Técnica, Visual e de Atualizações — Nox Archinstall (`v1.0.0-rc10`)
+# Relatório Final de Auditoria de Engenharia, Hardening de Segurança e Homologação — Nox Archinstall (`v1.0.1`)
+
+> **Histórico de versões anteriores:**
+> - Pré-release [`v1.0.0-rc10`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0-rc10): preservada integralmente em [`docs/history/FINAL-AUDIT-REPORT-v1.0.0-rc10.md`](history/FINAL-AUDIT-REPORT-v1.0.0-rc10.md).
+> - Release estável publicada [`v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0): documentada em [`docs/history/FINAL-AUDIT-REPORT-v1.0.0.md`](history/FINAL-AUDIT-REPORT-v1.0.0.md) (artefatos e hashes originais preservados sem alteração retroativa).
+
+---
+
+## 1. Identificação da Revisão Analisada (`v1.0.1` — Branch `hardening/v1.0.1`)
 
 - **Projeto:** Nox Archinstall / Project Nox (`https://github.com/Awerkori/arch-install`)
-- **Revisão entregue:** `v1.0.0-rc10` (`--prerelease`; **`v1.0.0` não publicada — aguarda aprovação humana explícita**)
-- **Release Tag:** [`v1.0.0-rc10`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0-rc10)
-- **Commit do payload (`main`):** `4f58011a820e6638b3e9f900f117cd03fabc4f7b` (metadata `d8900ba221230448820c8b99d6f2863188690c72`)
-- **Payload SHA-256 (`nox-archinstall-payload-v1.0.0-rc10.tar.gz`):** `6463bc0d24ac78aaa6ae08f86d18d67da96995256105a16ab4c96ec1bd128650`
-- **Pacote visual de evidências:** `/home/awerkori/Downloads/Aprovacao-Visual-Nox-Archinstall/PROXIMA-RC/` (`42` artefatos listados com SHA-256 em `MANIFEST.md`)
-- **Inventários:** [`INSTALLED-COMPONENTS.md`](INSTALLED-COMPONENTS.md), [`INSTALLED-PACKAGES.tsv`](INSTALLED-PACKAGES.tsv) e [`TOPGRADE-PROTON-INTEGRATION.md`](TOPGRADE-PROTON-INTEGRATION.md)
+- **Versão analisada:** `v1.0.1` (revisão de hardening sobre a release estável `v1.0.0`)
+- **Branch de engenharia:** `hardening/v1.0.1`
+- **ISO oficial homologada:** `archlinux-2026.11.01-x86_64.iso` (`archinstall 4.5`)
+- **Manifesto de integridade:** [`manifests/release.json`](../manifests/release.json) (schema v2)
+
+### Cadeia Acíclica de Commits Imutáveis e Hashes SHA-256 (`v1.0.1`)
+
+| Estágio | Artefato | Commit de Origem Imutável | SHA-256 |
+|---|---|---|---|
+| **Estágio 1 (Iniciador)** | [`i`](../i) | `16f858e924a4565fca85bb36a75c873eeeba3778` | `dd439e6364a5d97e970d1c8ed62224fea2e7c9c38018724c1216eae1f4ca50de` |
+| **Estágio 2 (Bootstrap)** | [`bootstrap/nox-install.py`](../bootstrap/nox-install.py) | `5e1128cba9796a88c0d62e22963c67bd18ccd79a` | `bee5edb22d802fe82fa4727377172694f4b53fd81839c5774e9ebcd6eb39ab80` |
+| **Estágio 3 (Configuração)** | [`user_configuration.json`](../user_configuration.json) | `e2e84418d045b8856157265dd4f74f9172211e4e` | `aef4bdeb5268d1bbbebb42ad8de00cf7d98b71b687332bfab1f259cadb8311f9` |
+| **Estágio 4 (Payload)** | `nox-archinstall-payload-v1.0.1.tar.gz` | `16f858e924a4565fca85bb36a75c873eeeba3778` | `660d6caa4a418a17a6a4138f2a1d61f10673718aeca775adca6bcf3fdbdd1ec3` |
+| **Arquivo `.sha256`** | `nox-archinstall-payload-v1.0.1.tar.gz.sha256` | `16f858e924a4565fca85bb36a75c873eeeba3778` | `8c1c1fb06a9ab2e66fbd9f83e81a83721fc520e17caf70a13d39ce788ab87596` |
 
 ---
 
-## 1. Validação em Gêmeas Limpas (`ACCEPT-A` e `ACCEPT-B`)
+## 2. Hardening da Cadeia de Confiança e Segurança
 
-Duas instalações limpas completas em UEFI/OVMF com Btrfs, a partir da ISO oficial `archlinux-2026.11.01-x86_64.iso`, utilizando exatamente o fluxo oficial do payload `v1.0.0-rc10`:
-
-| VM | Resultado Instalação | Fim (UTC) | `pacman -Qq` | `pacman -Qqe` | AUR (`pacman -Qqm`) | Unidades Falhas |
-|---|---|---|---|---|---|---|
-| **`ACCEPT-A`** | `EXIT_CODE=0` | `2026-11-19T21:08:28Z` | **711** | **100** | `luciole-git`, `topgrade-bin` | **0** (system + user) |
-| **`ACCEPT-B`** | `EXIT_CODE=0` | `2026-11-19T20:03:59Z` | **711** | **100** | `luciole-git`, `topgrade-bin` | **0** (system + user) |
-
-- **Paridade `ACCEPT-A` vs `ACCEPT-B`:** `diff -u` sobre `pacman -Qq` e `pacman -Qqe` retornou **0 diferenças** (`ALL_PACKAGES_MATCH_100PCT` / `EXPLICIT_PACKAGES_MATCH_100PCT`).
-- **Correções descobertas e aplicadas no próprio ciclo antes da aceitação final:**
-  1. `scripts/80-validation.sh`: ajustado para não exigir `//Snapshots` quando há 0 snapshots pós-instalação limpa (proibindo sempre `//+Snapshots`), pois `limine-snapper-sync` omite seção vazia.
-  2. `scripts/lib/aur.sh`: exportados `HOME` e `GIT_CONFIG_GLOBAL` para o usuário não-root `noxbuild` no `git clone`, com timeout de 45s (`-4`) e fallback oficial para tarball `.tar.gz` da AUR (`cgit`).
-
----
-
-## 2. Identidade Visual **Obsidian Purple** (RC9 → RC10)
-
-| Área | Implementação e Verificação em VM Limpa | Evidências (`PROXIMA-RC/`) |
-|---|---|---|
-| **Limine** | `interface_branding: Project Nox`, `interface_branding_colour: fbbf24`, `wallpaper` com hash BLAKE2b válido, `[+] Snapshots` recolhido por padrão, entradas `///Ponto de Segurança` (PRE) e `///Estado Atualizado` (POST) diretamente bootáveis | `01-Limine/limine-main-collapsed-vm.png`, `01-Limine/limine-snapshots-expanded-vm.png` |
-| **Noctalia Greeter** | `NOCTALIA_GREETER_ASSETS_DIR=/usr/share/nox-archinstall/greeter-assets` (`noctalia.svg` + `fonts/`), `theme_mode = "dark"`, erro `pam_authenticate: AUTH_ERR` legível sem distorção | `02-Noctalia-Greeter/greeter-live-vm.png`, `02-Noctalia-Greeter/greeter-error-vm.png` |
-| **Noctalia Lockscreen** | Sticker animado `nox-lockscreen-emblem.gif` ativo em 2 quadros distintos, relógio `Outfit`, `login_box` centralizado sem media strip | `03-Noctalia-Lockscreen/lockscreen-live-vm.png`, `03-Noctalia-Lockscreen/lockscreen-live-vm-frame2.png` |
-| **Wallpapers & Multi-Monitor** | `nox-noctalia-layout --init-once` no `autostart` do Umbriel (0 Setup Wizard); `mpvpaper` executando `nox-g5-runtime.webm` em `Virtual-1` (2 frames distintos comprovam animação contínua); perfil dual monitor (`DP-1` + `HDMI-A-1` vertical `90°` com `nox-aoc-runtime.webm`) validado por contrato/unit test | `04-Wallpapers-G5/desktop-frame1-vm.png`, `04-Wallpapers-G5/desktop-frame2-vm.png`, `05-Wallpapers-AOC/*` |
-| **Noctalia Config & Fontes** | `noctalia config validate ~/.config/noctalia` retornou `✓ Config is valid` (`0` avisos) nas duas VMs; `setup_wizard_enabled = false`; fontes OFL `Outfit` e `Plus Jakarta Sans` instaladas em `/usr/share/fonts/nox/` | `07-Evidencias-Tecnicas/acceptA-audit.txt`, `acceptB-audit.txt` |
-| **Fastfetch & Kitty** | Logo Braille de largura fixa 28 colunas (`nox-logo.txt`) e dashboard Obsidian Purple em tela cheia e metade Dwindle 50/50 | `06-Fastfetch/fastfetch-full-vm.png`, `06-Fastfetch/fastfetch-half-vm.png` |
-| **Firefox Pure & Launcher** | `firefox-pure` (`160.0-1`) com `userChrome.css`/`userContent.css` escuros Obsidian Purple; launcher exibe **estritamente 4 aplicativos** (`Firefox`, `kitty`, `Luciole`, `ProtonPlus`) | `07-Evidencias-Tecnicas/firefox-pure-obsidian-vm.png`, `08-Topgrade-Proton/launcher-4-apps-vm.png` |
+### 2.1. Eliminação de referências mutáveis (`main`) e execução não verificada
+1. **Estágio 1 (`i`):**
+   - Documentado exclusivamente com download prévio para arquivo temporário sob `umask 077`, `trap` de limpeza em `EXIT INT TERM`, HTTPS estrito (`--proto "=https" --proto-redir "=https" --tlsv1.2`) a partir do commit imutável `16f858e924a4565fca85bb36a75c873eeeba3778` e verificação `sha256sum -c -` **antes** da invocação do `sh`.
+   - O próprio script `i` baixa `bootstrap/nox-install.py` do commit imutável `5e1128cba9796a88c0d62e22963c67bd18ccd79a`, recusa URLs HTTP, valida o formato e o valor do hash SHA-256 (`bee5edb22d802fe82fa4727377172694f4b53fd81839c5774e9ebcd6eb39ab80`) antes de iniciar o `python3` e reconecta `/dev/tty`.
+2. **Estágio 2 (`bootstrap/nox-install.py`):**
+   - `DEFAULT_CONFIG_URL` aponta para o commit imutável `e2e84418d045b8856157265dd4f74f9172211e4e` (recusando URLs de branches mutáveis `main`/`master` sem `--config-sha256`).
+   - `verify_sha256_bytes()` verifica o hash SHA-256 independente da configuração oficial (`OFFICIAL_CONFIG_SHA256 = aef4bdeb5268d1bbbebb42ad8de00cf7d98b71b687332bfab1f259cadb8311f9`) **antes** de decodificar UTF-8 ou executar `json.loads()`.
+   - `SafeHTTPSRedirectHandler` bloqueia qualquer tentativa de downgrade de HTTPS para HTTP durante redirecionamentos HTTP `301`/`302`/`307`/`308`.
+   - `_fetch_url_bytes()` valida `Content-Length` contra o tamanho efetivamente recebido para detectar downloads truncados/incompletos e rejeita respostas vazias.
+   - `validate_payload_spec(..., enforce_official_payload=True)` garante que a configuração oficial autenticada só aceite o payload e o hash SHA-256 exatos da versão correspondente (`v1.0.1`), enquanto preserva o modo explícito de configuração personalizada do operador (`--config` / `--config-sha256` / `--payload-url` / `--payload-sha256`).
+3. **Proteção do sistema hospedeiro (`Host Safety`):**
+   - `ensure_arch_iso_environment()` em `bootstrap/nox-install.py` exige `EUID == 0`, `/sys/firmware/efi` e `/run/archiso`.
+   - `nox_assert_target_context()` em `scripts/lib/common.sh` e `is_target_chroot()` em `bootstrap/nox-bootstrap.sh` bloqueiam qualquer execução fora do `arch-chroot` ou alvo autorizado.
 
 ---
 
-## 3. Correções Técnicas, Áudio, Entrada e Inatividade
+## 3. Auditoria de Btrfs, Snapper, Limine e Secure Boot
 
-- **Pilha gráfica (`80-validation.sh` / `50-desktop.sh`):** `vulkan-tools` (`1.4.363.0-1.1`) e `mesa-utils` (`9.0.0-7.1`) instalados com Mesa/RADV/VA-API 64/32 bits; `libva-utils` ausente conforme esperado. Na VM sem passthrough GPU, `glxinfo` operou em `llvmpipe` e `vulkaninfo` falhou por ausência de GPU física (hardware RDNA marcado `PENDENTE-HARDWARE`).
-- **Energia / Anti-Inatividade:** `IdleAction=ignore`, `IdleActionSec=0` (`/etc/systemd/logind.conf.d/99-nox-no-idle.conf`), `swayidle`/`hypridle` ausentes e `nox-power.toml` com `lock`/`screen_off`/`lock_and_suspend` desativados. Comprovado empiricamente em `ACCEPT-B` com sessão gráfica aberta por **36 minutos ininterruptos sem interação** (`17:33` → `18:09`, `desktop-idle-live-vm.png`) mantendo tela ativa sem bloqueio/suspensão.
-- **Teclado ANSI `us(intl)` e Acentuação:** Umbriel configurado com `layout = "us"`, `variant = "intl"`, `track_layout = "global"`, `repeat_rate = 25`, `repeat_delay = 600` e `~/.XCompose` com `<dead_acute> <c> : "ç" ccedilla`. Sintoma físico de chattering/tecla `M` no AULA F75 permanece `PENDENTE-HARDWARE` (não reproduzível em teclado virtual KVM).
-- **Havit Fuxi H3 (`nox-fuxi-h3-fix`):** Regra udev `85-nox-fuxi-h3.rules` e unit `nox-fuxi-h3.path`/`service` atualizados para varredura multi-índice ALSA `Mic Capture Switch` + unmute PipeWire `alsa_input.*(fuxi|xiisound)` preservando mute intencional em `/var/lib/nox-archinstall/` (`PENDENTE-HARDWARE` para ciclo real de energia no headset).
-
----
-
-## 4. Bateria de Atualizações, ProtonPlus e Snapshots (Seção 12.1)
-
-Todas as provas abaixo foram executadas e registradas na VM limpa `ACCEPT-B` (`08-Topgrade-Proton/acceptB-battery-clean.log`, `acceptB-test4-multi-txn.log`, `acceptB-limine-snapshots-post-test4.txt`, `acceptB-post-restore.log`):
-
-| Teste | Escopo Verificado | Resultado Observado |
-|---|---|---|
-| **1 — `pacman` normal** | `pacman -S --noconfirm tree` + `-Rns tree` | `snap-pac` criou `PRE/POST`; política `root` manteve apenas par mais recente (`#3/#4`) + hashes BLAKE2b 100% íntegros |
-| **2 — `paru` AUR** | `paru -S --noconfirm --rebuild topgrade-bin` | Build e instalação via `paru` geraram `#5/#6`; cleanup manteve `2` snapshots |
-| **3 — Snapshot manual + `pacman`** | Snapshot manual `#7` (`manual-keep-test`) + transação `jq` (`#8/#9`) | Snapshot manual `#7` preservado; política removeu pares automáticos antigos (`#5/#6`), mantendo `#7` + `#8/#9` |
-| **4 — `topgrade` real multi-transação (`Repo + AUR`)** | Downgrade temporário local de `mesa-utils` (`9.0.0-0`) + `topgrade-bin` (`17.17.0-0`), seguido de **uma execução real** `/usr/local/bin/topgrade --yes` | `paru` atualizou `mesa-utils` (`9.0.0-0 → 9.0.0-7.1`, `#15/#16`) **e** compilou/atualizou `topgrade-bin` (`17.17.0-0 → 17.17.0-1`, `#17/#18`). `nox-snapper-cleanup` consolidou para **exatamente 1 par**: `PRE=#15` (Estado A) e `POST=#19` (`pre-number=15`, Estado C). `/boot/limine.conf` exibiu `///Ponto de Segurança` (`#15`) e `///Estado Atualizado` (`#19`), todos com BLAKE2b válidos |
-| **5 — `topgrade` no-op** | `/usr/local/bin/topgrade --yes` sem pendências | Nenhum snapshot novo criado |
-| **6 — `PRE` órfão (transação interrompida)** | Criação de `PRE=#12` (`interrupted-test`) + `nox-snapper-cleanup` | Preservaram-se snapshots existentes sem apagar ponto de recuperação válido |
-| **7 — `ProtonPlus` + falha simulada** | `protonplus list`, `protonplus update all` e wrapper mock retornando `exit 1` | `protonplus update all` → `Already up to date` (real) e `topgrade --only protonplus` falhou isoladamente com `SIM_FAIL_RC=1` sem corromper snapshots |
-| **8 — Kernel / `limine-update`** | `sudo limine-update` completo (mkinitcpio + `sbctl` + hooks pre/post) | Regenerou initramfs (`7.3.5-1-cachyos`), executou hooks `05`/`85`/`95`, e verificou `ALL_LIMINE_BLAKE2_HASHES_MATCH=True` (`7/7`) |
-| **9 — Boot em Snapshot + Restore real (`--restore`)** | Boot direto via menu Limine em **`///Ponto de Segurança` (`#15`)** → verificação em `overlay` (`mesa-utils 9.0.0-0`, `topgrade-bin 17.17.0-0`) → `sudo limine-snapper-sync --restore` (`r` + Enter) → reboot → pós-reexecução `topgrade --yes` | Subvolume `/@` restaurado ao Estado A em Btrfs gravável (`subvolid=284`, `mesa-utils 9.0.0-0` e `topgrade-bin 17.17.0-0` confirmados após reboot), e em seguida atualizado novamente de volta para `9.0.0-7.1` + `17.17.0-1` (`#21/#25`) |
-| **10 — Par `POST`/`PRE` final e limpeza** | Limpeza do snapshot `#20` (`backup before restore #15`) | Snapper `root` finalizado com exatamente o par `#21` (`pre`) e `#25` (`post`), zero restos temporários |
-| **11 — `topgrade --dry-run`** | Execução via `/usr/local/bin/topgrade --dry-run` em `ACCEPT-A` e `ACCEPT-B` | `System update: OK`, `config-update: OK`, `ProtonPlus: OK` + notificação Noctalia (`topgrade-dryrun-kitty-vm.png`) |
-| **12 — GUI ProtonPlus + Proton-CachyOS SLR** | Abertura do ProtonPlus e checagem `/usr/share/steam/compatibilitytools.d/` | `protonplus` (`0.6.8-2`) visível no launcher e funcional; `proton-cachyos-slr` (`1:11.0.20261015-1`) pré-instalado. Download automático de `GE-Proton` / `DWProton` documentado como dependente de instalação futura de um launcher de jogos (`Steam`/`Heroic`/`Lutris`/`Bottles`/`Faugus`) |
+1. **Btrfs e Swapfile NOCOW (`scripts/60-snapshots.sh`, `scripts/70-memory.sh`):**
+   - Subvolumes `@`, `@home`, `@log`, `@pkg`, `@.snapshots` e `@swap` montados com `compress=zstd:3,noatime,discard=async,space_cache=v2`.
+   - Adicionados `trap` de desmontagem e limpeza automática para montagens temporárias `subvolid=5` (`TOP_MNT`) e `/nox-swap`.
+   - `/nox-swap/swapfile` confirmado com atributo `+C` (`NOCOW`) e prioridade `10` abaixo da ZRAM (`zstd`, prioridade `100`).
+2. **Snapper (`configs/bin/nox-snapper-cleanup`):**
+   - Adicionado bloqueio exclusivo de concorrência via `fcntl.flock` (`_cleanup_lock`) para serializar invocações simultâneas de hooks e timers.
+   - Adicionada limpeza automática de estado residual (`update-session.json`) ao executar transações simples fora de sessões `topgrade`/`paru`.
+   - Adicionado fallback de segurança durante consolidação multi-transação: caso `snapper create --type post` falhe após remover o `POST` anterior da âncora, o par intermediário íntegro (`fallback_pre`/`fallback_post`) é preservado tanto no disco quanto no arquivo de estado.
+3. **Limine e 5 Estágios do Secure Boot (`configs/bin/nox-secureboot-verify`, `configs/bin/nox-limine-integrity`, `configs/boot-hooks/95-nox-sbctl-fallback`):**
+   - `nox-secureboot-verify` valida e reporta separadamente os 5 estágios:
+     1. **Estágio 1 (Preparação das chaves):** presença das chaves privadas locais em `/var/lib/sbctl/keys/`.
+     2. **Estágio 2 (Assinatura dos binários):** verificação PE/EFI via `sbctl verify` de `limine_x64.efi`, `BOOTX64.EFI` e de todas as imagens `vmlinuz*` presentes na ESP.
+     3. **Estágio 3 (Configuração e BLAKE2B do Limine):** ausência de marcador de transação interrompida (`/run/nox-limine-tx.dirty`), conferência real do `b2sum` de cada arquivo `boot():/<caminho>#<hash>` referenciado em `/boot/limine.conf` contra o arquivo no disco, e verificação da inscrição do `b2sum /boot/limine.conf` dentro de `limine_x64.efi` e `BOOTX64.EFI`.
+     4. **Estágio 4 (Enrollment na NVRAM UEFI):** distinção explícita entre `Setup Mode` e `User Mode`.
+     5. **Estágio 5 (Enforcement ativo na UEFI):** verificação do estado real de `Secure Boot` no firmware (`--require-active`).
 
 ---
 
-## 5. Secure Boot e Itens `PENDENTE-HARDWARE`
+## 4. Testes Automatizados e Qualidade de Código (CI/CD)
 
-### 5.1 Estado do Secure Boot
-- **Na instalação/VM:** `nox-secureboot-verify` passou `5/5` verificações em `ACCEPT-A` e `ACCEPT-B` (chaves privadas `sbctl` geradas, `/etc/default/limine` configurado, `/boot/EFI/limine/limine_x64.efi` e `/boot/EFI/BOOT/BOOTX64.EFI` assinados, 100% dos caminhos no `/boot/limine.conf` com hash BLAKE2b).
-- **Enrolamento NVRAM OVMF (`ACCEPT-B`):** `sudo nox-secureboot-enroll --yes-enroll-uefi-keys --ignore-immutable` gravou chaves PK/KEK/db com certificados Microsoft no OVMF (`Setup Mode: Disabled`). A ativação final do bit `Secure Boot: Enabled` no menu UEFI da placa-mãe física (`nox-secureboot-verify --require-active` 6/6) é etapa de firmware pós-instalação no equipamento físico.
-
-### 5.2 Itens `PENDENTE-HARDWARE` (Não Reproduzíveis Integralmente em KVM)
-1. **Monitor físico dual (`DP-1` 2560×1440@165 Hz + `HDMI-A-1` 1920×1080@100 Hz rotação 90°)** com vídeo animado `nox-g5-runtime.webm` + `nox-aoc-runtime.webm` simultâneos.
-2. **GPU AMD RX 9060 XT (RDNA) + `vulkaninfo` / `rocm-smi-lib` / `btop`** com aceleração de hardware real.
-3. **Teclado AULA F75 físico** (verificação de ausência de chattering / múltiplas ocorrências da tecla `M` fora de hardware KVM).
-4. **Headset Havit Fuxi H3 físico** (teste real de power-cycle / dongle + Bluetooth validando `nox-fuxi-h3-fix`).
-5. **Placa Wi-Fi Intel AX210 + `iwlwifi`** e ativação do Secure Boot no UEFI BIOS físico (`nox-secureboot-verify --require-active` 6/6).
-6. **ProtonPlus com launcher de jogos real instalado** (`Steam` / `Heroic` / `Lutris` / `Bottles` / `Faugus`) para download e detecção ativa de `GE-Proton` e `DWProton` via `protonplus update all`.
+- **Workflow GitHub Actions (`.github/workflows/ci.yml`):**
+  - Atualizado `actions/checkout` para `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1` (`v7.0.1`, runtime nativo **Node.js 24**).
+  - Descoberta automática e auditoria de **todos os 31 scripts shell** do repositório (incluindo executáveis sem extensão `.sh` em `i`, `configs/bin/*` e `configs/boot-hooks/*`):
+    - `bash -n` em todos os 31 scripts e `sh -n` nos scripts POSIX (`i` e `configs/bin/nox-greeter-session`): **PASS (31/31)**.
+    - `shellcheck -x -P .`: **PASS (31/31, 0 avisos/erros)**.
+    - `shfmt -i 2 -ci -d`: **PASS (31/31, 0 diferenças)**.
+  - Validação sintática JSON (`jq empty`) em `user_configuration.json`, `manifests/release.json`, `profiles/hardware.json` e `configs/noctalia/palettes/ObsidianPurple.json`: **PASS (4/4)**.
+  - Suite expandida de testes unitários, de contrato, segurança e documentação (`python3 -B -m unittest discover -s tests/unit -p 'test_*.py' -v`): **PASS (42/42 testes aprovados, 0 falhas, 0 ignorados)**.
 
 ---
 
-## 6. Recomendações ao Operador (`v1.0.0-rc10` → `v1.0.0`)
+## 5. Validação Real em Máquinas Virtuais (`ACCEPT-A` e `ACCEPT-B`)
 
-1. Inspecionar os artefatos visuais e logs em `/home/awerkori/Downloads/Aprovacao-Visual-Nox-Archinstall/REFINAMENTO-FINAL/` (`01-Referencias/` a `07-Relatorio/` e `MANIFEST.md`), além de `REVISAO-VISUAL-DEFINITIVA/` (Fastfetch e Limine aprovados).
-2. Após testar em hardware físico (ou aprovar explicitamente o pacote visual/técnico da RC10), autorizar a publicação da release estável **`v1.0.0`**.
-3. Até lá, **`v1.0.0-rc10`** permanece exclusivamente como pré-release no repositório `Awerkori/arch-install`.
+As duas máquinas virtuais independentes QEMU/KVM (`nox-archinstall-lab-acceptA` e `nox-archinstall-lab-acceptB`, 6 vCPUs AMD Zen 4 `host-passthrough`, 8 GiB RAM, UEFI/OVMF Secure Boot capable, discos virtuais independentes) foram inicializadas e validadas com o payload determinístico `nox-archinstall-payload-v1.0.1.tar.gz` (`660d6caa4a418a17a6a4138f2a1d61f10673718aeca775adca6bcf3fdbdd1ec3`):
 
----
+| Item Verificado (Seção 11) | `ACCEPT-A` | `ACCEPT-B` | Status |
+|---|---|---|---|
+| 1. Instalação e validação `80-validation.sh` | `status: SUCCESS` (`55/55` checks) | `status: SUCCESS` (`55/55` checks) | **PASS** |
+| 2. Boot pelo Limine (`timeout: 5`, `Arch Linux/Project Nox`) | Validado (`01-limine-boot.png`) | Validado | **PASS** |
+| 3. Primeiro login via Noctalia Greeter (`greetd`) | Validado (`02-noctalia-greeter.png`) | Validado | **PASS** |
+| 4. Inicialização do Umbriel (`mode = "dwindle"`) | Ativo (`✓ Configuration is valid`) | Ativo (`✓ Configuration is valid`) | **PASS** |
+| 5. Inicialização do Noctalia Shell | Ativo (`✓ Config is valid`) | Ativo (`✓ Config is valid`) | **PASS** |
+| 6. Tema Obsidian Purple + `mpvpaper` animado | Ativo (`03-desktop-initial.png`) | Ativo (`nox-g5-runtime.webm`) | **PASS** |
+| 7. Inicialização do Firefox Pure (`firefox-pure`) | Instalado e validado | Validado em execução (`09-firefox-luciole-desktop.png`) | **PASS** |
+| 8. Funcionamento do Luciole (`luciole-git`) | Instalado e validado | Validado em execução (`09-firefox-luciole-desktop.png`) | **PASS** |
+| 9. Funcionamento do Kitty + Fastfetch | Validado (`04-noctalia-launcher.png`) | Validado (`06-fastfetch-kitty.png`) | **PASS** |
+| 10. Unidades systemd com falha (`system` e `user`) | **0 falhas** (`0 loaded units listed`) | **0 falhas** (`0 loaded units listed`) | **PASS** |
+| 11. Kernel final único (`linux-cachyos`) | `7.3.5-1-cachyos` (único kernel) | `7.3.5-1-cachyos` (único kernel) | **PASS** |
+| 12. Subvolumes Btrfs + ZRAM + Swapfile NOCOW | `@`, `@home`, `@log`, `@pkg`, `@.snapshots`, `@swap` (`+C`) | `@`, `@home`, `@log`, `@pkg`, `@.snapshots`, `@swap` (`+C`) | **PASS** |
+| 13. Snapper (`root`, `NUMBER_LIMIT=2`, `TIMELINE_CREATE=no`) | Configurado e ativo | Configurado e ativo | **PASS** |
+| 14. Snapshots `PRE`/`POST` | Política validada | Par ativo `#21` (`pre`) + `#25` (`post`, `pre-number=21`) (`07-snapshots-state.png`) | **PASS** |
+| 15. Sincronização de snapshots com Limine | `//Project Nox` + BLAKE2B verificados | `///Ponto de Segurança` + `///Estado Atualizado` (`07-snapshots-state.png`) | **PASS** |
+| 16. Verificações de Secure Boot (`nox-secureboot-verify`) | Estágios 1–3 `PASS` (Setup Mode pré-enrollment) | Estágios 1–5 `PASS` (`--require-active` com Secure Boot ativo na OVMF, `08-integrity-verification.png`) | **PASS** |
+| 17. Integridade dos arquivos de configuração | `umbriel`, `noctalia`, `visudo`, `limine.conf` `PASS` | `umbriel`, `noctalia`, `visudo`, `limine.conf` `PASS` | **PASS** |
 
-## 8. Refinamento Visual Final (`REFINAMENTO-FINAL` — Feixe Global, Greeter & Lock Screen)
+### Comparação de Pacotes (`pacman -Qq` e `pacman -Qqe`)
 
-- **Feixe solar global (`tools/generate_nox_visuals.py`):** Corrigida a implementação anterior restrita à máscara metálica do ouro; implementada camada `draw_global_light_sweep` baseada em `Awerkori/Awerkori/assets/profile/hero.svg`, `ProjectNox-org/.github` e `banner-engine.mjs` (`sweepBeam` inclinado `-20°` atravessando fundo esquerdo, emblema, fundo direito e saída fora da tela em loop contínuo de `10.0s` para G5 `2560×1440` e AOC `1080×1920`).
-- **Greeter Obsidian Purple real (`configs/greeter/sync.toml`, `greeter.toml`, `scripts/51-input-displays.sh`):** Adicionada a 16ª chave `shadow` e `sync.toml` com `scheme = "Synced"` para aplicar o cartão escuro `#140c24`, bordas `#6d28d9` e ação `#9333ea` (em substituição ao fallback azul/amarelo), sem chaves não reconhecidas no relógio.
-- **Lock Screen unificada (`configs/noctalia/nox-theme.toml`, `configs/bin/nox-noctalia-layout`):** `blur_intensity = 0.0` e `tint_intensity = 0.0` para nitidez da neve cósmica, remoção da caixa redundante `show_unlock_hint = false`, adição do subtítulo de data alinhado ao Greeter e unificação tipográfica (`Outfit` + `Plus Jakarta Sans`). Validada ao vivo na VM `ACCEPT-B` (`mpvpaper` G5 em movimento, login no Greeter e Lock Screen animada com `LOCKSCREEN_ANIM_CHANGED_PIXELS=2867`).
-
----
-
-## 7. Revisão Visual Definitiva (`v1.0.0-rc10` — Obsidian Purple & Ouro)
-
-- **Pacote organizado para aprovação:** `/home/awerkori/Downloads/Aprovacao-Visual-Nox-Archinstall/REVISAO-VISUAL-DEFINITIVA/` (`01-Fastfetch/` a `08-Relatorio/` + `MANIFEST.md` com 36 arquivos e hashes SHA-256).
-- **Mudanças visuais aplicadas:**
-  - Substituição global de partículas amarelas/roxas de fundo pela `neveCosmica` oficial (`snowWhite`, `snowSilver`, `snowLilac` desfocadas) em `tools/generate_nox_visuals.py` para G5, AOC, Greeter, Lock Screen e Limine.
-  - Feixe metálico diagonal oficial (`feixeLuminoso`) restrito à máscara dourada do emblema nos loops WebM/GIF (`nox-g5*`, `nox-aoc*`, `nox-lockscreen-emblem.gif`).
-  - Remoção de geometria inventada: linha horizontal no G5, elipses gigantes e eixo vertical no AOC, oval gigante/divisor no Greeter (`hide_logo = true`, emblema superior integrado, relógio e cartão Obsidian Purple refinados) e colchetes/divisor no fundo do Lock Screen (layout unificado em `configs/bin/nox-noctalia-layout`).
-  - Reprodução fiel do painel `Fastfetch` (`configs/bin/nox-fastfetch` + `tools/generate_braille_logo.py`), eliminando `\x1b[13G`, alinhando colunas `│` e bordas dos 4 quadros em modos cheio e split Dwindle, e preservando Lambda violeta sólido.
-- **Validação em VM existente (`ACCEPT-B`):** boot pelo Limine atualizado (`limine-live-vm.png`), captura de Greeter e erro/login, `mpvpaper` G5 em movimento (`desktop-frame-1.png` vs `desktop-frame-2.png`), Lock Screen animado (`LOCKSCREEN_ANIM_CHANGED_PIXELS=1416`) com desbloqueio real e Fastfetch no Kitty cheio e em split (`fastfetch-kitty-full.png`, `fastfetch-kitty-split.png`), além de `24/24` testes unitários OK (`python3 -m unittest discover -s tests/unit -v`).
-
----
-
-## 9. Rodada Final Dual-Monitor (`REFINAMENTO-DUAL-MONITOR` — G5 → AOC, Greeter, Lock Screen & Avatar)
-
-- **Pacote entregue para aprovação:** `/home/awerkori/Downloads/Aprovacao-Visual-Nox-Archinstall/REFINAMENTO-DUAL-MONITOR/` (`01-Referencias/` a `08-Relatorio/` + `MANIFEST.md` e `RELATORIO-DUAL-MONITOR.md`).
-- **Animação contínua G5 → AOC (`tools/generate_nox_visuals.py` + `configs/noctalia/plugins/mpvpaper/`):**
-  - Timeline global única de `14.0 s` (`840` quadros a `60 fps` em WebM; `280` quadros a `20 fps` em GIF) calculada em espaço virtual contínuo (`Odyssey G5 [0,0]` `2560×1440` → `AOC 24B35 [2560,-350]` `1080×1920`), sem feixe duplicado e sem ping-pong.
-  - Sincronizador leve por IPC Unix JSON via `socat` (`dual_sync = true`, checagem de drift a cada `3 s` em módulo `14.0 s` com `seek absolute+exact`, pausa/retomada coordenada em `session_locked`/`session_unlocked` e alinhamento automático em `onOutputsChanged`), com `nox-bundled` como última `[[plugins.source]]` em `nox-theme.toml`.
-  - **Evidência:** prévia composta sintética `04-Animacao-Conjunta/preview-dual-monitor.webm`, teste live na VM `ACCEPT-B` (`mpvpaper` G5 em `Virtual-1`, `seek` exato via `socat`, `STAT=T<l` no Lock Screen e teste empírico com dois processos `mpv --vo=null` corrigindo `5.0 s` de desvio para `Δ = 0.016 s`). Travessia simultânea nas duas saídas físicas (`DP-*` + `HDMI-A-*`) permanece **`PENDENTE-HARDWARE`**.
-- **Greeter, Lock Screen e Avatar:**
-  - Greeter refinado com `corner_radius_scale = 1.05`, borda `#5b21b6`, superfície `#120a21` e ajuste de altura/diâmetro do emblema em `nox-greeter.png` (documentando ausência de `card_width` configurável no binário).
-  - Lock Screen refinada sem `background_padding` (0 warnings em `noctalia config validate`), botões `[[shell.session.actions]]` em `variant = "outline"` eliminando o destaque coral sólido do `Shut Down`, GIF `360×360` animado e desbloqueio preservado.
-  - Removida imposição de `nox-emblem.png` como `[shell].avatar_path` e documentada a ausência de `accountsservice` na RC10 (avatar customizado funciona no Noctalia Shell via Settings → Shell; compartilhamento com Greeter depende de instalação futura de `accountsservice`).
-- **Testes unitários após alterações finais:** `25/25` OK em `tests/unit/test_nox.py`.
+- **Pacotes explícitos (`pacman -Qqe`):** **`100` em `ACCEPT-A` vs `100` em `ACCEPT-B`** — `diff -u` retornou **0 diferenças (`100% idênticos`)**.
+- **Todos os pacotes (`pacman -Qq`):**
+  - Na instalação limpa inicial: **`711` em `ACCEPT-A` vs `711` em `ACCEPT-B` (0 diferenças)**.
+  - Após a bateria de atualização real com `topgrade --yes` em `ACCEPT-B`: `ACCEPT-B` possui `712` pacotes porque o repositório `multilib` substituiu `lib32-zlib` por `lib32-zlib-ng` + `lib32-zlib-ng-compat` (+1 pacote de dependência transitiva). Todas as demais 710 entradas são idênticas.
 
 ---
 
-## 10. Adendo `DP-1` (Odyssey G5) e Revisão Plug-and-Play
+## 6. Evidências Visuais Reais e Manifesto SHA-256 (`v1.0.1`)
 
-- **Atualização de porta e EDID (`profiles/hardware.json`, `configs/bin/nox-display-profile`, `configs/bin/nox-noctalia-layout`, `configs/bin/nox-session-init`):**
-  - `preferred_connectors` do monitor primário atualizado para `["DP-1", "DP-2"]` (G5 à esquerda em `[0, 0]`, `2560×1440@165`; AOC em `[2560, -350]`, `transform = "90"`, `1920×1080@100`).
-  - Identificação em duas etapas estritas priorizando modelo/EDID (`Odyssey G5`/`Samsung` e `24B35`/`AOC`, incluindo leitura dos blocos descritores em `/sys/class/drm/card*-*/edid`) antes da ordem de conectores, evitando inversão de monitor primário ou troca de wallpapers por ordem de enumeração.
-  - `nox-session-init` atualiza automaticamente `outputs.toml` e revalida `assignments.json` (`nox_mpv_layout_stale`) se os conectores ativos divergirem entre boots, preservando operação plug-and-play no primeiro login (`scripts/50-desktop.sh`, `51-input-displays.sh`, `53-appearance.sh`).
-- **Limitação honesta:** conectores físicos reais (`DP-1` + `HDMI-A-*`) permanecem **`PENDENTE-HARDWARE`** até execução no computador físico (VM KVM expõe apenas `Virtual-1`).
+As capturas de tela reais produzidas nas VMs `ACCEPT-A` e `ACCEPT-B` durante esta auditoria estão organizadas em `/home/awerkori/.local/share/antigravity/Nox-Workspace/laboratorios/nox-archinstall-lab/evidence/v1.0.1/` (acompanhadas de `MANIFEST.sha256` e dos logs completos em `logs/`):
+
+1. `screenshots/01-limine-boot.png` — Menu de boot Limine (`Project Nox`, kernel `7.3.5-1-cachyos`, auto-boot 5s).
+2. `screenshots/02-noctalia-greeter.png` — Noctalia Greeter (`greetd`, sessão `Umbriel`, tema Obsidian Purple).
+3. `screenshots/03-desktop-initial.png` — Desktop inicial Umbriel + Noctalia Shell + wallpaper animado `mpvpaper`.
+4. `screenshots/04-noctalia-launcher.png` — Launcher minimalista do Noctalia exibindo os 4 aplicativos principais (`Firefox`, `kitty`, `Luciole`, `ProtonPlus`).
+5. `screenshots/05-noctalia-lockscreen.png` — Noctalia Lock Screen com emblema animado, relógio `Outfit` e caixa de desbloqueio centralizada.
+6. `screenshots/06-fastfetch-kitty.png` — Painel `nox-fastfetch` no terminal Kitty com logo Braille e 4 quadros alinhados.
+7. `screenshots/07-snapshots-state.png` — Estado dos snapshots Snapper (`PRE`/`POST`), entradas `Ponto de Segurança` / `Estado Atualizado` no `/boot/limine.conf`, subvolumes Btrfs e swapfile NOCOW (`+C`).
+8. `screenshots/08-integrity-verification.png` — Execução real de `sudo nox-secureboot-verify --require-active` (todos os 5 estágios `PASS`), `systemctl --failed` (`0` falhas) e `/var/lib/nox-archinstall/status.json`.
+9. `screenshots/09-firefox-luciole-desktop.png` — Firefox Pure (com tema escuro Obsidian Purple) e gerenciador de arquivos Luciole em execução no Umbriel (`dwindle`).
+
+---
+
+## 7. Limitações Conhecidas e Itens Pendentes de Validação Física (`PENDENTE-HARDWARE`)
+
+### 7.1. Limitações Arquiteturais Documentadas
+1. **Pinagem de hashes SHA-256 sem chave pública offline pré-instalada na ISO:** A ISO oficial do Arch Linux não inclui chaves públicas do proprietário do Project Nox. Por isso, a cadeia de confiança utiliza referências imutáveis de commit no GitHub sobre HTTPS/TLSv1.2+ combinadas à verificação explícita de hash SHA-256 em cada estágio.
+2. **Releases imutáveis do GitHub (`immutable_releases`):** A proteção da branch `main` (exigindo CI `validate`, bloqueando force-push e deleção) e o ruleset de proteção de tags `refs/tags/v*` (bloqueando deleção e force-push de tags de release) já estão ativos via API do GitHub. A chave adicional *Enable release immutability* na interface web do GitHub (`Settings → General → Releases`) só pode ser ativada pelo proprietário no navegador.
+
+### 7.2. Checklist de Validação Física (`PENDENTE-HARDWARE`)
+Os itens abaixo dependem exclusivamente do hardware físico de referência e permanecem identificados como pendentes até o teste na máquina real (procedimento detalhado em [`docs/POST_INSTALL_CHECKS.md`](POST_INSTALL_CHECKS.md)):
+
+- [ ] **GPU ASRock AMD Radeon RX 9060 XT:** aceleração Vulkan/RADV real (`vulkaninfo`, `rocm-smi-lib`, `btop` GPU meter) e preservação de vídeo da Option ROM/GOP no POST com Secure Boot ativo.
+- [ ] **Monitor principal Samsung Odyssey G5 (`DP-1`, `2560x1440@165Hz`) e monitor secundário AOC 24B35 (`HDMI-A-1`, `1920x1080@100Hz` vertical `90°`):** alinhamento físico `[2560, -350]` e travessia contínua do feixe luminoso entre os dois monitores reais.
+- [ ] **Placa Wi-Fi / Bluetooth Intel AX210 (`iwlwifi` + `iwd`):** conexão Wi-Fi real, `regdomain BR` e pareamento de áudio Bluetooth A2DP.
+- [ ] **Headset HAVIT Fuxi H3:** ciclo real de conexão USB/2.4GHz validando `nox-fuxi-h3-fix` (`PCM Playback Volume` = 100 e unmute de captura).
+- [ ] **Microfone analógico P2:** seleção de fonte padrão no WirePlumber sem dispositivo virtual residual.
+- [ ] **Teclado AULA F75:** digitação física com layout `us(intl)` e cedilha (`' + c → ç`) sem chattering.
+- [ ] **Secure Boot efetivamente ativo na UEFI da MSI PRO B650M-P (`MS-7E27`, BIOS `1.I2`):** execução presencial das Fases A a E de [`docs/SECURE-BOOT-MSI.md`](SECURE-BOOT-MSI.md), correção da política `FQ0001` (`Maximum Security` / `Deny Execute`) e teste físico de rejeição do pendrive não assinado.

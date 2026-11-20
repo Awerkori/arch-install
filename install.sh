@@ -27,14 +27,39 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --stage) STAGE="$2"; shift 2 ;;
-    --profile) export NOX_PROFILE="$2"; shift 2 ;;
-    --resume) RESUME=true; shift ;;
-    --from-stage) FROM_STAGE="$2"; shift 2 ;;
-    --dry-run) export NOX_DRY_RUN=true; shift ;;
-    --check-only) CHECK_ONLY=true; shift ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "Opcao desconhecida: $1" >&2; usage; exit 2 ;;
+    --stage)
+      STAGE="$2"
+      shift 2
+      ;;
+    --profile)
+      export NOX_PROFILE="$2"
+      shift 2
+      ;;
+    --resume)
+      RESUME=true
+      shift
+      ;;
+    --from-stage)
+      FROM_STAGE="$2"
+      shift 2
+      ;;
+    --dry-run)
+      export NOX_DRY_RUN=true
+      shift
+      ;;
+    --check-only)
+      CHECK_ONLY=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Opcao desconhecida: $1" >&2
+      usage
+      exit 2
+      ;;
   esac
 done
 

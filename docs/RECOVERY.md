@@ -148,7 +148,7 @@ Agora você está executando comandos diretamente dentro do seu sistema Project 
   1. Conecte-se à internet na ISO oficial, siga o **[Procedimento Base](#procedimento-base-como-iniciar-pela-iso-oficial-do-arch-linux-e-entrar-no-arch-chroot)** e entre em `arch-chroot /mnt`.
   2. Reinstale o kernel `linux-cachyos` e regenere toda a cadeia de boot:
      ```bash
-     rm -f /var/lib/pacman/db.lck
+     pgrep -a pacman || rm -f /var/lib/pacman/db.lck
      pacman -Syyu --noconfirm linux-cachyos linux-cachyos-headers
      limine-update
      limine-snapper-sync || true
