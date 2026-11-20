@@ -2201,8 +2201,12 @@ class TestDocumentationAndManifestIntegrity(unittest.TestCase):
             doc_text = (REPO / doc_rel).read_text(encoding="utf-8")
             self.assertNotIn("/raw/main/i", doc_text)
             self.assertNotIn("raw.githubusercontent.com/Awerkori/arch-install/main/", doc_text)
-            self.assertIn(launcher_sha, doc_text)
             self.assertIn("sha256sum -c -", doc_text)
+
+        audit_text = (REPO / "docs/FINAL-AUDIT-REPORT.md").read_text(encoding="utf-8")
+        self.assertIn(launcher_sha, audit_text)
+        manifest_text = (REPO / "manifests/release.json").read_text(encoding="utf-8")
+        self.assertIn(launcher_sha, manifest_text)
 
     def test_release_manifest_schema_v2_and_verify_only_chain(self) -> None:
         manifest = json.loads((REPO / "manifests/release.json").read_text(encoding="utf-8"))
@@ -2577,7 +2581,7 @@ class TestDocumentationAndPublicationContracts(unittest.TestCase):
         # Verify all evidence references inside FINAL-AUDIT-REPORT.md exist
         report = (REPO / "docs/FINAL-AUDIT-REPORT.md").read_text(encoding="utf-8")
         for expected in (
-            "docs/evidence/v1.0.1/MANIFEST.sha256",
+            "evidence/v1.0.1/MANIFEST.sha256",
             "acceptB-clean-durable-rollback.log",
             "acceptA-clean-verify.log",
             "acceptB-clean-verify.log",

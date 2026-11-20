@@ -19,7 +19,7 @@ Este documento é o manual técnico e didático preparado especificamente para o
 3. [Comparação profunda: `--microsoft` versus `--firmware-builtin` no `sbctl`](#3-comparação-profunda---microsoft-versus---firmware-builtin-no-sbctl)
 4. [Proteção crítica de vídeo para a Radeon RX 9060 XT (Por que o Ryzen 5 7500F exige cuidado redobrado)](#4-proteção-crítica-de-vídeo-para-a-radeon-rx-9060-xt-por-que-o-ryzen-5-7500f-exige-cuidado-redobrado)
 5. [Investigação e solução documentada do alerta `FQ0001` na MSI](#5-investigação-e-solução-documentada-do-alerta-fq0001-na-msi)
-6. [Relatos reais de usuários Linux em placas MSI / AM5 (Pesquisa Comunitária)](#6-relatos-reais-de-usuários-linux-em-placas-msi--am5-pesquisa-comunitária)
+6. [Cenários técnicos documentados em placas MSI / AM5 (Upstream e Wikis Oficiais)](#6-cenários-técnicos-documentados-em-placas-msi--am5-upstream-e-wikis-oficiais)
 7. [Preparação segura, backup e pontos de parada antes de modificar o firmware](#7-preparação-segura-backup-e-pontos-de-parada-antes-de-modificar-o-firmware)
 8. [Procedimento físico passo a passo na MSI PRO B650M-P (Fases A a F)](#8-procedimento-físico-passo-a-passo-na-msi-pro-b650m-p-fases-a-a-f)
 
