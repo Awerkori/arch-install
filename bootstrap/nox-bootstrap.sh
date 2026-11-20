@@ -67,6 +67,9 @@ if [[ "${ACTUAL_SHA256,,}" != "${EXPECTED_SHA256,,}" ]]; then
   exit 1
 fi
 
+# Restore standard umask before extracting payload and running install.sh so target system directories/configs get 0755/0644 instead of 0700/0600.
+umask 022
+
 DEST_DIR="${NOX_PAYLOAD_DEST_DIR:-/var/lib/nox-archinstall/payload}"
 STAGE_DIR="${TMP_DIR}/extracted"
 mkdir -p "$STAGE_DIR" "$(dirname "$DEST_DIR")"
@@ -75,6 +78,7 @@ tar --no-same-owner --no-same-permissions -xzf "$TAR_PATH" --strip-components=1 
 [[ -x "${STAGE_DIR}/install.sh" ]] || chmod +x "${STAGE_DIR}/install.sh"
 rm -rf "$DEST_DIR"
 mv "$STAGE_DIR" "$DEST_DIR"
+chmod 755 "$DEST_DIR"
 
 if ((${#INSTALL_ARGS[@]} == 0)); then
   INSTALL_ARGS=(--stage target-offline)
