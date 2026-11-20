@@ -94,14 +94,24 @@ TAR_PATH="${DIST_DIR}/${TAR_NAME}"
 
 build_deterministic_payload() {
   local out_tar="$1"
-  # Deterministic archive excluding release-pointer & stage-1/2/docs files so commit pinning
-  # outside payload paths never causes circular hash dependencies.
-  GZIP=-n tar --sort=name --mtime='UTC 2026-01-01' --owner=0 --group=0 --numeric-owner \
-    --exclude='.git' --exclude='dist' --exclude='__pycache__' --exclude='*.pyc' --exclude='*.pyo' \
-    --exclude='./user_configuration.json' --exclude='./manifests/release.json' \
-    --exclude='./i' --exclude='./bootstrap/nox-install.py' \
-    --exclude='./README.md' --exclude='./docs' --exclude='./tests' \
-    -czf "$out_tar" -C "$REPO_ROOT" .
+  local file_list
+  file_list="$(mktemp "${DIST_DIR}/.payload-files.XXXXXX")"
+  # Build strictly from git-tracked runtime payload paths with normalized mode, owner, mtime, and GNU tar format
+  # so builds are bit-for-bit identical across Arch, Ubuntu CI, and any umask.
+  git -C "$REPO_ROOT" ls-files -- \
+    LICENSE \
+    install.sh \
+    bootstrap/nox-bootstrap.sh \
+    configs \
+    profiles \
+    scripts \
+    tools | LC_ALL=C sort >"$file_list"
+  GZIP=-n tar --format=gnu --sort=name --mtime='UTC 2026-01-01' \
+    --owner=0 --group=0 --numeric-owner \
+    --mode='a+rX,u+w,go-w' \
+    --transform='s|^|nox-archinstall/|' \
+    -czf "$out_tar" -C "$REPO_ROOT" -T "$file_list"
+  rm -f "$file_list"
   sha256sum "$out_tar" | awk '{print $1}'
 }
 
@@ -303,7 +313,7 @@ if [[ -z "$BASE_URL" ]]; then
 fi
 PAYLOAD_URL="${BASE_URL}/${TAR_NAME}"
 
-# Update user_configuration.json payload pointer if requested
+# Update user_configuration.json payload pointer
 python3 - "${REPO_ROOT}/user_configuration.json" "$PAYLOAD_URL" "$SHA256" <<'PY'
 import json, sys
 cfg_path, url, sha = sys.argv[1:]
@@ -345,7 +355,7 @@ HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 [[ -n "$CONFIG_COMMIT" ]] || CONFIG_COMMIT="$HEAD_SHA"
 [[ -n "$BOOTSTRAP_COMMIT" ]] || BOOTSTRAP_COMMIT="$HEAD_SHA"
 [[ -n "$LAUNCHER_COMMIT" ]] || LAUNCHER_COMMIT="$HEAD_SHA"
-[[ -n "$PAYLOAD_COMMIT" ]] || PAYLOAD_COMMIT="$LAUNCHER_COMMIT"
+[[ -n "$PAYLOAD_COMMIT" ]] || PAYLOAD_COMMIT="$CONFIG_COMMIT"
 
 CONFIG_SHA256="$(sha256sum "${REPO_ROOT}/user_configuration.json" | awk '{print $1}')"
 BOOTSTRAP_SHA256="$(sha256sum "${REPO_ROOT}/bootstrap/nox-install.py" | awk '{print $1}')"
@@ -422,20 +432,15 @@ manifest = {
     },
     "reproducibility": {
         "build_script": "scripts/build-release.sh",
-        "tar_flags": "GZIP=-n tar --sort=name --mtime='UTC 2026-01-01' --owner=0 --group=0 --numeric-owner",
-        "excluded_paths": [
-            ".git",
-            "dist",
-            "__pycache__",
-            "*.pyc",
-            "*.pyo",
-            "./user_configuration.json",
-            "./manifests/release.json",
-            "./i",
-            "./bootstrap/nox-install.py",
-            "./README.md",
-            "./docs",
-            "./tests",
+        "tar_flags": "GZIP=-n tar --format=gnu --sort=name --mtime='UTC 2026-01-01' --owner=0 --group=0 --numeric-owner --mode='a+rX,u+w,go-w'",
+        "included_paths": [
+            "LICENSE",
+            "install.sh",
+            "bootstrap/nox-bootstrap.sh",
+            "configs",
+            "profiles",
+            "scripts",
+            "tools",
         ],
     },
 }
