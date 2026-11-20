@@ -30,15 +30,15 @@ from pathlib import Path
 from typing import Any
 
 NOX_RELEASE_VERSION = "v1.0.1"
-OFFICIAL_CONFIG_COMMIT = "48ef35686a2fb948ad9b1b96621019ba7d47611e"
+OFFICIAL_CONFIG_COMMIT = "77f63485529b7f52080d1e1b7c8169aa1c8dda5f"
 DEFAULT_CONFIG_URL = (
     f"https://raw.githubusercontent.com/Awerkori/arch-install/{OFFICIAL_CONFIG_COMMIT}/user_configuration.json"
 )
-OFFICIAL_CONFIG_SHA256 = "d815b8577d268ded529da1a45ba753861ce75b333ff331b6058967ad9625404a"
+OFFICIAL_CONFIG_SHA256 = "fcedd6a28f8acfe31b0c66f70cd772195e5f959273da59b9eedf6ab6f05f49f7"
 OFFICIAL_PAYLOAD_URL = (
     "https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz"
 )
-OFFICIAL_PAYLOAD_SHA256 = "7dcc5acea5feab877ab18c4677656eae9b85358dddccd550e43f8d09c36d52c8"
+OFFICIAL_PAYLOAD_SHA256 = "5db77939a83f50ceb30b812dfb0d669867c1a0f21ee05fb253dc3137bd0764b4"
 
 LEGACY_RC_TAG = "v1.0.0-rc10"
 LEGACY_RC_PREFIX = "v1.0.0-rc"
@@ -966,10 +966,13 @@ def interactive_main(args: argparse.Namespace) -> int:
             print(f"ERRO CRITICO (revalidacao final antes de archinstall): {exc}", file=sys.stderr)
             return 1
         print("\nIniciando archinstall com configuracao Project Nox automatica...")
+        # Restore standard 0022 umask before spawning archinstall so target /etc, pacstrap, and systemd-nspawn get 0755/0644 instead of inheriting caller 0077.
+        prev_umask = os.umask(0o022)
         try:
             proc = subprocess.run(cmd, check=False)
             return proc.returncode
         finally:
+            os.umask(prev_umask)
             scrub_persisted_archinstall_credentials()
 
 

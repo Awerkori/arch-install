@@ -2287,6 +2287,89 @@ class TestDocumentationAndManifestIntegrity(unittest.TestCase):
             self.assertNotEqual(bad_res.returncode, 0)
             self.assertIn("ERRO payload", bad_res.stderr)
 
+    def test_nox_install_restores_umask_022_before_invoking_archinstall(self) -> None:
+        mod = self._load_nox_install()
+        observed: dict[str, object] = {}
+
+        with tempfile.TemporaryDirectory() as td:
+            cfg_path = Path(td) / "user_configuration.json"
+            cfg_path.write_text((REPO / "user_configuration.json").read_text(encoding="utf-8"), encoding="utf-8")
+            cfg_sha = hashlib.sha256(cfg_path.read_bytes()).hexdigest()
+            payload_tar = REPO / "dist/nox-archinstall-payload-v1.0.1.tar.gz"
+            if not payload_tar.is_file():
+                subprocess.run(["bash", str(REPO / "scripts/build-release.sh")], cwd=REPO, check=True)
+            manifest = json.loads((REPO / "manifests/release.json").read_text(encoding="utf-8"))
+            payload_url = manifest["payload_url"]
+            payload_sha = manifest["payload_sha256"]
+            override_cmd = manifest["artifacts"]
+
+            fake_disk = {
+                "name": "vda",
+                "path": "/dev/vda",
+                "by_id": "/dev/disk/by-id/virtio-test",
+                "size_bytes": 60 * 1024**3,
+                "size_gib": 60.0,
+                "model": "QEMU",
+                "serial": "clean",
+                "tran": "virtio",
+                "removable": False,
+                "mounts": [],
+            }
+            answers = iter(["1", "vda", "noxdev", "s"])
+
+            def fake_run(cmd, *args, **kwargs):
+                cur_umask = os.umask(0o022)
+                os.umask(cur_umask)
+                observed["cmd"] = cmd
+                observed["child_umask"] = cur_umask
+                cfg_arg = Path(cmd[cmd.index("--config") + 1])
+                creds_arg = Path(cmd[cmd.index("--creds") + 1])
+                observed["tmp_dir_mode"] = cfg_arg.parent.stat().st_mode & 0o777
+                observed["cfg_mode"] = cfg_arg.stat().st_mode & 0o777
+                observed["creds_mode"] = creds_arg.stat().st_mode & 0o777
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+
+            old_umask = os.umask(0o077)
+            try:
+                ns = mod.parse_args(
+                    [
+                        "--config",
+                        str(cfg_path),
+                        "--config-sha256",
+                        cfg_sha,
+                        "--payload-url",
+                        f"https://example.invalid/{payload_tar.name}",
+                        "--payload-sha256",
+                        payload_sha,
+                        "--skip-net-check",
+                    ]
+                )
+                with (
+                    mock.patch.object(mod, "ensure_interactive_tty"),
+                    mock.patch.object(mod, "preflight_environment", return_value="4.5"),
+                    mock.patch.object(mod, "list_candidate_disks", return_value=[fake_disk]),
+                    mock.patch.object(mod, "verify_disk_safe_to_wipe"),
+                    mock.patch.object(mod, "_read_disk_sector_size", return_value=512),
+                    mock.patch.object(mod, "select_tmpfs_dir", return_value=td),
+                    mock.patch.object(mod, "scrub_persisted_archinstall_credentials"),
+                    mock.patch("builtins.input", side_effect=lambda _prompt="": next(answers)),
+                    mock.patch("getpass.getpass", return_value="noxdev123"),
+                    mock.patch.object(mod.subprocess, "run", side_effect=fake_run),
+                ):
+                    rc = mod.interactive_main(ns)
+                post_umask = os.umask(0o077)
+                os.umask(post_umask)
+            finally:
+                os.umask(old_umask)
+
+            self.assertEqual(rc, 0)
+            self.assertEqual(observed["child_umask"], 0o022)
+            self.assertEqual(observed["tmp_dir_mode"], 0o700)
+            self.assertEqual(observed["cfg_mode"], 0o600)
+            self.assertEqual(observed["creds_mode"], 0o600)
+            self.assertEqual(post_umask, 0o077)
+            _ = override_cmd
+
 
 
 
