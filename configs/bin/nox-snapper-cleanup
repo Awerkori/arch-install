@@ -238,34 +238,27 @@ def _save_state(state_file: Path, payload: dict[str, Any]) -> None:
 
 @contextmanager
 def _cleanup_lock(lock_path: Path | None) -> Iterator[None]:
-    """Serialize concurrent snapper cleanup invocations safely."""
+    """Serialize concurrent snapper cleanup invocations safely (fail-closed)."""
     if lock_path is None:
         yield
         return
-    fd: int | None = None
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
     try:
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
         fcntl.flock(fd, fcntl.LOCK_EX)
-    except OSError:
-        if fd is not None:
-            try:
-                os.close(fd)
-            except OSError:
-                pass
-            fd = None
+    except BaseException:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        raise
     try:
         yield
     finally:
-        if fd is not None:
-            try:
-                fcntl.flock(fd, fcntl.LOCK_UN)
-            except OSError:
-                pass
-            try:
-                os.close(fd)
-            except OSError:
-                pass
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
 
 def main() -> int:
@@ -282,179 +275,191 @@ def main() -> int:
     if lock_file is None and not args.dry_run:
         lock_file = args.state_file.with_name(args.state_file.name + ".lock")
 
-    with _cleanup_lock(lock_file):
-        use_dbus = False
-        if args.input_json:
-            raw = args.input_json.read_text(encoding="utf-8")
+    try:
+        lock_ctx = _cleanup_lock(lock_file)
+        with lock_ctx:
+            return _main_locked(args)
+    except OSError as exc:
+        print(
+            f"ERRO CRITICO (nox-snapper-cleanup): falha ao adquirir/gerenciar lock '{lock_file}': {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+
+def _main_locked(args: argparse.Namespace) -> int:
+    use_dbus = False
+    if args.input_json:
+        raw = args.input_json.read_text(encoding="utf-8")
+    else:
+        res = subprocess.run(
+            snapper_cmd("--jsonout", "-c", "root", "list", use_dbus=True, snapper_bin=args.snapper_bin),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            use_dbus = True
         else:
             res = subprocess.run(
-                snapper_cmd("--jsonout", "-c", "root", "list", use_dbus=True, snapper_bin=args.snapper_bin),
+                snapper_cmd("--jsonout", "-c", "root", "list", use_dbus=False, snapper_bin=args.snapper_bin),
                 capture_output=True,
                 text=True,
                 check=False,
             )
-            if res.returncode == 0 and res.stdout.strip():
-                use_dbus = True
-            else:
-                res = subprocess.run(
-                    snapper_cmd("--jsonout", "-c", "root", "list", use_dbus=False, snapper_bin=args.snapper_bin),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if res.returncode != 0 or not res.stdout.strip():
-                    return 0
-            raw = res.stdout
+            if res.returncode != 0 or not res.stdout.strip():
+                return 0
+        raw = res.stdout
 
-        entries = parse_snapper_json(raw)
-        session_id = args.session_id if args.session_id is not None else detect_update_session()
+    entries = parse_snapper_json(raw)
+    session_id = args.session_id if args.session_id is not None else detect_update_session()
 
-        saved_state: dict[str, Any] | None = None
-        if args.state_file.is_file():
-            try:
-                saved_state = json.loads(args.state_file.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                saved_state = None
+    saved_state: dict[str, Any] | None = None
+    if args.state_file.is_file():
+        try:
+            saved_state = json.loads(args.state_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            saved_state = None
 
-        plan = plan_session_cleanup(entries, session_id=session_id, saved_state=saved_state)
+    plan = plan_session_cleanup(entries, session_id=session_id, saved_state=saved_state)
 
-        if args.dry_run:
-            out = {"action": plan["action"], "reason": plan["reason"], "delete": plan.get("delete", [])}
-            if "anchor_pre" in plan:
-                out["anchor_pre"] = plan["anchor_pre"]
-            if "delete_old_anchor_posts" in plan:
-                out["delete_old_anchor_posts"] = plan["delete_old_anchor_posts"]
-            if "delete_after_create" in plan:
-                out["delete_after_create"] = plan["delete_after_create"]
-            print(json.dumps(out))
-            return 0
+    if args.dry_run:
+        out = {"action": plan["action"], "reason": plan["reason"], "delete": plan.get("delete", [])}
+        if "anchor_pre" in plan:
+            out["anchor_pre"] = plan["anchor_pre"]
+        if "delete_old_anchor_posts" in plan:
+            out["delete_old_anchor_posts"] = plan["delete_old_anchor_posts"]
+        if "delete_after_create" in plan:
+            out["delete_after_create"] = plan["delete_after_create"]
+        print(json.dumps(out))
+        return 0
 
-        if not session_id and args.state_file.is_file():
-            try:
-                args.state_file.unlink()
-            except OSError:
-                pass
+    if not session_id and args.state_file.is_file():
+        try:
+            args.state_file.unlink()
+        except OSError:
+            pass
 
-        if plan["action"] == "init-session":
-            _save_state(
-                args.state_file,
-                {
-                    "session_id": plan["session_id"],
-                    "anchor_pre": plan["anchor_pre"],
-                    "latest_post": plan["latest_post"],
-                },
-            )
-            to_delete = plan.get("delete", [])
-            if to_delete:
-                res = _run_snapper_retry(
-                    "-c",
-                    "root",
-                    "delete",
-                    "--sync",
-                    *(str(n) for n in to_delete),
-                    use_dbus=use_dbus,
-                    snapper_bin=args.snapper_bin,
-                )
-                if res.returncode != 0:
-                    print(f"nox-snapper-cleanup warning: {res.stderr.strip()}", file=sys.stderr)
-            return 0
-
-        if plan["action"] == "consolidate":
-            anchor_pre = int(plan["anchor_pre"])
-            old_posts = [str(n) for n in plan.get("delete_old_anchor_posts", [])]
-            if old_posts:
-                del_old = _run_snapper_retry(
-                    "-c",
-                    "root",
-                    "delete",
-                    "--sync",
-                    *old_posts,
-                    use_dbus=use_dbus,
-                    snapper_bin=args.snapper_bin,
-                )
-                if del_old.returncode != 0:
-                    print(
-                        f"nox-snapper-cleanup consolidation aborted (delete old post): {del_old.stderr.strip()}",
-                        file=sys.stderr,
-                    )
-                    return 0
-
-            create_res = _run_snapper_retry(
+    if plan["action"] == "init-session":
+        _save_state(
+            args.state_file,
+            {
+                "session_id": plan["session_id"],
+                "anchor_pre": plan["anchor_pre"],
+                "latest_post": plan["latest_post"],
+            },
+        )
+        to_delete = plan.get("delete", [])
+        if to_delete:
+            res = _run_snapper_retry(
                 "-c",
                 "root",
-                "create",
-                "--type",
-                "post",
-                "--pre-number",
-                str(anchor_pre),
-                "--cleanup-algorithm",
-                "number",
-                "--description",
-                "Project Nox Topgrade/Paru session POST",
-                "--print-number",
+                "delete",
+                "--sync",
+                *(str(n) for n in to_delete),
                 use_dbus=use_dbus,
                 snapper_bin=args.snapper_bin,
             )
-            if create_res.returncode != 0 or not create_res.stdout.strip().isdigit():
-                # Preserve the intact intermediate pair (fallback_pre + fallback_post) as recovery point
-                if "fallback_pre" in plan and "fallback_post" in plan:
-                    _save_state(
-                        args.state_file,
-                        {
-                            "session_id": session_id,
-                            "anchor_pre": int(plan["fallback_pre"]),
-                            "latest_post": int(plan["fallback_post"]),
-                        },
-                    )
+            if res.returncode != 0:
+                print(f"nox-snapper-cleanup warning: {res.stderr.strip()}", file=sys.stderr)
+        return 0
+
+    if plan["action"] == "consolidate":
+        anchor_pre = int(plan["anchor_pre"])
+        old_posts = [str(n) for n in plan.get("delete_old_anchor_posts", [])]
+        if old_posts:
+            del_old = _run_snapper_retry(
+                "-c",
+                "root",
+                "delete",
+                "--sync",
+                *old_posts,
+                use_dbus=use_dbus,
+                snapper_bin=args.snapper_bin,
+            )
+            if del_old.returncode != 0:
                 print(
-                    f"nox-snapper-cleanup consolidation warning (create post): {create_res.stderr.strip()}",
+                    f"nox-snapper-cleanup consolidation aborted (delete old post): {del_old.stderr.strip()}",
                     file=sys.stderr,
                 )
                 return 0
 
-            new_post = int(create_res.stdout.strip())
-            _save_state(
-                args.state_file,
-                {
-                    "session_id": session_id,
-                    "anchor_pre": anchor_pre,
-                    "latest_post": new_post,
-                },
-            )
-            intermediates = [str(n) for n in plan.get("delete_after_create", [])]
-            if intermediates:
-                del_mid = _run_snapper_retry(
-                    "-c",
-                    "root",
-                    "delete",
-                    "--sync",
-                    *intermediates,
-                    use_dbus=use_dbus,
-                    snapper_bin=args.snapper_bin,
-                )
-                if del_mid.returncode != 0:
-                    print(
-                        f"nox-snapper-cleanup consolidation warning (delete intermediates): {del_mid.stderr.strip()}",
-                        file=sys.stderr,
-                    )
-            return 0
-
-        to_delete = plan.get("delete", [])
-        if not to_delete:
-            return 0
-
-        res = _run_snapper_retry(
+        create_res = _run_snapper_retry(
             "-c",
             "root",
-            "delete",
-            "--sync",
-            *(str(n) for n in to_delete),
+            "create",
+            "--type",
+            "post",
+            "--pre-number",
+            str(anchor_pre),
+            "--cleanup-algorithm",
+            "number",
+            "--description",
+            "Project Nox Topgrade/Paru session POST",
+            "--print-number",
             use_dbus=use_dbus,
             snapper_bin=args.snapper_bin,
         )
-        if res.returncode != 0:
-            print(f"nox-snapper-cleanup warning: {res.stderr.strip()}", file=sys.stderr)
+        if create_res.returncode != 0 or not create_res.stdout.strip().isdigit():
+            # Preserve the intact intermediate pair (fallback_pre + fallback_post) as recovery point
+            if "fallback_pre" in plan and "fallback_post" in plan:
+                _save_state(
+                    args.state_file,
+                    {
+                        "session_id": session_id,
+                        "anchor_pre": int(plan["fallback_pre"]),
+                        "latest_post": int(plan["fallback_post"]),
+                    },
+                )
+            print(
+                f"nox-snapper-cleanup consolidation warning (create post): {create_res.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return 0
+
+        new_post = int(create_res.stdout.strip())
+        _save_state(
+            args.state_file,
+            {
+                "session_id": session_id,
+                "anchor_pre": anchor_pre,
+                "latest_post": new_post,
+            },
+        )
+        intermediates = [str(n) for n in plan.get("delete_after_create", [])]
+        if intermediates:
+            del_mid = _run_snapper_retry(
+                "-c",
+                "root",
+                "delete",
+                "--sync",
+                *intermediates,
+                use_dbus=use_dbus,
+                snapper_bin=args.snapper_bin,
+            )
+            if del_mid.returncode != 0:
+                print(
+                    f"nox-snapper-cleanup consolidation warning (delete intermediates): {del_mid.stderr.strip()}",
+                    file=sys.stderr,
+                )
         return 0
+
+    to_delete = plan.get("delete", [])
+    if not to_delete:
+        return 0
+
+    res = _run_snapper_retry(
+        "-c",
+        "root",
+        "delete",
+        "--sync",
+        *(str(n) for n in to_delete),
+        use_dbus=use_dbus,
+        snapper_bin=args.snapper_bin,
+    )
+    if res.returncode != 0:
+        print(f"nox-snapper-cleanup warning: {res.stderr.strip()}", file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":

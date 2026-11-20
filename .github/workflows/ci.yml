@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (Node.js 24)
+        with:
+          fetch-depth: 0
 
       - name: Install shellcheck, shfmt, jq, and test dependencies
         run: |
@@ -59,6 +61,7 @@ jobs:
             test -s "$jf"
             jq empty "$jf"
           done
+          ./scripts/build-release.sh --verify-only
 
       - name: Run unit, contract, security, and documentation tests
         run: |
@@ -66,5 +69,5 @@ jobs:
 
       - name: Secret and private data scan
         run: |
-          ! grep -rnE '[g]hp_|[g]ho_|[g]ithub_pat_|BEGIN (OPENSSH|RSA|EC|PRIVATE) (PRIVATE )?KEY' \
-            --exclude-dir=.git --exclude-dir=.github --exclude-dir=dist --exclude-dir=reports .
+          ! grep -rnE '[g]hp_|[g]ho_|[g]ithub_pat_|[A]KIA[0-9A-Z]{16}|BEGIN[[:space:]]+(OPENSSH|RSA|EC|DSA|PGP|PRIVATE)[[:space:]]+(PRIVATE[[:space:]]+)?KEY' \
+            --exclude-dir=.git --exclude-dir=dist --exclude-dir=reports --exclude-dir=__pycache__ .

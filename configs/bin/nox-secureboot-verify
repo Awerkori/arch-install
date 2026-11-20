@@ -3,11 +3,12 @@
 #   1. Key preparation (/var/lib/sbctl/keys)
 #   2. Binary signatures (limine_x64.efi, BOOTX64.EFI, and kernels on ESP)
 #   3. Limine configuration & BLAKE2B integrity (no dirty marker, real file b2sum match, enrolled config b2sum)
-#   4. Firmware NVRAM key enrollment status (Setup Mode vs User Mode)
+#   4. Firmware NVRAM key enrollment status (Setup Mode vs User Mode; fail-closed on UNKNOWN)
 #   5. UEFI Secure Boot active enforcement (--require-active)
 set -Eeuo pipefail
 
 REQUIRE_ACTIVE=false
+IGNORE_DIRTY_MARKER=false
 CUSTOM_ESP=""
 LIMINE_DEFAULT="${NOX_LIMINE_DEFAULT:-/etc/default/limine}"
 DIRTY_MARKER="${NOX_DIRTY_MARKER:-/run/nox-limine-tx.dirty}"
@@ -17,6 +18,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --require-active)
       REQUIRE_ACTIVE=true
+      shift
+      ;;
+    --ignore-dirty-marker)
+      IGNORE_DIRTY_MARKER=true
       shift
       ;;
     --esp-path)
@@ -39,6 +44,7 @@ while [[ $# -gt 0 ]]; do
       cat <<'USAGE'
 Usage: nox-secureboot-verify [options]
   --require-active          Require UEFI Secure Boot to be actively enforced in firmware
+  --ignore-dirty-marker     Internal flag used during atomic repair pre-commit check
   --esp-path <dir>          Override ESP mountpoint (default: /boot or /efi)
   --limine-default <path>   Override /etc/default/limine path
   --dirty-marker <path>     Override /run/nox-limine-tx.dirty path
@@ -79,10 +85,10 @@ else
 fi
 
 # Transaction atomicity check (no interrupted update/restore)
-if [[ -e "$DIRTY_MARKER" ]]; then
+if ! $IGNORE_DIRTY_MARKER && [[ -e "$DIRTY_MARKER" ]]; then
   fail "Stage 3 (Transaction State): partially updated/interrupted Limine transaction detected ($DIRTY_MARKER present)"
 else
-  pass "Stage 3 (Transaction State): no dirty Limine transaction marker ($DIRTY_MARKER absent)"
+  pass "Stage 3 (Transaction State): no dirty Limine transaction marker"
 fi
 
 # Stage 2: Signature of EFI binaries (and any kernel images present on ESP)
@@ -159,26 +165,56 @@ else
   fail "Stage 3 (Config Presence): missing or empty $CONF"
 fi
 
-# Stage 4 & Stage 5: Firmware NVRAM key enrollment vs active UEFI Secure Boot enforcement
-STATUS_JSON="$("$SBCTL_BIN" status --json 2>/dev/null || true)"
-if printf '%s' "$STATUS_JSON" | grep -q '"setup_mode": true'; then
-  info "Stage 4 (Firmware Key Enrollment): UEFI is in Setup Mode (keys prepared on disk, not yet enrolled in UEFI NVRAM)"
+# Stage 4 & Stage 5: Strict firmware state parsing (fail-closed on UNKNOWN/corrupt/error)
+FW_RC=0
+STATUS_JSON="$("$SBCTL_BIN" status --json 2>/dev/null)" || FW_RC=$?
+if ((FW_RC != 0)) || [[ -z "${STATUS_JSON// /}" ]]; then
+  fail "Stage 4/5 (Firmware Status): UNKNOWN — '$SBCTL_BIN status --json' failed or returned empty output (rc=$FW_RC)"
 else
-  info "Stage 4 (Firmware Key Enrollment): UEFI Setup Mode is Disabled (User Mode active in NVRAM)"
-fi
+  FW_PARSE_ERR=""
+  FW_RESULT=""
+  FW_RESULT="$(
+    python3 - "$STATUS_JSON" <<'PY' 2>&1
+import json, sys
+raw = sys.argv[1]
+try:
+    data = json.loads(raw)
+except Exception as exc:
+    raise SystemExit(f"malformed JSON: {exc}")
+if not isinstance(data, dict):
+    raise SystemExit("JSON root must be an object")
+for field in ("setup_mode", "secure_boot"):
+    if field not in data:
+        raise SystemExit(f"missing required field '{field}'")
+    if type(data[field]) is not bool:
+        raise SystemExit(f"field '{field}' must be boolean, got {type(data[field]).__name__}")
+print(f"{'true' if data['setup_mode'] else 'false'} {'true' if data['secure_boot'] else 'false'}")
+PY
+  )" || FW_PARSE_ERR="$FW_RESULT"
 
-if printf '%s' "$STATUS_JSON" | grep -q '"secure_boot": true'; then
-  pass "Stage 5 (UEFI Enforcement): UEFI Secure Boot is actively enforced by firmware"
-else
-  if $REQUIRE_ACTIVE; then
-    fail "Stage 5 (UEFI Enforcement): UEFI Secure Boot is NOT active (--require-active)"
+  if [[ -n "$FW_PARSE_ERR" ]]; then
+    fail "Stage 4/5 (Firmware Status): UNKNOWN — invalid sbctl status JSON ($FW_PARSE_ERR)"
   else
-    info "Stage 5 (UEFI Enforcement): UEFI Secure Boot is currently Disabled (offline signing & BLAKE2B verified; enable in UEFI BIOS after key enrollment)"
+    SETUP_MODE="${FW_RESULT%% *}"
+    SECURE_BOOT="${FW_RESULT##* }"
+    if [[ "$SETUP_MODE" == "true" ]]; then
+      info "Stage 4 (Firmware Key Enrollment): UEFI is in Setup Mode (keys prepared on disk, NOT yet enrolled in UEFI NVRAM)"
+    else
+      pass "Stage 4 (Firmware Key Enrollment): Keys enrolled in UEFI NVRAM (User Mode; Setup Mode Disabled)"
+    fi
+
+    if [[ "$SECURE_BOOT" == "true" ]]; then
+      pass "Stage 5 (UEFI Enforcement): UEFI Secure Boot is actively enforced by firmware"
+    elif $REQUIRE_ACTIVE; then
+      fail "Stage 5 (UEFI Enforcement): UEFI Secure Boot is Disabled (--require-active)"
+    else
+      info "Stage 5 (UEFI Enforcement): UEFI Secure Boot is Disabled in firmware (offline signing & BLAKE2B verified; NOT actively enforced)"
+    fi
   fi
 fi
 
 if ((FAILS == 0)); then
-  echo "[NOX SECUREBOOT] OK: /var/lib/sbctl/keys presente, Limine + kernel assinados e hash de limine.conf inscrito."
+  echo "[NOX SECUREBOOT] OK: chaves verificadas, Limine/kernel assinados, hash BLAKE2B de limine.conf inscrito e estado do firmware valido."
   exit 0
 fi
 exit 1

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Atomic repair / verification helper for Limine config normalization, BLAKE2b enrollment, and sbctl signatures.
+# Transactional repair / verification helper for Limine config normalization, BLAKE2b enrollment, and sbctl signatures.
 set -Eeuo pipefail
 
 MODE="${1:---repair-if-dirty}"
@@ -15,75 +15,132 @@ LIMINE_DEFAULT="${NOX_LIMINE_DEFAULT:-/etc/default/limine}"
 LIMINE_EFI="${ESP}/EFI/limine/limine_x64.efi"
 FALLBACK_EFI="${ESP}/EFI/BOOT/BOOTX64.EFI"
 NORMALIZE_BIN="${NOX_NORMALIZE_BIN:-/usr/local/libexec/nox/nox-limine-normalize}"
+LIMINE_ENROLL_BIN="${NOX_LIMINE_ENROLL_BIN:-limine-enroll-config}"
 FALLBACK_HOOK="${NOX_FALLBACK_HOOK:-/etc/boot/hooks/post.d/95-nox-sbctl-fallback}"
+VERIFY_BIN="${NOX_VERIFY_BIN:-/usr/local/bin/nox-secureboot-verify}"
 SBCTL_BIN="${NOX_SBCTL_BIN:-sbctl}"
 
 [[ -f "$CONF" ]] || exit 0
+
+_is_config_normalized() {
+  ! grep -Eq '^[[:space:]]*//linux-cachyos$|^[[:space:]]*///[0-9]+[[:space:]]*\||^[[:space:]]*/\+Snapshots\b' "$CONF" || return 1
+  if grep -Eq '^[[:space:]]*/\+Arch Linux' "$CONF" && ! grep -Eq '^[[:space:]]*//Project Nox$' "$CONF"; then
+    return 1
+  fi
+  if [[ -f "${ESP}/nox-limine-wallpaper.png" ]] && grep -q '^wallpaper: boot():/nox-limine-wallpaper\.png#' "$CONF"; then
+    local wp_b2
+    wp_b2="$(b2sum "${ESP}/nox-limine-wallpaper.png" 2>/dev/null | awk '{print $1}' || true)"
+    if [[ -n "$wp_b2" ]] && ! grep -qiF "wallpaper: boot():/nox-limine-wallpaper.png#${wp_b2}" "$CONF"; then
+      return 1
+    fi
+  fi
+  return 0
+}
+
+_are_blake2b_enrolled() {
+  if ! grep -qE '^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=yes' "$LIMINE_DEFAULT" 2>/dev/null; then
+    return 0
+  fi
+  [[ -s "$LIMINE_EFI" && -s "$FALLBACK_EFI" ]] || return 1
+  local conf_b2
+  conf_b2="$(b2sum "$CONF" 2>/dev/null | awk '{print $1}' || true)"
+  [[ -n "$conf_b2" ]] || return 1
+  grep -qaiF "$conf_b2" "$LIMINE_EFI" 2>/dev/null || return 1
+  grep -qaiF "$conf_b2" "$FALLBACK_EFI" 2>/dev/null || return 1
+  return 0
+}
+
+_are_efi_binaries_signed() {
+  command -v "$SBCTL_BIN" >/dev/null 2>&1 || return 1
+  "$SBCTL_BIN" setup --print-state --json 2>/dev/null | grep -q '"installed": true' || return 1
+  local efi
+  for efi in "$LIMINE_EFI" "$FALLBACK_EFI"; do
+    [[ -s "$efi" ]] || return 1
+    "$SBCTL_BIN" verify "$efi" 2>/dev/null | grep -q 'is signed' || return 1
+  done
+  return 0
+}
 
 needs_repair=false
 if [[ "$MODE" == "--force" || "$MODE" == "--repair" ]]; then
   needs_repair=true
 elif [[ -f "$DIRTY_MARKER" ]]; then
   needs_repair=true
-elif grep -Eq '^[[:space:]]*//linux-cachyos$|^[[:space:]]*///[0-9]+[[:space:]]*\|' "$CONF"; then
+elif ! _is_config_normalized; then
   needs_repair=true
-elif grep -Eq '^[[:space:]]*/\+Arch Linux' "$CONF" && ! grep -Eq '^[[:space:]]*//Project Nox$' "$CONF"; then
+elif ! _are_blake2b_enrolled; then
   needs_repair=true
-fi
-
-if ! $needs_repair && [[ -f "${ESP}/nox-limine-wallpaper.png" ]] && grep -q '^wallpaper: boot():/nox-limine-wallpaper\.png#' "$CONF"; then
-  WP_B2="$(b2sum "${ESP}/nox-limine-wallpaper.png" 2>/dev/null | awk '{print $1}' || true)"
-  if [[ -n "$WP_B2" ]] && ! grep -qiF "wallpaper: boot():/nox-limine-wallpaper.png#${WP_B2}" "$CONF"; then
-    needs_repair=true
-  fi
-fi
-
-if ! $needs_repair && grep -qE '^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=yes' "$LIMINE_DEFAULT" 2>/dev/null; then
-  if [[ ! -f "$LIMINE_EFI" || ! -f "$FALLBACK_EFI" ]]; then
-    needs_repair=true
-  else
-    CONF_B2="$(b2sum "$CONF" 2>/dev/null | awk '{print $1}' || true)"
-    if [[ -n "$CONF_B2" ]]; then
-      if ! grep -qaiF "$CONF_B2" "$LIMINE_EFI" 2>/dev/null ||
-        ! grep -qaiF "$CONF_B2" "$FALLBACK_EFI" 2>/dev/null; then
-        needs_repair=true
-      fi
-    elif grep -qaE '0{128}' "$LIMINE_EFI" 2>/dev/null ||
-      grep -qaE '0{128}' "$FALLBACK_EFI" 2>/dev/null; then
-      needs_repair=true
-    fi
-  fi
-fi
-
-if ! $needs_repair && command -v "$SBCTL_BIN" >/dev/null 2>&1; then
-  if "$SBCTL_BIN" setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
-    for efi in "$LIMINE_EFI" "$FALLBACK_EFI"; do
-      if [[ -f "$efi" ]] && ! "$SBCTL_BIN" verify "$efi" 2>/dev/null | grep -q 'is signed'; then
-        needs_repair=true
-        break
-      fi
-    done
-  fi
+elif ! _are_efi_binaries_signed; then
+  needs_repair=true
 fi
 
 $needs_repair || exit 0
 
 if ((EUID != 0)) && [[ "${NOX_ALLOW_NONROOT_TEST:-0}" != "1" ]]; then
-  echo "nox-limine-integrity: root privileges required to repair $CONF" >&2
+  echo "nox-limine-integrity: privilegios root obrigatorios para reparar $CONF" >&2
   exit 1
 fi
 
-if [[ -x "$NORMALIZE_BIN" ]]; then
-  "$NORMALIZE_BIN" --post --file "$CONF" --esp-dir "$ESP"
+# Preflight all mandatory recovery dependencies BEFORE mutating any file (preserve dirty marker on failure)
+fail_preflight() {
+  echo "nox-limine-integrity: ERRO CRITICO (preflight): $*" >&2
+  exit 1
+}
+
+[[ -x "$NORMALIZE_BIN" ]] || fail_preflight "normalizador ausente ou sem permissao de execucao: $NORMALIZE_BIN"
+command -v "$LIMINE_ENROLL_BIN" >/dev/null 2>&1 || fail_preflight "comando obrigatorio ausente no PATH: $LIMINE_ENROLL_BIN"
+[[ -x "$FALLBACK_HOOK" ]] || fail_preflight "hook de fallback ausente ou sem permissao de execucao: $FALLBACK_HOOK"
+[[ -x "$VERIFY_BIN" ]] || command -v "$VERIFY_BIN" >/dev/null 2>&1 || fail_preflight "verificador obrigatorio ausente: $VERIFY_BIN"
+command -v "$SBCTL_BIN" >/dev/null 2>&1 || fail_preflight "sbctl ausente: $SBCTL_BIN"
+command -v b2sum >/dev/null 2>&1 || fail_preflight "b2sum ausente"
+
+# Step 1: Normalize /boot/limine.conf
+if ! "$NORMALIZE_BIN" --post --file "$CONF" --esp-dir "$ESP"; then
+  echo "nox-limine-integrity: ERRO CRITICO ao normalizar $CONF" >&2
+  exit 1
 fi
 
-if command -v limine-enroll-config >/dev/null 2>&1; then
-  limine-enroll-config
+# Step 2: Enroll BLAKE2B of limine.conf and sign primary EFI binary
+if ! "$LIMINE_ENROLL_BIN"; then
+  echo "nox-limine-integrity: ERRO CRITICO ao executar $LIMINE_ENROLL_BIN" >&2
+  exit 1
 fi
 
-if [[ -x "$FALLBACK_HOOK" ]]; then
-  "$FALLBACK_HOOK"
+# Step 3: Update and sign fallback BOOTX64.EFI without clearing dirty marker prematurely
+if ! NOX_PRESERVE_DIRTY_MARKER=1 "$FALLBACK_HOOK"; then
+  echo "nox-limine-integrity: ERRO CRITICO ao executar hook de fallback $FALLBACK_HOOK" >&2
+  exit 1
 fi
 
+# Step 4: Re-verify ALL post-conditions before declaring transaction clean
+if ! _is_config_normalized; then
+  echo "nox-limine-integrity: ERRO CRITICO pos-reparo — $CONF nao ficou normalizado." >&2
+  exit 1
+fi
+
+if ! _are_blake2b_enrolled; then
+  echo "nox-limine-integrity: ERRO CRITICO pos-reparo — hash BLAKE2B de $CONF nao confere em $LIMINE_EFI / $FALLBACK_EFI." >&2
+  exit 1
+fi
+
+if ! _are_efi_binaries_signed; then
+  echo "nox-limine-integrity: ERRO CRITICO pos-reparo — assinatura EFI sbctl invalida ou ausente." >&2
+  exit 1
+fi
+
+if ! "$VERIFY_BIN" \
+  --esp-path "$ESP" \
+  --limine-default "$LIMINE_DEFAULT" \
+  --dirty-marker "$DIRTY_MARKER" \
+  --ignore-dirty-marker \
+  --sbctl-bin "$SBCTL_BIN"; then
+  echo "nox-limine-integrity: ERRO CRITICO pos-reparo — $VERIFY_BIN reprovou a cadeia de boot." >&2
+  exit 1
+fi
+
+# Step 5: Flush storage before atomically removing dirty marker
 sync -f "$CONF" 2>/dev/null || sync
+sync -f "$LIMINE_EFI" 2>/dev/null || sync
+sync -f "$FALLBACK_EFI" 2>/dev/null || sync
 rm -f "$DIRTY_MARKER"
+sync
