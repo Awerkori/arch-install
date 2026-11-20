@@ -8,10 +8,12 @@ set -Eeuo pipefail
 
 CMD_NAME="$(basename "$0")"
 case "$CMD_NAME" in
-  limine-snapper-sync) REAL_BIN="/usr/bin/limine-snapper-sync" ;;
-  *) REAL_BIN="/usr/bin/limine-snapper-restore" ;;
+  limine-snapper-sync) REAL_BIN="${NOX_SYNC_BIN:-/usr/bin/limine-snapper-sync}" ;;
+  *) REAL_BIN="${NOX_RESTORE_BIN:-/usr/bin/limine-snapper-restore}" ;;
 esac
+LIST_BIN="${NOX_LIST_BIN:-/usr/bin/limine-snapper-list}"
 INTEGRITY_HELPER="${NOX_INTEGRITY_HELPER:-/usr/local/libexec/nox/nox-limine-integrity}"
+RESTORE_LOCKFILE="${NOX_RESTORE_LOCKFILE:-/run/lock/limine-snapper-restore.lock}"
 
 if [[ ! -x "$REAL_BIN" ]]; then
   echo "ERRO: $REAL_BIN nao encontrado." >&2
@@ -24,6 +26,9 @@ repair_if_interrupted() {
   local rc="$1"
   ((repaired == 0)) || return 0
   repaired=1
+  if [[ "$CMD_NAME" == "limine-snapper-sync" && -e "$RESTORE_LOCKFILE" ]]; then
+    return 0
+  fi
   if [[ "$rc" -ne 0 || -f "${NOX_DIRTY_MARKER:-/run/nox-limine-tx.dirty}" ]]; then
     if ((EUID == 0)) || [[ "${NOX_ALLOW_NONROOT_TEST:-0}" == "1" ]]; then
       if [[ -x "$INTEGRITY_HELPER" ]]; then
@@ -78,13 +83,13 @@ if [[ "$CMD_NAME" == "limine-snapper-restore" ]] && ! $has_non_interactive_flag;
 fi
 
 # Pre-hook interactive selection only once when running as root on a TTY (prevents touching /boot before confirmation)
-if $is_interactive_restore && ((EUID == 0)) && [[ -t 0 && -t 1 ]] &&
+if $is_interactive_restore && { ((EUID == 0)) || [[ "${NOX_ALLOW_NONROOT_TEST:-0}" == "1" ]]; } && [[ -t 0 && -t 1 ]] &&
   [[ "${NOX_LIMINE_PREPROMPT_DONE:-0}" != "1" ]] && [[ "${NOX_RAW_LIMINE_RESTORE:-0}" != "1" ]] &&
-  command -v /usr/bin/limine-snapper-list >/dev/null 2>&1; then
+  [[ -x "$LIST_BIN" ]]; then
   export NOX_LIMINE_PREPROMPT_DONE=1
   echo "[nox-limine] Listando snapshots disponiveis (somente leitura; /boot intacto)..."
-  /usr/bin/limine-snapper-list
-  mapfile -t VALID_IDS < <(/usr/bin/limine-snapper-list 2>/dev/null | awk -F'│' '/^[[:space:]]*[0-9]+[[:space:]]*│/{gsub(/[[:space:]]+/,"",$1); print $1}')
+  "$LIST_BIN"
+  mapfile -t VALID_IDS < <("$LIST_BIN" 2>/dev/null | awk -F'│' '/^[[:space:]]*[0-9]+[[:space:]]*│/{gsub(/[[:space:]]+/,"",$1); print $1}')
   if ((${#VALID_IDS[@]} == 0)); then
     echo "Nenhum snapshot restauravel encontrado." >&2
     exit 1
@@ -117,7 +122,7 @@ if $is_interactive_restore && ((EUID == 0)) && [[ -t 0 && -t 1 ]] &&
   esac
 
   set +e
-  python3 - "$REAL_BIN" "$SNAP_CHOICE" "$BACKUP_DESC" "$@" <<'PY'
+  python3 - "$REAL_BIN" "$SNAP_CHOICE" "$BACKUP_DESC" "$@" 3<&0 <<'PY'
 import os, pty, select, sys, termios, tty
 
 real_bin, snap_id, desc = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -131,16 +136,20 @@ if pid == 0:
 sent_choice = False
 sent_desc = False
 buf = b""
-stdin_fd = sys.stdin.fileno()
+stdin_fd = 3
+try:
+    has_tty = os.isatty(stdin_fd)
+except OSError:
+    has_tty = False
 old_tty = None
-if os.isatty(stdin_fd):
+if has_tty:
     old_tty = termios.tcgetattr(stdin_fd)
     tty.setraw(stdin_fd)
 
 try:
     while True:
         watch = [fd]
-        if sent_choice and sent_desc and os.isatty(stdin_fd):
+        if sent_choice and sent_desc and has_tty:
             watch.append(stdin_fd)
         r, _, _ = select.select(watch, [], [], 0.2)
         if fd in r:

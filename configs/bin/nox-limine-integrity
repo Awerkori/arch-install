@@ -140,6 +140,20 @@ command -v "$LIMINE_ENROLL_BIN" >/dev/null 2>&1 || fail_preflight "comando obrig
 command -v "$SBCTL_BIN" >/dev/null 2>&1 || fail_preflight "sbctl ausente: $SBCTL_BIN"
 command -v b2sum >/dev/null 2>&1 || fail_preflight "b2sum ausente"
 
+if [[ -n "${NOX_INTEGRITY_LOCK:-}" ]]; then
+  LOCK_FILE="$NOX_INTEGRITY_LOCK"
+elif ((EUID != 0)) && [[ -n "${ESP_PATH:-}" ]]; then
+  LOCK_FILE="${ESP}/.nox-limine-integrity.lock"
+else
+  LOCK_FILE="/run/lock/nox-limine-integrity.lock"
+fi
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 202>"$LOCK_FILE"
+flock -w 30 202 || {
+  echo "nox-limine-integrity: timeout aguardando lock $LOCK_FILE" >&2
+  exit 1
+}
+
 # Step 1: Normalize /boot/limine.conf
 if ! "$NORMALIZE_BIN" --post --file "$CONF" --esp-dir "$ESP"; then
   echo "nox-limine-integrity: ERRO CRITICO ao normalizar $CONF" >&2

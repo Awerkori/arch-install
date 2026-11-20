@@ -2432,6 +2432,137 @@ class TestLimineIntegrityAndSnapPacRegression(unittest.TestCase):
             self.assertIn("repair_rc=7", res.stderr)
             self.assertTrue(dirty.exists())
 
+    def test_limine_snapper_sync_skips_repair_when_restore_lock_active(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            real_sync = root / "real-sync"
+            real_sync.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+            real_sync.chmod(0o755)
+            marker = root / "repair-called"
+            fake_integ = root / "fake-integ"
+            fake_integ.write_text(f"#!/usr/bin/env bash\ntouch '{marker}'\nexit 0\n", encoding="utf-8")
+            fake_integ.chmod(0o755)
+            restore_lock = root / "limine-snapper-restore.lock"
+            restore_lock.write_text("", encoding="utf-8")
+            dirty = root / "dirty"
+            dirty.write_text("active-restore\n", encoding="utf-8")
+            wrapper = root / "limine-snapper-sync"
+            wrapper.write_text((REPO / "configs/bin/nox-limine-snapper-restore").read_text(encoding="utf-8"), encoding="utf-8")
+            wrapper.chmod(0o755)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "NOX_SYNC_BIN": str(real_sync),
+                    "NOX_INTEGRITY_HELPER": str(fake_integ),
+                    "NOX_RESTORE_LOCKFILE": str(restore_lock),
+                    "NOX_DIRTY_MARKER": str(dirty),
+                    "NOX_ALLOW_NONROOT_TEST": "1",
+                }
+            )
+            res = subprocess.run(["bash", str(wrapper)], env=env, capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 1)
+            self.assertFalse(marker.exists(), "Watcher/sync wrapper must NOT repair while foreground restore lock is active")
+
+    def test_limine_snapper_restore_forwards_live_tty_input_through_reboot_prompt(self) -> None:
+        import pty as pty_mod
+        import select as select_mod
+        import time as time_mod
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            snap_list = root / "limine-snapper-list"
+            snap_list.write_text(
+                "#!/usr/bin/env bash\n"
+                "echo ' 8 │ 2026-11-20 17:41:58 │ nox-final-pre'\n",
+                encoding="utf-8",
+            )
+            snap_list.chmod(0o755)
+
+            received_log = root / "received.txt"
+            fake_restore = root / "real-restore"
+            fake_restore.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "sys.stdout.write('Choice: '); sys.stdout.flush()\n"
+                "c = sys.stdin.readline().strip()\n"
+                "sys.stdout.write('Description for backup subvolume: '); sys.stdout.flush()\n"
+                "d = sys.stdin.readline().strip()\n"
+                "sys.stdout.write('Restore complete. Reboot now? [Y/n]: '); sys.stdout.flush()\n"
+                "a = sys.stdin.readline().strip()\n"
+                f"open('{received_log}', 'w').write(f'{{c}}|{{d}}|{{a}}')\n"
+                "raise SystemExit(0 if (c == '8' and d == 'bkp' and a == 'n') else 9)\n",
+                encoding="utf-8",
+            )
+            fake_restore.chmod(0o755)
+
+            fake_integ = root / "integ"
+            fake_integ.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            fake_integ.chmod(0o755)
+
+            wrapper = root / "limine-snapper-restore"
+            wrapper.write_text((REPO / "configs/bin/nox-limine-snapper-restore").read_text(encoding="utf-8"), encoding="utf-8")
+            wrapper.chmod(0o755)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "NOX_LIST_BIN": str(snap_list),
+                    "NOX_RESTORE_BIN": str(fake_restore),
+                    "NOX_INTEGRITY_HELPER": str(fake_integ),
+                    "NOX_DIRTY_MARKER": str(root / "dirty"),
+                    "NOX_ALLOW_NONROOT_TEST": "1",
+                }
+            )
+
+            master_fd, slave_fd = pty_mod.openpty()
+            proc = subprocess.Popen(
+                ["bash", str(wrapper)],
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                env=env,
+                start_new_session=True,
+                close_fds=True,
+            )
+            os.close(slave_fd)
+            buf = b""
+            step = 0
+            deadline = time_mod.monotonic() + 15
+            try:
+                while time_mod.monotonic() < deadline:
+                    r, _, _ = select_mod.select([master_fd], [], [], 0.2)
+                    if master_fd in r:
+                        try:
+                            chunk = os.read(master_fd, 4096)
+                        except OSError:
+                            break
+                        if not chunk:
+                            break
+                        buf = (buf + chunk)[-2048:]
+                        if step == 0 and b"Informe o ID do snapshot para restaurar" in buf:
+                            os.write(master_fd, b"8\n")
+                            step = 1
+                            buf = b""
+                        elif step == 1 and b"Descricao opcional do backup" in buf:
+                            os.write(master_fd, b"bkp\n")
+                            step = 2
+                            buf = b""
+                        elif step == 2 and b"Confirmar restauracao do snapshot ID" in buf:
+                            os.write(master_fd, b"s\n")
+                            step = 3
+                            buf = b""
+                        elif step == 3 and b"Reboot now? [Y/n]:" in buf:
+                            os.write(master_fd, b"n\r")
+                            step = 4
+                            buf = b""
+                    if proc.poll() is not None and step == 4:
+                        break
+            finally:
+                os.close(master_fd)
+            self.assertEqual(proc.wait(timeout=5), 0)
+            self.assertEqual(received_log.read_text(encoding="utf-8"), "8|bkp|n")
+
     def test_fallback_hook_serializes_concurrent_runs_with_isolated_tempdir(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
