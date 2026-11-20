@@ -1,6 +1,6 @@
 {
-  "version": "v1.0.0-rc10",
-  "payload_commit": "4f58011a820e6638b3e9f900f117cd03fabc4f7b",
-  "payload_url": "https://github.com/Awerkori/arch-install/releases/download/v1.0.0-rc10/nox-archinstall-payload-v1.0.0-rc10.tar.gz",
-  "payload_sha256": "6463bc0d24ac78aaa6ae08f86d18d67da96995256105a16ab4c96ec1bd128650"
+  "version": "v1.0.0",
+  "payload_commit": "e11eeabc7f3089732932c771b891e8ad3b038ec3",
+  "payload_url": "https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-archinstall-payload-v1.0.0.tar.gz",
+  "payload_sha256": "56d7e3e7cecc28831b9b5bf2268616db6f82777a15a097ccf6182286361624ce"
 }
