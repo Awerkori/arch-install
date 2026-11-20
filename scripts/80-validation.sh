@@ -16,7 +16,8 @@ fi
 
 FAILS=0
 check() {
-  local name="$1"; shift
+  local name="$1"
+  shift
   if "$@"; then
     nox_info "[PASS] $name"
   else
@@ -106,7 +107,7 @@ while IFS=: read -r uname _uid _gid _home ushell; do
   check "permissoes .local, ProtonPlus visivel e overlays launcher para $uname" bash -c "test \"\$(stat -c '%U' '${_home}/.local')\" = '$uname' && test \"\$(stat -c '%U' '${_home}/.local/share')\" = '$uname' && grep -qx 'NoDisplay=true' '${_home}/.local/share/applications/limine-snapper-restore.desktop' && test ! -e '${_home}/.local/share/applications/com.vysp3r.ProtonPlus.desktop'"
 done < <(nox_list_human_users)
 
-if (( FAILS > 0 )); then
+if ((FAILS > 0)); then
   nox_die "Validacao offline falhou com ${FAILS} erro(s)."
 fi
 nox_info "Todas as checagens offline de 80-validation passaram!"

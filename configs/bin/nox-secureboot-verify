@@ -1,69 +1,184 @@
 #!/usr/bin/env bash
-# Verify Limine + sbctl + BLAKE2 boot chain cryptographic integrity.
+# Verify Limine + sbctl + BLAKE2 boot chain cryptographic integrity across all 5 Secure Boot stages:
+#   1. Key preparation (/var/lib/sbctl/keys)
+#   2. Binary signatures (limine_x64.efi, BOOTX64.EFI, and kernels on ESP)
+#   3. Limine configuration & BLAKE2B integrity (no dirty marker, real file b2sum match, enrolled config b2sum)
+#   4. Firmware NVRAM key enrollment status (Setup Mode vs User Mode)
+#   5. UEFI Secure Boot active enforcement (--require-active)
 set -Eeuo pipefail
 
 REQUIRE_ACTIVE=false
-for arg in "$@"; do
-  case "$arg" in
-    --require-active) REQUIRE_ACTIVE=true ;;
-    -h|--help)
-      echo "Usage: nox-secureboot-verify [--require-active]"
+CUSTOM_ESP=""
+LIMINE_DEFAULT="${NOX_LIMINE_DEFAULT:-/etc/default/limine}"
+DIRTY_MARKER="${NOX_DIRTY_MARKER:-/run/nox-limine-tx.dirty}"
+SBCTL_BIN="${NOX_SBCTL_BIN:-sbctl}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --require-active)
+      REQUIRE_ACTIVE=true
+      shift
+      ;;
+    --esp-path)
+      CUSTOM_ESP="$2"
+      shift 2
+      ;;
+    --limine-default)
+      LIMINE_DEFAULT="$2"
+      shift 2
+      ;;
+    --dirty-marker)
+      DIRTY_MARKER="$2"
+      shift 2
+      ;;
+    --sbctl-bin)
+      SBCTL_BIN="$2"
+      shift 2
+      ;;
+    -h | --help)
+      cat <<'USAGE'
+Usage: nox-secureboot-verify [options]
+  --require-active          Require UEFI Secure Boot to be actively enforced in firmware
+  --esp-path <dir>          Override ESP mountpoint (default: /boot or /efi)
+  --limine-default <path>   Override /etc/default/limine path
+  --dirty-marker <path>     Override /run/nox-limine-tx.dirty path
+  --sbctl-bin <bin>         Override sbctl executable
+USAGE
       exit 0
       ;;
-    *) echo "Unknown option: $arg" >&2; exit 2 ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
-BOOT_MP="/boot"
-if ! findmnt /boot >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
+BOOT_MP="${CUSTOM_ESP:-${ESP_PATH:-/boot}}"
+if [[ -z "$CUSTOM_ESP" && -z "${ESP_PATH:-}" ]] && ! findmnt /boot >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
   BOOT_MP="/efi"
 fi
 
 FAILS=0
 pass() { echo "[PASS] $*"; }
-fail() { echo "[FAIL] $*" >&2; ((FAILS++)) || true; }
+info() { echo "[INFO] $*"; }
+fail() {
+  echo "[FAIL] $*" >&2
+  ((FAILS++)) || true
+}
 
-command -v sbctl >/dev/null 2>&1 || { fail "sbctl missing"; exit 1; }
+command -v "$SBCTL_BIN" >/dev/null 2>&1 || {
+  fail "sbctl missing ($SBCTL_BIN)"
+  exit 1
+}
 
-if sbctl setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
-  pass "sbctl per-install private keys present"
+# Stage 1: Preparation of local per-install Secure Boot keys
+if "$SBCTL_BIN" setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
+  pass "Stage 1 (Key Preparation): sbctl per-install private keys present"
 else
-  fail "sbctl keys not generated"
+  fail "Stage 1 (Key Preparation): sbctl keys not generated"
 fi
 
-if [[ -f /etc/default/limine ]] && \
-   grep -Eq '^[[:space:]]*ENABLE_VERIFICATION=yes' /etc/default/limine && \
-   grep -Eq '^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=yes' /etc/default/limine; then
-  pass "/etc/default/limine enables verification + config enrollment"
+# Transaction atomicity check (no interrupted update/restore)
+if [[ -e "$DIRTY_MARKER" ]]; then
+  fail "Stage 3 (Transaction State): partially updated/interrupted Limine transaction detected ($DIRTY_MARKER present)"
 else
-  fail "/etc/default/limine missing ENABLE_VERIFICATION=yes or ENABLE_ENROLL_LIMINE_CONFIG=yes"
+  pass "Stage 3 (Transaction State): no dirty Limine transaction marker ($DIRTY_MARKER absent)"
 fi
 
+# Stage 2: Signature of EFI binaries (and any kernel images present on ESP)
 for efi in "${BOOT_MP}/EFI/limine/limine_x64.efi" "${BOOT_MP}/EFI/BOOT/BOOTX64.EFI"; do
-  if [[ -s "$efi" ]] && sbctl verify "$efi" 2>/dev/null | grep -q 'is signed'; then
-    pass "signed EFI binary: $efi"
+  if [[ -s "$efi" ]] && "$SBCTL_BIN" verify "$efi" 2>/dev/null | grep -q 'is signed'; then
+    pass "Stage 2 (Binary Signature): ✓ $efi is signed"
   else
-    fail "unsigned or missing EFI binary: $efi"
+    fail "Stage 2 (Binary Signature): ✗ unsigned or missing EFI binary: $efi"
   fi
 done
 
-if [[ -s "${BOOT_MP}/limine.conf" ]]; then
-  bad_paths="$(grep -E '^[[:space:]]*(path|module_path):' "${BOOT_MP}/limine.conf" | grep -Ev '#[0-9a-fA-F]{64,128}[[:space:]]*$' || true)"
-  if [[ -z "$bad_paths" ]] && grep -qE '^[[:space:]]*(path|module_path):.*#[0-9a-fA-F]{64,128}' "${BOOT_MP}/limine.conf"; then
-    pass "${BOOT_MP}/limine.conf all kernel/initramfs paths carry BLAKE2 checksums"
+while IFS= read -r kfile; do
+  [[ -n "$kfile" && -f "$kfile" ]] || continue
+  if "$SBCTL_BIN" verify "$kfile" 2>/dev/null | grep -q 'is signed'; then
+    pass "Stage 2 (Kernel Signature): ✓ $kfile is signed"
   else
-    fail "${BOOT_MP}/limine.conf missing BLAKE2 checksums: ${bad_paths}"
+    fail "Stage 2 (Kernel Signature): ✗ unsigned kernel image: $kfile"
+  fi
+done < <(find "$BOOT_MP" -maxdepth 3 -type f -name 'vmlinuz*' 2>/dev/null | sort)
+
+# Stage 3: Limine configuration and BLAKE2B checksum verification
+if [[ -f "$LIMINE_DEFAULT" ]] &&
+  grep -Eq '^[[:space:]]*ENABLE_VERIFICATION=yes' "$LIMINE_DEFAULT" &&
+  grep -Eq '^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=yes' "$LIMINE_DEFAULT"; then
+  pass "Stage 3 (Limine Policy): $LIMINE_DEFAULT enables verification + config enrollment"
+else
+  fail "Stage 3 (Limine Policy): $LIMINE_DEFAULT missing ENABLE_VERIFICATION=yes or ENABLE_ENROLL_LIMINE_CONFIG=yes"
+fi
+
+CONF="${BOOT_MP}/limine.conf"
+if [[ -s "$CONF" ]]; then
+  bad_paths="$(grep -E '^[[:space:]]*(path|module_path):' "$CONF" | grep -Ev '#[0-9a-fA-F]{64,128}[[:space:]]*$' || true)"
+  if [[ -z "$bad_paths" ]] && grep -qE '^[[:space:]]*(path|module_path):.*#[0-9a-fA-F]{64,128}' "$CONF"; then
+    pass "Stage 3 (Config Syntax): $CONF all kernel/initramfs paths carry BLAKE2 checksums"
+  else
+    fail "Stage 3 (Config Syntax): $CONF missing BLAKE2 checksums: ${bad_paths}"
+  fi
+
+  # Verify actual file BLAKE2B hashes for all boot():/<relpath>#<hash> references in limine.conf
+  hash_mismatches=0
+  while IFS=$'\t' read -r rel_path expected_hash; do
+    [[ -n "$rel_path" && -n "$expected_hash" ]] || continue
+    target_path="${BOOT_MP}/${rel_path#/}"
+    if [[ ! -s "$target_path" ]]; then
+      fail "Stage 3 (Asset Integrity): referenced boot file missing or empty: $target_path"
+      ((hash_mismatches++)) || true
+      continue
+    fi
+    actual_hash="$(b2sum "$target_path" 2>/dev/null | awk '{print $1}' || true)"
+    if [[ "${actual_hash,,}" != "${expected_hash,,}" ]]; then
+      fail "Stage 3 (Asset Integrity): BLAKE2B mismatch for $target_path (expected=${expected_hash:0:16}..., actual=${actual_hash:0:16}...)"
+      ((hash_mismatches++)) || true
+    fi
+  done < <(sed -nE 's@^[[:space:]]*(wallpaper|path|module_path|image_path):[[:space:]]*boot\(\):/([^#[:space:]]+)#([0-9a-fA-F]{64,128})[[:space:]]*$@\2\t\3@p' "$CONF")
+
+  if ((hash_mismatches == 0)); then
+    pass "Stage 3 (Asset Integrity): all boot():/ files referenced in $CONF match their BLAKE2B hashes on disk"
+  fi
+
+  # Verify actual BLAKE2B of limine.conf is enrolled inside both limine_x64.efi and BOOTX64.EFI
+  CONF_B2="$(b2sum "$CONF" 2>/dev/null | awk '{print $1}' || true)"
+  if [[ -z "$CONF_B2" ]]; then
+    fail "Stage 3 (Config Enrollment): unable to compute BLAKE2B for $CONF"
+  else
+    for efi in "${BOOT_MP}/EFI/limine/limine_x64.efi" "${BOOT_MP}/EFI/BOOT/BOOTX64.EFI"; do
+      if [[ -s "$efi" ]] && grep -qaiF "$CONF_B2" "$efi" 2>/dev/null; then
+        pass "Stage 3 (Config Enrollment): $CONF BLAKE2B (${CONF_B2:0:16}...) enrolled in $efi"
+      else
+        fail "Stage 3 (Config Enrollment): $CONF BLAKE2B (${CONF_B2:0:16}...) NOT enrolled or mismatched in $efi"
+      fi
+    done
   fi
 else
-  fail "missing ${BOOT_MP}/limine.conf"
+  fail "Stage 3 (Config Presence): missing or empty $CONF"
 fi
 
-if $REQUIRE_ACTIVE; then
-  if sbctl status --json 2>/dev/null | grep -q '"secure_boot": true'; then
-    pass "UEFI Secure Boot is actively enforced"
+# Stage 4 & Stage 5: Firmware NVRAM key enrollment vs active UEFI Secure Boot enforcement
+STATUS_JSON="$("$SBCTL_BIN" status --json 2>/dev/null || true)"
+if printf '%s' "$STATUS_JSON" | grep -q '"setup_mode": true'; then
+  info "Stage 4 (Firmware Key Enrollment): UEFI is in Setup Mode (keys prepared on disk, not yet enrolled in UEFI NVRAM)"
+else
+  info "Stage 4 (Firmware Key Enrollment): UEFI Setup Mode is Disabled (User Mode active in NVRAM)"
+fi
+
+if printf '%s' "$STATUS_JSON" | grep -q '"secure_boot": true'; then
+  pass "Stage 5 (UEFI Enforcement): UEFI Secure Boot is actively enforced by firmware"
+else
+  if $REQUIRE_ACTIVE; then
+    fail "Stage 5 (UEFI Enforcement): UEFI Secure Boot is NOT active (--require-active)"
   else
-    fail "UEFI Secure Boot is NOT active (--require-active)"
+    info "Stage 5 (UEFI Enforcement): UEFI Secure Boot is currently Disabled (offline signing & BLAKE2B verified; enable in UEFI BIOS after key enrollment)"
   fi
 fi
 
-(( FAILS == 0 ))
+if ((FAILS == 0)); then
+  echo "[NOX SECUREBOOT] OK: /var/lib/sbctl/keys presente, Limine + kernel assinados e hash de limine.conf inscrito."
+  exit 0
+fi
+exit 1

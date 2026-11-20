@@ -41,19 +41,19 @@ export NOX_BOOT_MP="$BOOT_MP"
 ROOT_AVAIL_KB=$(df -Pk / | awk 'NR==2 {print $4}')
 BOOT_TOTAL_KB=$(df -Pk "$BOOT_MP" | awk 'NR==2 {print $2}')
 BOOT_AVAIL_KB=$(df -Pk "$BOOT_MP" | awk 'NR==2 {print $4}')
-(( ROOT_AVAIL_KB >= 8 * 1024 * 1024 )) || nox_die "Espaco livre insuficiente em '/' (${ROOT_AVAIL_KB} KiB; minimo 8 GiB)."
-(( BOOT_TOTAL_KB >= 1500 * 1024 )) || nox_die "Particao EFI '${BOOT_MP}' muito pequena para Limine+snapshots ($((BOOT_TOTAL_KB/1024)) MiB; minimo 2 GiB, recomendado 4 GiB)."
-(( BOOT_AVAIL_KB >= 500 * 1024 )) || nox_die "Espaco livre insuficiente em '${BOOT_MP}' (${BOOT_AVAIL_KB} KiB; minimo 500 MiB)."
-if (( BOOT_TOTAL_KB < 3800 * 1024 )); then
-  nox_warn "ESP '${BOOT_MP}' com $((BOOT_TOTAL_KB/1024)) MiB (abaixo dos 4 GiB recomendados para Limine + limine-snapper-sync)."
+((ROOT_AVAIL_KB >= 8 * 1024 * 1024)) || nox_die "Espaco livre insuficiente em '/' (${ROOT_AVAIL_KB} KiB; minimo 8 GiB)."
+((BOOT_TOTAL_KB >= 1500 * 1024)) || nox_die "Particao EFI '${BOOT_MP}' muito pequena para Limine+snapshots ($((BOOT_TOTAL_KB / 1024)) MiB; minimo 2 GiB, recomendado 4 GiB)."
+((BOOT_AVAIL_KB >= 500 * 1024)) || nox_die "Espaco livre insuficiente em '${BOOT_MP}' (${BOOT_AVAIL_KB} KiB; minimo 500 MiB)."
+if ((BOOT_TOTAL_KB < 3800 * 1024)); then
+  nox_warn "ESP '${BOOT_MP}' com $((BOOT_TOTAL_KB / 1024)) MiB (abaixo dos 4 GiB recomendados para Limine + limine-snapper-sync)."
 fi
-nox_info "Espaco livre OK: /=$((ROOT_AVAIL_KB/1024)) MiB, ${BOOT_MP}=$((BOOT_AVAIL_KB/1024))/$((BOOT_TOTAL_KB/1024)) MiB."
+nox_info "Espaco livre OK: /=$((ROOT_AVAIL_KB / 1024)) MiB, ${BOOT_MP}=$((BOOT_AVAIL_KB / 1024))/$((BOOT_TOTAL_KB / 1024)) MiB."
 
 # 3. Verify pacman lock and HTTPS/DNS (dual-stack with IPv4 fallback)
 nox_wait_pacman_lock
-curl --proto '=https' --tlsv1.2 -fsSI --connect-timeout 8 --retry 3 --max-time 20 "https://mirror.cachyos.org/repo/x86_64/cachyos/" >/dev/null \
-  || curl -4 --proto '=https' --tlsv1.2 -fsSI --connect-timeout 8 --retry 3 --max-time 20 "https://mirror.cachyos.org/repo/x86_64/cachyos/" >/dev/null \
-  || nox_die "Sem conectividade HTTPS/DNS para mirror.cachyos.org."
+curl --proto '=https' --tlsv1.2 -fsSI --connect-timeout 8 --retry 3 --max-time 20 "https://mirror.cachyos.org/repo/x86_64/cachyos/" >/dev/null ||
+  curl -4 --proto '=https' --tlsv1.2 -fsSI --connect-timeout 8 --retry 3 --max-time 20 "https://mirror.cachyos.org/repo/x86_64/cachyos/" >/dev/null ||
+  nox_die "Sem conectividade HTTPS/DNS para mirror.cachyos.org."
 
 # 4. Install hardware profile metadata
 nox_atomic_install 0644 "${NOX_ROOT}/profiles/hardware.json" "${NOX_CFG_DIR}/hardware.json"

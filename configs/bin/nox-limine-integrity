@@ -4,15 +4,19 @@ set -Eeuo pipefail
 
 MODE="${1:---repair-if-dirty}"
 ESP="${ESP_PATH:-/boot}"
-if ! findmnt "$ESP" >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
+if [[ -z "${ESP_PATH:-}" ]] && ! findmnt "$ESP" >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
   ESP="/efi"
 fi
 export ESP_PATH="$ESP"
 
 CONF="${ESP}/limine.conf"
-DIRTY_MARKER="/run/nox-limine-tx.dirty"
+DIRTY_MARKER="${NOX_DIRTY_MARKER:-/run/nox-limine-tx.dirty}"
+LIMINE_DEFAULT="${NOX_LIMINE_DEFAULT:-/etc/default/limine}"
 LIMINE_EFI="${ESP}/EFI/limine/limine_x64.efi"
 FALLBACK_EFI="${ESP}/EFI/BOOT/BOOTX64.EFI"
+NORMALIZE_BIN="${NOX_NORMALIZE_BIN:-/usr/local/libexec/nox/nox-limine-normalize}"
+FALLBACK_HOOK="${NOX_FALLBACK_HOOK:-/etc/boot/hooks/post.d/95-nox-sbctl-fallback}"
+SBCTL_BIN="${NOX_SBCTL_BIN:-sbctl}"
 
 [[ -f "$CONF" ]] || exit 0
 
@@ -25,36 +29,60 @@ elif grep -Eq '^[[:space:]]*//linux-cachyos$|^[[:space:]]*///[0-9]+[[:space:]]*\
   needs_repair=true
 elif grep -Eq '^[[:space:]]*/\+Arch Linux' "$CONF" && ! grep -Eq '^[[:space:]]*//Project Nox$' "$CONF"; then
   needs_repair=true
-elif [[ -f "$LIMINE_EFI" || -f "$FALLBACK_EFI" ]] && grep -qE '^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=yes' /etc/default/limine 2>/dev/null; then
-  CONF_B2="$(b2sum "$CONF" 2>/dev/null | awk '{print $1}' || true)"
-  if [[ -n "$CONF_B2" ]]; then
-    if { [[ -f "$LIMINE_EFI" ]] && ! grep -qaiF "$CONF_B2" "$LIMINE_EFI" 2>/dev/null; } || \
-       { [[ -f "$FALLBACK_EFI" ]] && ! grep -qaiF "$CONF_B2" "$FALLBACK_EFI" 2>/dev/null; }; then
+fi
+
+if ! $needs_repair && [[ -f "${ESP}/nox-limine-wallpaper.png" ]] && grep -q '^wallpaper: boot():/nox-limine-wallpaper\.png#' "$CONF"; then
+  WP_B2="$(b2sum "${ESP}/nox-limine-wallpaper.png" 2>/dev/null | awk '{print $1}' || true)"
+  if [[ -n "$WP_B2" ]] && ! grep -qiF "wallpaper: boot():/nox-limine-wallpaper.png#${WP_B2}" "$CONF"; then
+    needs_repair=true
+  fi
+fi
+
+if ! $needs_repair && grep -qE '^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=yes' "$LIMINE_DEFAULT" 2>/dev/null; then
+  if [[ ! -f "$LIMINE_EFI" || ! -f "$FALLBACK_EFI" ]]; then
+    needs_repair=true
+  else
+    CONF_B2="$(b2sum "$CONF" 2>/dev/null | awk '{print $1}' || true)"
+    if [[ -n "$CONF_B2" ]]; then
+      if ! grep -qaiF "$CONF_B2" "$LIMINE_EFI" 2>/dev/null ||
+        ! grep -qaiF "$CONF_B2" "$FALLBACK_EFI" 2>/dev/null; then
+        needs_repair=true
+      fi
+    elif grep -qaE '0{128}' "$LIMINE_EFI" 2>/dev/null ||
+      grep -qaE '0{128}' "$FALLBACK_EFI" 2>/dev/null; then
       needs_repair=true
     fi
-  elif { [[ -f "$LIMINE_EFI" ]] && grep -qaE '0{128}' "$LIMINE_EFI" 2>/dev/null; } || \
-       { [[ -f "$FALLBACK_EFI" ]] && grep -qaE '0{128}' "$FALLBACK_EFI" 2>/dev/null; }; then
-    needs_repair=true
+  fi
+fi
+
+if ! $needs_repair && command -v "$SBCTL_BIN" >/dev/null 2>&1; then
+  if "$SBCTL_BIN" setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
+    for efi in "$LIMINE_EFI" "$FALLBACK_EFI"; do
+      if [[ -f "$efi" ]] && ! "$SBCTL_BIN" verify "$efi" 2>/dev/null | grep -q 'is signed'; then
+        needs_repair=true
+        break
+      fi
+    done
   fi
 fi
 
 $needs_repair || exit 0
 
-if (( EUID != 0 )); then
+if ((EUID != 0)) && [[ "${NOX_ALLOW_NONROOT_TEST:-0}" != "1" ]]; then
   echo "nox-limine-integrity: root privileges required to repair $CONF" >&2
   exit 1
 fi
 
-if [[ -x /usr/local/libexec/nox/nox-limine-normalize ]]; then
-  /usr/local/libexec/nox/nox-limine-normalize --post
+if [[ -x "$NORMALIZE_BIN" ]]; then
+  "$NORMALIZE_BIN" --post --file "$CONF" --esp-dir "$ESP"
 fi
 
 if command -v limine-enroll-config >/dev/null 2>&1; then
   limine-enroll-config
 fi
 
-if [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]]; then
-  /etc/boot/hooks/post.d/95-nox-sbctl-fallback
+if [[ -x "$FALLBACK_HOOK" ]]; then
+  "$FALLBACK_HOOK"
 fi
 
 sync -f "$CONF" 2>/dev/null || sync

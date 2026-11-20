@@ -21,10 +21,10 @@ fi
 repaired=0
 repair_if_interrupted() {
   local rc="$1"
-  (( repaired == 0 )) || return 0
+  ((repaired == 0)) || return 0
   repaired=1
   if [[ "$rc" -ne 0 || -f /run/nox-limine-tx.dirty ]]; then
-    if (( EUID == 0 )) && [[ -x "$INTEGRITY_HELPER" ]]; then
+    if ((EUID == 0)) && [[ -x "$INTEGRITY_HELPER" ]]; then
       echo "[nox-limine] Verificando/reparando integridade de /boot/limine.conf e EFI apos saida ($rc)..." >&2
       "$INTEGRITY_HELPER" --repair-if-dirty || true
     fi
@@ -41,7 +41,7 @@ is_interactive_restore=false
 has_non_interactive_flag=false
 for arg in "$@"; do
   case "$arg" in
-    --kernels|--restore-kernels|--list|--info|--add|--remove|-h|--help)
+    --kernels | --restore-kernels | --list | --info | --add | --remove | -h | --help)
       has_non_interactive_flag=true
       ;;
     --restore)
@@ -54,14 +54,14 @@ if [[ "$CMD_NAME" == "limine-snapper-restore" ]] && ! $has_non_interactive_flag;
 fi
 
 # Pre-hook interactive selection only once when running as root on a TTY (prevents touching /boot before confirmation)
-if $is_interactive_restore && (( EUID == 0 )) && [[ -t 0 && -t 1 ]] && \
-   [[ "${NOX_LIMINE_PREPROMPT_DONE:-0}" != "1" ]] && [[ "${NOX_RAW_LIMINE_RESTORE:-0}" != "1" ]] && \
-   command -v /usr/bin/limine-snapper-list >/dev/null 2>&1; then
+if $is_interactive_restore && ((EUID == 0)) && [[ -t 0 && -t 1 ]] &&
+  [[ "${NOX_LIMINE_PREPROMPT_DONE:-0}" != "1" ]] && [[ "${NOX_RAW_LIMINE_RESTORE:-0}" != "1" ]] &&
+  command -v /usr/bin/limine-snapper-list >/dev/null 2>&1; then
   export NOX_LIMINE_PREPROMPT_DONE=1
   echo "[nox-limine] Listando snapshots disponiveis (somente leitura; /boot intacto)..."
   /usr/bin/limine-snapper-list
   mapfile -t VALID_IDS < <(/usr/bin/limine-snapper-list 2>/dev/null | awk -F'│' '/^[[:space:]]*[0-9]+[[:space:]]*│/{gsub(/[[:space:]]+/,"",$1); print $1}')
-  if (( ${#VALID_IDS[@]} == 0 )); then
+  if ((${#VALID_IDS[@]} == 0)); then
     echo "Nenhum snapshot restauravel encontrado." >&2
     exit 1
   fi
@@ -85,7 +85,7 @@ if $is_interactive_restore && (( EUID == 0 )) && [[ -t 0 && -t 1 ]] && \
   read -r -p "Descricao opcional do backup do @ atual [Enter para padrao]: " BACKUP_DESC
   read -r -p "Confirmar restauracao do snapshot ID ${SNAP_CHOICE}? [s/N]: " FINAL_CONF
   case "${FINAL_CONF,,}" in
-    s|sim|y|yes) ;;
+    s | sim | y | yes) ;;
     *)
       echo "Restauracao cancelada antes de modificar /boot."
       exit 0

@@ -145,8 +145,8 @@ nox_aur_install_pkg "topgrade-bin"
 nox_aur_cleanup_user
 
 # Verify bash is login shell for all human accounts and valid in /etc/shells
-grep -qxF '/bin/bash' /etc/shells || printf '/bin/bash\n' >> /etc/shells
-grep -qxF '/usr/bin/bash' /etc/shells || printf '/usr/bin/bash\n' >> /etc/shells
+grep -qxF '/bin/bash' /etc/shells || printf '/bin/bash\n' >>/etc/shells
+grep -qxF '/usr/bin/bash' /etc/shells || printf '/usr/bin/bash\n' >>/etc/shells
 while IFS=: read -r uname _uid _gid _home ushell; do
   [[ -n "$uname" ]] || continue
   if [[ "$ushell" != "/bin/bash" && "$ushell" != "/usr/bin/bash" ]]; then

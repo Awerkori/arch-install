@@ -42,7 +42,7 @@ nox_aur_install_pkg() {
   nox_aur_setup_user
   rm -rf "$workdir"
   mkdir -p "$workdir"
-  cat > "${NOX_AUR_HOME}/.gitconfig" <<'EOF'
+  cat >"${NOX_AUR_HOME}/.gitconfig" <<'EOF'
 [http]
 	version = HTTP/1.1
 	lowSpeedLimit = 1024
@@ -103,16 +103,16 @@ PY
     else
       aur_deps+=("$dep")
     fi
-  done <<< "$deps_raw"
+  done <<<"$deps_raw"
 
-  if (( ${#aur_deps[@]} > 0 )); then
+  if ((${#aur_deps[@]} > 0)); then
     for adep in "${aur_deps[@]}"; do
       nox_info "Resolvendo dependencia AUR '$adep' para '$pkgname'..."
       nox_aur_install_pkg "$adep"
     done
   fi
 
-  if (( ${#repo_deps[@]} > 0 )); then
+  if ((${#repo_deps[@]} > 0)); then
     nox_wait_pacman_lock
     pacman -S --needed --noconfirm "${repo_deps[@]}"
   fi
@@ -140,7 +140,7 @@ PY
     built_pkgs+=("$f")
   done < <(find "${workdir}/src" -maxdepth 1 -type f -name '*.pkg.tar.*' ! -name '*.sig' ! -name '*-debug-*' | sort)
 
-  if (( ${#built_pkgs[@]} == 0 )); then
+  if ((${#built_pkgs[@]} == 0)); then
     nox_die "Nenhum pacote compilado encontrado para '$pkgname'."
   fi
 

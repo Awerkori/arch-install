@@ -48,14 +48,13 @@ for unit in \
   irqbalance.service \
   fstrim.timer \
   systemd-resolved.service \
-  systemd-oomd.service
-do
+  systemd-oomd.service; do
   systemctl enable "$unit"
 done
 
 # Ensure systemd-resolved stub symlink is created cleanly at early boot (preserving chroot DNS now)
 mkdir -p /etc/tmpfiles.d
-cat > /etc/tmpfiles.d/nox-resolv.conf <<'EOF'
+cat >/etc/tmpfiles.d/nox-resolv.conf <<'EOF'
 L+ /etc/resolv.conf - - - - ../run/systemd/resolve/stub-resolv.conf
 EOF
 

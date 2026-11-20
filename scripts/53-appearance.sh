@@ -24,8 +24,8 @@ FIREFOX_DESKTOP="firefox.desktop"
 
 # 2. Verify Qt darker palettes exist before referencing them
 for v in 5 6; do
-  [[ -f "/usr/share/qt${v}ct/colors/darker.conf" ]] \
-    || nox_die "Paleta darker.conf do Qt${v} ausente!"
+  [[ -f "/usr/share/qt${v}ct/colors/darker.conf" ]] ||
+    nox_die "Paleta darker.conf do Qt${v} ausente!"
 done
 
 # 3. Install Project Nox Obsidian Purple identity assets, fonts, icons, wallpapers, greeter assets, bundled plugins, Firefox Pure dark defaults, GTK3/4, Qt5/6, btop, fastfetch & Noctalia configs
@@ -160,7 +160,7 @@ fi
 
 # 3b. XDG mimeapps.list: Luciole (directories) + Firefox Pure (HTTP/HTTPS/HTML)
 mkdir -p /etc/skel/.config
-cat > /etc/skel/.config/mimeapps.list <<EOF
+cat >/etc/skel/.config/mimeapps.list <<EOF
 [Default Applications]
 inode/directory=${LUCIOLE_DESKTOP}
 x-scheme-handler/http=${FIREFOX_DESKTOP}

@@ -11,7 +11,7 @@ for arg in "$@"; do
     --yes-enroll-uefi-keys) YES_CONFIRM=true ;;
     --no-microsoft) USE_MICROSOFT=false ;;
     --ignore-immutable) IGNORE_IMMUTABLE=true ;;
-    -h|--help)
+    -h | --help)
       cat <<'USAGE'
 Usage: sudo nox-secureboot-enroll [options]
   --yes-enroll-uefi-keys   Non-interactive confirmation to modify UEFI NVRAM keys
@@ -27,9 +27,18 @@ USAGE
   esac
 done
 
-(( EUID == 0 )) || { echo "Run as root (sudo nox-secureboot-enroll)." >&2; exit 1; }
-[[ -d /sys/firmware/efi ]] || { echo "System is not booted in UEFI mode." >&2; exit 1; }
-command -v sbctl >/dev/null 2>&1 || { echo "sbctl is not installed." >&2; exit 1; }
+((EUID == 0)) || {
+  echo "Run as root (sudo nox-secureboot-enroll)." >&2
+  exit 1
+}
+[[ -d /sys/firmware/efi ]] || {
+  echo "System is not booted in UEFI mode." >&2
+  exit 1
+}
+command -v sbctl >/dev/null 2>&1 || {
+  echo "sbctl is not installed." >&2
+  exit 1
+}
 
 if ! sbctl setup --print-state --json 2>/dev/null | grep -q '"installed": true'; then
   echo "Generating per-installation private Secure Boot keys..."
@@ -54,7 +63,10 @@ if ! $YES_CONFIRM; then
     echo "WARNING: --no-microsoft selected; third-party PCIe/GPU Option ROMs may fail unless built into firmware."
   fi
   read -r -p "Type ENROLL to continue: " reply
-  [[ "$reply" == "ENROLL" ]] || { echo "Aborted by user." >&2; exit 1; }
+  [[ "$reply" == "ENROLL" ]] || {
+    echo "Aborted by user." >&2
+    exit 1
+  }
 fi
 
 ENROLL_ARGS=()

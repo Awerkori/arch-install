@@ -20,6 +20,8 @@ evidence/raw/
 sbctl-keys/
 *.log
 __pycache__/
+*.pyc
+*.pyo
 .pytest_cache/
 tests/vm/work/
 dist/

@@ -77,7 +77,7 @@ if [[ -f /usr/share/nox-archinstall/firefox/userChrome.css ]]; then
       [[ -d "$prof" ]] || continue
       base="$(basename "$prof")"
       case "$base" in
-        Crash*|Pending*) continue ;;
+        Crash* | Pending*) continue ;;
       esac
       mkdir -p "${prof}chrome"
       if [[ ! -f "${prof}chrome/userChrome.css" ]]; then

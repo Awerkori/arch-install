@@ -12,20 +12,44 @@ DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --pactl-cards) PACTL_CARDS_FILE="$2"; shift 2 ;;
-    --pactl-sources) PACTL_SOURCES_FILE="$2"; shift 2 ;;
-    --amixer-contents) AMIXER_CONTENTS_FILE="$2"; shift 2 ;;
-    --alsa-cards) ALSA_CARDS_FILE="$2"; shift 2 ;;
-    --state-file) STATE_FILE="$2"; shift 2 ;;
-    --hotplug) HOTPLUG_MODE=true; shift ;;
-    --dry-run) DRY_RUN=true; shift ;;
-    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+    --pactl-cards)
+      PACTL_CARDS_FILE="$2"
+      shift 2
+      ;;
+    --pactl-sources)
+      PACTL_SOURCES_FILE="$2"
+      shift 2
+      ;;
+    --amixer-contents)
+      AMIXER_CONTENTS_FILE="$2"
+      shift 2
+      ;;
+    --alsa-cards)
+      ALSA_CARDS_FILE="$2"
+      shift 2
+      ;;
+    --state-file)
+      STATE_FILE="$2"
+      shift 2
+      ;;
+    --hotplug)
+      HOTPLUG_MODE=true
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 2
+      ;;
   esac
 done
 
 wait_for_pipewire() {
   local tries=0
-  while (( tries < 20 )); do
+  while ((tries < 20)); do
     if pactl info >/dev/null 2>&1; then
       return 0
     fi
@@ -45,7 +69,7 @@ write_state() {
   local present="$1" source_name="$2" user_muted="$3"
   mkdir -p "$(dirname "$STATE_FILE")"
   local tmp="${STATE_FILE}.nox.tmp"
-  printf 'PRESENT=%s\nSOURCE=%s\nUSER_MUTED=%s\n' "$present" "$source_name" "$user_muted" > "$tmp"
+  printf 'PRESENT=%s\nSOURCE=%s\nUSER_MUTED=%s\n' "$present" "$source_name" "$user_muted" >"$tmp"
   mv -f "$tmp" "$STATE_FILE"
 }
 
