@@ -9,6 +9,13 @@ FALLBACK_EFI="${ESP}/EFI/BOOT/BOOTX64.EFI"
 SRC_EFI="${NOX_LIMINE_SRC_EFI:-/usr/share/limine/BOOTX64.EFI}"
 LIMINE_DEFAULT="${NOX_LIMINE_DEFAULT:-/etc/default/limine}"
 DIRTY_MARKER="${NOX_DIRTY_MARKER:-/run/nox-limine-tx.dirty}"
+if [[ -n "${NOX_FALLBACK_LOCK:-}" ]]; then
+  LOCK_FILE="$NOX_FALLBACK_LOCK"
+elif ((EUID != 0)) && [[ -n "${ESP_PATH:-}" ]]; then
+  LOCK_FILE="${ESP}/.nox-sbctl-fallback.lock"
+else
+  LOCK_FILE="/run/lock/nox-sbctl-fallback.lock"
+fi
 SBCTL_BIN="${NOX_SBCTL_BIN:-sbctl}"
 
 [[ -d /sys/firmware/efi || "${NOX_FORCE_EFI_HOOK:-0}" == "1" ]] || exit 0
@@ -20,6 +27,13 @@ if ! "$SBCTL_BIN" setup --print-state --json 2>/dev/null | grep -q '"installed":
   exit 0
 fi
 
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 201>"$LOCK_FILE"
+flock -w 30 201 || {
+  echo "95-nox-sbctl-fallback: timeout aguardando lock $LOCK_FILE" >&2
+  exit 1
+}
+
 ENROLL_FLAG="no"
 if [[ -f "$LIMINE_DEFAULT" ]]; then
   val="$(sed -n 's/^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG=\(.*\)/\1/p' "$LIMINE_DEFAULT" | tail -n1 | tr -d '"' | tr -d "'" | tr -d '[:space:]')"
@@ -27,8 +41,9 @@ if [[ -f "$LIMINE_DEFAULT" ]]; then
 fi
 
 mkdir -p "$(dirname "$FALLBACK_EFI")"
-TMP_EFI="${FALLBACK_EFI}.nox.tmp"
-trap 'rm -f "$TMP_EFI"' EXIT INT TERM HUP
+TMP_DIR="$(mktemp -d "$(dirname "$FALLBACK_EFI")/.nox-sbctl-fb.XXXXXX")"
+TMP_EFI="${TMP_DIR}/BOOTX64.EFI"
+trap 'rm -rf "$TMP_DIR"' EXIT INT TERM HUP
 cp -f "$SRC_EFI" "$TMP_EFI"
 
 if [[ "$ENROLL_FLAG" == "yes" ]]; then

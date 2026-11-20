@@ -28,7 +28,9 @@ repair_if_interrupted() {
     if ((EUID == 0)) || [[ "${NOX_ALLOW_NONROOT_TEST:-0}" == "1" ]]; then
       if [[ -x "$INTEGRITY_HELPER" ]]; then
         echo "[nox-limine] Verificando/reparando integridade de /boot/limine.conf e EFI apos saida ($rc)..." >&2
-        if ! "$INTEGRITY_HELPER" --repair-if-dirty; then
+        if "$INTEGRITY_HELPER" --repair-if-dirty; then
+          :
+        else
           repair_rc=$?
           echo "[nox-limine] ERRO CRITICO: falha no reparo de integridade apos saida (repair_rc=${repair_rc}); marcador .dirty preservado." >&2
           return "$repair_rc"

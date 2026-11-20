@@ -1826,7 +1826,7 @@ class TestLimineAndSecureBootHardening(unittest.TestCase):
                 "    ;;\n"
                 "  sign)\n"
                 "    target=\"${@: -1}\"\n"
-                "    real_target=\"${target%.nox.tmp}\"\n"
+                "    real_target=\"$(printf '%s' \"$target\" | sed -E 's|/\\.nox-sbctl-fb\\.[^/]+/|/|; s|\\.nox\\.tmp$||')\"\n"
                 f"    sed -i \"\\|^${{real_target}}$|d\" '{unsigned_list}' 2>/dev/null || true\n"
                 "    echo \"✓ Signed $target\"\n"
                 "    ;;\n"
@@ -2412,7 +2412,9 @@ class TestLimineIntegrityAndSnapPacRegression(unittest.TestCase):
             bad_integ.chmod(0o755)
             dirty = root / "dirty"
             dirty.write_text("pending\n", encoding="utf-8")
-            wrapper = root / "limine-snapper-sync-wrap"
+            wrap_dir = root / "wrap"
+            wrap_dir.mkdir()
+            wrapper = wrap_dir / "limine-snapper-sync"
             # Point wrapper script at fake real binary by copying helper with swapped /usr/bin lookup
             src_wrap = (REPO / "configs/bin/nox-limine-snapper-restore").read_text(encoding="utf-8")
             wrapper.write_text(src_wrap.replace("/usr/bin/limine-snapper-sync", str(real_sync)), encoding="utf-8")
@@ -2427,7 +2429,58 @@ class TestLimineIntegrityAndSnapPacRegression(unittest.TestCase):
             )
             res = subprocess.run(["bash", str(wrapper), "--list"], env=env, capture_output=True, text=True, check=False)
             self.assertEqual(res.returncode, 7)
+            self.assertIn("repair_rc=7", res.stderr)
             self.assertTrue(dirty.exists())
+
+    def test_fallback_hook_serializes_concurrent_runs_with_isolated_tempdir(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            esp = root / "boot"
+            (esp / "EFI/BOOT").mkdir(parents=True)
+            (esp / "EFI/limine").mkdir(parents=True)
+            conf = esp / "limine.conf"
+            conf.write_text("timeout: 5\n", encoding="utf-8")
+            src = root / "SRC_BOOTX64.EFI"
+            src.write_bytes(b"VALID-PE-BINARY")
+            lim_def = root / "default-limine"
+            lim_def.write_text("ENABLE_ENROLL_LIMINE_CONFIG=yes\n", encoding="utf-8")
+            lock_f = root / "fb.lock"
+
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            (bin_dir / "limine").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            (bin_dir / "limine").chmod(0o755)
+            mock_sbctl = bin_dir / "sbctl"
+            mock_sbctl.write_text(
+                "#!/usr/bin/env bash\n"
+                "case \"$1\" in\n"
+                "  setup) echo '{\"installed\": true}' ;;\n"
+                "  sign) sleep 0.1; test -s \"$2\" ;;\n"
+                "  verify) echo \"✓ $2 is signed\" ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            mock_sbctl.chmod(0o755)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{bin_dir}:{env['PATH']}",
+                    "ESP_PATH": str(esp),
+                    "NOX_LIMINE_SRC_EFI": str(src),
+                    "NOX_LIMINE_DEFAULT": str(lim_def),
+                    "NOX_FALLBACK_LOCK": str(lock_f),
+                    "NOX_SBCTL_BIN": str(mock_sbctl),
+                    "NOX_FORCE_EFI_HOOK": "1",
+                    "NOX_PRESERVE_DIRTY_MARKER": "1",
+                }
+            )
+            p1 = subprocess.Popen(["bash", str(REPO / "configs/boot-hooks/95-nox-sbctl-fallback")], env=env)
+            p2 = subprocess.Popen(["bash", str(REPO / "configs/boot-hooks/95-nox-sbctl-fallback")], env=env)
+            self.assertEqual(p1.wait(timeout=15), 0)
+            self.assertEqual(p2.wait(timeout=15), 0)
+            self.assertTrue((esp / "EFI/BOOT/BOOTX64.EFI").is_file())
+            self.assertEqual(list((esp / "EFI/BOOT").glob(".nox-sbctl-fb.*")), [])
 
     def test_list_candidate_disks_fails_closed_on_lsblk_errors_and_bad_json(self) -> None:
         from unittest import mock
@@ -2722,6 +2775,8 @@ class TestDocumentationAndPublicationContracts(unittest.TestCase):
 
         msi_doc = (REPO / "docs/SECURE-BOOT-MSI.md").read_text(encoding="utf-8")
         self.assertNotIn("Relatos reais de usuários", msi_doc)
+        self.assertNotIn("--custom-only", msi_doc)
+        self.assertIn("--no-microsoft", msi_doc)
         self.assertIn("Cenários técnicos documentados", msi_doc)
 
 

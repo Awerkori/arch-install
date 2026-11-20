@@ -17,12 +17,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/03-desktop-first-login.png" alt="Nox Archinstall — Desktop Umbriel + Noctalia Shell (Obsidian Purple)" width="100%" />
+  <img src="docs/screenshots/03-desktop-showcase.png" alt="Nox Archinstall — Desktop Umbriel + Noctalia Shell + Kitty/Fastfetch (Obsidian Purple)" width="100%" />
 </p>
 
 **Nox Archinstall** (internamente *Project Nox*) é o instalador pessoal e reproduzível do meu próprio desktop Arch Linux — não uma distribuição genérica — projetado especificamente para plataforma **AMD Zen 4/5 (`x86-64-v4`)**, placa-mãe **MSI PRO B650M-P**, **Ryzen 5 7500F**, **Radeon RX 9060 XT** e **Intel AX210**.
 
-Ele parte da **ISO oficial do Arch Linux** (`archinstall 4.5`) para garantir base limpa e auditável, automatizando em seguida todo o pós-instalação: repositório CachyOS `znver4`, kernel único **`linux-cachyos`**, compositor Wayland **`Umbriel`** com **`Noctalia Shell`** (`Obsidian Purple`), layout Btrfs resiliente com **snapshots PRE/POST automáticos** (`Snapper` + `snap-pac` + `limine-snapper-sync`) e **restauração assistida** (`Limine` / `nox-limine-snapper-restore`), além de cadeia UEFI **`sbctl`** com verificação **BLAKE2B** do `limine.conf`.
+Ele parte da **ISO oficial do Arch Linux** (`archinstall 4.5`) para garantir base limpa e auditável, automatizando em seguida todo o pós-instalação: repositório CachyOS `znver4`, kernel único **`linux-cachyos`**, compositor Wayland **`Umbriel`** com **`Noctalia Shell`** (`Obsidian Purple`), layout Btrfs resiliente com **snapshots PRE/POST automáticos** (`Snapper` + `snap-pac` + `limine-snapper-sync`) e **restauração assistida** (`Limine` / `limine-snapper-restore`), além de cadeia UEFI **`sbctl`** com verificação **BLAKE2B** do `limine.conf`.
 
 ---
 
@@ -45,7 +45,7 @@ Ele parte da **ISO oficial do Arch Linux** (`archinstall 4.5`) para garantir bas
 | **Armazenamento** | GPT UEFI (`/boot` 4 GiB FAT32 + Btrfs `zstd:3`: `@`, `@home`, `@log`, `@pkg`, `@.snapshots`, `@swap` + `zram0`) |
 | **Boot** | **Limine** com verificação **BLAKE2B** de kernel/initramfs/`limine.conf` (`nox-limine-integrity`) |
 | **Segurança** | Chaves locais individuais via **`sbctl`**, `UMASK 022` isolado no alvo e verificações fail-closed |
-| **Snapshots** | **Snapshots PRE/POST automáticos** (`Snapper` `root` máx. 2 + `snap-pac` + `limine-snapper-sync`) e **restauração assistida** (`Limine` / `nox-limine-snapper-restore`) |
+| **Snapshots** | **Snapshots PRE/POST automáticos** (`Snapper` `root` máx. 2 + `snap-pac` + `limine-snapper-sync`) e **restauração assistida** (`Limine` / `limine-snapper-restore`) |
 | **Desktop** | **Umbriel** (`dwindle`), **Noctalia Shell / Greeter / Lock Screen**, **Obsidian Purple** e `mpvpaper` |
 | **Aplicativos** | **Kitty**, **Bash**, **Luciole**, **Firefox Pure** (`CachyOS`), **btop**, **fastfetch**, `nox-topgrade` + **ProtonPlus** |
 

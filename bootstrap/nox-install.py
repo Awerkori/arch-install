@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 NOX_RELEASE_VERSION = "v1.0.1"
-OFFICIAL_CONFIG_COMMIT = "7b64e74308880246cd140b258b4554258a418208"
+OFFICIAL_CONFIG_COMMIT = "5272393d6585f087641c2aa7aa29f8a76ae2b661"
 DEFAULT_CONFIG_URL = (
     f"https://raw.githubusercontent.com/Awerkori/arch-install/{OFFICIAL_CONFIG_COMMIT}/user_configuration.json"
 )
@@ -38,7 +38,7 @@ OFFICIAL_CONFIG_SHA256 = "44b535686205c5d6e0ccfbd06921b53d64671647caca6ad4815a46
 OFFICIAL_PAYLOAD_URL = (
     "https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz"
 )
-OFFICIAL_PAYLOAD_SHA256 = "87c330736f0080da51a3bda8b67a1abd0d94750d0f3ca1197d8356efdd559d13"
+OFFICIAL_PAYLOAD_SHA256 = "cad27cd3bbbf7294547df502dc4d1942b0f4cef5141bca977718e37bb488c6f2"
 
 LEGACY_RC_TAG = "v1.0.0-rc10"
 LEGACY_RC_PREFIX = "v1.0.0-rc"
