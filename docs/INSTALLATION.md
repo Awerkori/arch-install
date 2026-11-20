@@ -78,17 +78,27 @@ curl -I https://archlinux.org
 
 ---
 
-## 3. Comando Definitivo de Instalação (`Download-Then-Execute`)
+## 3. Comando Definitivo de Instalação
 
-O instalador utiliza o método **baixar e executar** (`download-then-execute`), salvando `nox-install.py` em `/tmp/nox-install.py` (em memória RAM da ISO) antes de iniciá-lo. Isso garante que o script só seja executado se o download HTTPS terminar com sucesso e preserva o terminal interativo (`stdin`/`/dev/tty`) para as perguntas do assistente.
+O instalador baixa o script oficial `nox-install.py` em memória RAM (`/tmp`), valida sua integridade via **SHA-256** e conecta o terminal interativo (`/dev/tty`) para conduzir as perguntas do assistente.
 
-### Opção 1 — Comando único (recomendado para copiar ou digitar)
+Você pode iniciar a instalação usando o **comando curto** (mais fácil de digitar manualmente no teclado da ISO) ou o **comando completo original**. Ambos iniciam exatamente o mesmo instalador e validam os mesmos hashes SHA-256.
+
+### Opção 1 — Comando curto (recomendado para digitar na ISO)
+
+```bash
+curl -fsSL https://github.com/Awerkori/arch-install/raw/main/i | sh
+```
+
+*(O script curto [`i`](../i), hospedado na raiz deste próprio repositório, baixa o `nox-install.py` oficial da release `v1.0.0` via HTTPS estrito, confere seu hash SHA-256 `fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10`, reconecta a entrada interativa ao `/dev/tty` e remove a pasta temporária ao sair).*
+
+### Opção 2 — Comando completo original (`Download-Then-Execute`)
 
 ```bash
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/main/bootstrap/nox-install.py -o /tmp/nox-install.py && python3 /tmp/nox-install.py
 ```
 
-### Opção 2 — Em duas etapas (útil caso queira conferir o arquivo antes de iniciar)
+### Opção 3 — Em duas etapas separadas (útil para inspeção manual)
 
 ```bash
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/main/bootstrap/nox-install.py -o /tmp/nox-install.py
