@@ -114,7 +114,7 @@ Todas as etapas da cadeia oficial de instalação utilizam **referências imutá
 1. **Estágio 1 ([`i`](i)):** baixado por HTTPS estrito de commit imutável e verificado por SHA-256 no terminal antes de ser executado pelo `sh`.
 2. **Estágio 2 ([`bootstrap/nox-install.py`](bootstrap/nox-install.py)):** baixado pelo iniciador `i` de commit imutável e verificado por SHA-256 antes de iniciar o Python.
 3. **Estágio 3 ([`user_configuration.json`](user_configuration.json)):** baixado de commit imutável e verificado por SHA-256 (`OFFICIAL_CONFIG_SHA256`) antes do parse JSON.
-4. **Estágio 4 (`nox-archinstall-payload-v1.0.1.tar.gz`):** baixado por HTTPS sem downgrade de redirecionamento e verificado por SHA-256 antes de qualquer extração no sistema-alvo.
+4. **Estágio 4 (`nox-archinstall-payload-v1.0.1.tar.gz`):** baixado por HTTPS sem downgrade de redirecionamento e verificado por SHA-256 (`6e9500f44ce9c4882db27e91e20aa3e276499d3f1681ed0872c92dae696a2509`) antes de qualquer extração no sistema-alvo. *(A release estável atualmente publicada é a `v1.0.0`; os artefatos `v1.0.1` da branch `hardening/v1.0.1` aguardam aprovação humana para publicação.)*
 
 ### Passo a passo rápido na ISO oficial
 
@@ -123,15 +123,15 @@ Todas as etapas da cadeia oficial de instalação utilizam **referências imutá
 3. Execute o comando oficial verificado abaixo (baixa o iniciador `i` do commit imutável, confere o SHA-256 e só então inicia o assistente):
 
 ```bash
-sh -c 'set -eu; umask 077; f=$(mktemp /tmp/nox-i.XXXXXX); trap "rm -f \"$f\"" EXIT INT TERM; curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/16f858e924a4565fca85bb36a75c873eeeba3778/i -o "$f"; printf "%s  %s\n" "dd439e6364a5d97e970d1c8ed62224fea2e7c9c38018724c1216eae1f4ca50de" "$f" | sha256sum -c -; sh "$f"'
+sh -c 'set -eu; umask 077; f=$(mktemp /tmp/nox-i.XXXXXX); trap "rm -f \"$f\"" EXIT INT TERM; curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/058c37de6279d427c8d902bde47e124d6a671106/i -o "$f"; printf "%s  %s\n" "36ce94494db9fb13caad373fa13ed55b8f2d6b15ed4dac8f3b4827ecb687ad11" "$f" | sha256sum -c -; sh "$f"'
 ```
 
 Se preferir inspecionar o iniciador manualmente antes de executá-lo, utilize a sequência passo a passo (que aplica exatamente a mesma verificação de integridade):
 
 ```bash
 umask 077
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/16f858e924a4565fca85bb36a75c873eeeba3778/i -o /tmp/nox-i
-printf '%s  /tmp/nox-i\n' 'dd439e6364a5d97e970d1c8ed62224fea2e7c9c38018724c1216eae1f4ca50de' | sha256sum -c -
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/058c37de6279d427c8d902bde47e124d6a671106/i -o /tmp/nox-i
+printf '%s  /tmp/nox-i\n' '36ce94494db9fb13caad373fa13ed55b8f2d6b15ed4dac8f3b4827ecb687ad11' | sha256sum -c -
 less /tmp/nox-i
 sh /tmp/nox-i
 rm -f /tmp/nox-i

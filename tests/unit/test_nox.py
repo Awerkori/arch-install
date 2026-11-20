@@ -970,8 +970,8 @@ class TestCorrectiveAuditAdditions(unittest.TestCase):
         self.assertIn("pacman -Syyu --noconfirm", desktop_stage)
         self.assertNotIn("_nox_lagging", desktop_stage)
         limine_integ = (REPO / "configs/bin/nox-limine-integrity").read_text(encoding="utf-8")
-        self.assertIn('CONF_B2="$(b2sum "$CONF"', limine_integ)
-        self.assertIn('grep -qaiF "$CONF_B2" "$LIMINE_EFI"', limine_integ)
+        self.assertIn('conf_b2="$(b2sum "$CONF"', limine_integ)
+        self.assertIn('grep -qaiF "$conf_b2" "$LIMINE_EFI"', limine_integ)
         mem_stage = (REPO / "scripts/70-memory.sh").read_text(encoding="utf-8")
         self.assertNotIn("nodatacow", mem_stage)
         wrap = (REPO / "configs/bin/nox-limine-snapper-restore").read_text(encoding="utf-8")
@@ -1335,7 +1335,7 @@ class TestBootstrapAndHostSafetyHardening(unittest.TestCase):
                 self.assertTrue((d / "install.log").exists())
                 self.assertEqual( d.stat().st_mode & 0o777, 0o700)
 
-    def test_verify_disk_safe_to_wipe_rejects_missing_or_mounted_or_broken_by_id(self) -> None:
+    def test_verify_disk_safe_to_wipe_fail_closed_matrix(self) -> None:
         from unittest import mock
 
         mod = self._load_nox_install()
@@ -1343,10 +1343,77 @@ class TestBootstrapAndHostSafetyHardening(unittest.TestCase):
             tmp = Path(td)
             fake_disk = tmp / "nvme0n1"
             fake_disk.write_text("", encoding="utf-8")
+            fake_part = tmp / "nvme0n1p1"
+            fake_part.write_text("", encoding="utf-8")
             other_disk = tmp / "sda"
             other_disk.write_text("", encoding="utf-8")
             bad_symlink = tmp / "by-id-nvme"
             bad_symlink.symlink_to(other_disk)
+            good_symlink = tmp / "by-id-nvme-ok"
+            good_symlink.symlink_to(fake_disk)
+
+            base_disk = {
+                "name": "nvme0n1",
+                "path": str(fake_disk),
+                "size_bytes": 100 * (1024**3),
+                "model": "TestNVMe",
+                "serial": "SER123",
+                "tran": "nvme",
+                "by_id": str(good_symlink),
+            }
+
+            def make_lsblk_json(
+                path: str | None = None,
+                name: str = "nvme0n1",
+                size: int = 100 * (1024**3),
+                model: str = "TestNVMe",
+                serial: str = "SER123",
+                tran: str = "nvme",
+                children: list[dict] | None = None,
+            ) -> str:
+                return json.dumps(
+                    {
+                        "blockdevices": [
+                            {
+                                "name": name,
+                                "path": path or str(fake_disk),
+                                "size": size,
+                                "model": model,
+                                "serial": serial,
+                                "tran": tran,
+                                "type": "disk",
+                                "rm": False,
+                                "mountpoints": [],
+                                "children": children or [],
+                            }
+                        ]
+                    }
+                )
+
+            def make_runner(
+                lsblk_j_rc: int = 0,
+                lsblk_j_out: str | None = None,
+                lsblk_m_rc: int = 0,
+                lsblk_m_out: str = "",
+                findmnt_rc: int = 0,
+                findmnt_out: str = "/dev/sda1 /\n",
+                swapon_rc: int = 0,
+                swapon_out: str = "/dev/zram0\n",
+            ):
+                payload_j = make_lsblk_json() if lsblk_j_out is None else lsblk_j_out
+
+                def _runner(cmd, capture_output=True, text=True, check=False):
+                    if cmd[:2] == ["lsblk", "-b"]:
+                        return subprocess.CompletedProcess(cmd, lsblk_j_rc, stdout=payload_j, stderr="lsblk-j err")
+                    if cmd[:2] == ["lsblk", "-nr"]:
+                        return subprocess.CompletedProcess(cmd, lsblk_m_rc, stdout=lsblk_m_out, stderr="lsblk-m err")
+                    if cmd[0] == "findmnt":
+                        return subprocess.CompletedProcess(cmd, findmnt_rc, stdout=findmnt_out, stderr="findmnt err")
+                    if cmd[0] == "swapon":
+                        return subprocess.CompletedProcess(cmd, swapon_rc, stdout=swapon_out, stderr="swapon err")
+                    raise AssertionError(f"Unexpected cmd: {cmd}")
+
+                return _runner
 
             # 1. Missing disk rejected
             with self.assertRaises(RuntimeError) as m_ctx:
@@ -1355,15 +1422,74 @@ class TestBootstrapAndHostSafetyHardening(unittest.TestCase):
 
             # 2. Broken/redirected by-id symlink rejected
             with self.assertRaises(RuntimeError) as id_ctx:
-                mod.verify_disk_safe_to_wipe({"path": str(fake_disk), "by_id": str(bad_symlink)})
+                mod.verify_disk_safe_to_wipe({**base_disk, "by_id": str(bad_symlink)})
             self.assertIn("Identificador persistente", str(id_ctx.exception))
 
-            # 3. Active mounts rejected
-            fake_proc = subprocess.CompletedProcess(args=["lsblk"], returncode=0, stdout="/mnt\n", stderr="")
-            with mock.patch.object(mod.subprocess, "run", return_value=fake_proc):
-                with self.assertRaises(RuntimeError) as mnt_ctx:
-                    mod.verify_disk_safe_to_wipe({"path": str(fake_disk), "by_id": ""})
-                self.assertIn("pontos montados ativos", str(mnt_ctx.exception))
+            # 3. lsblk -J returning non-zero fails closed
+            with mock.patch.object(mod.subprocess, "run", side_effect=make_runner(lsblk_j_rc=32)):
+                with self.assertRaises(RuntimeError) as e3:
+                    mod.verify_disk_safe_to_wipe(base_disk)
+                self.assertIn("Falha ao reidentificar", str(e3.exception))
+
+            # 4. Invalid/malformed or incomplete lsblk JSON fails closed
+            for bad_json in ("NOT-JSON", "{}", '{"blockdevices": []}'):
+                with mock.patch.object(mod.subprocess, "run", side_effect=make_runner(lsblk_j_out=bad_json)):
+                    with self.assertRaises(RuntimeError):
+                        mod.verify_disk_safe_to_wipe(base_disk)
+
+            # 5. lsblk mountpoints query failure fails closed (never treated as empty mounts)
+            with mock.patch.object(mod.subprocess, "run", side_effect=make_runner(lsblk_m_rc=1)):
+                with self.assertRaises(RuntimeError) as e5:
+                    mod.verify_disk_safe_to_wipe(base_disk)
+                self.assertIn("Falha ao consultar lsblk", str(e5.exception))
+
+            # 6. Active mount on disk/partition rejected
+            with mock.patch.object(mod.subprocess, "run", side_effect=make_runner(lsblk_m_out="/mnt\n")):
+                with self.assertRaises(RuntimeError) as e6:
+                    mod.verify_disk_safe_to_wipe(base_disk)
+                self.assertIn("pontos montados", str(e6.exception))
+
+            # 7. Active swap on partition of selected disk rejected & swapon failure fails closed
+            children_tree = make_lsblk_json(
+                children=[{"name": "nvme0n1p1", "path": str(fake_part), "mountpoints": []}]
+            )
+            with mock.patch.object(
+                mod.subprocess, "run", side_effect=make_runner(lsblk_j_out=children_tree, swapon_out=f"{fake_part}\n")
+            ):
+                with self.assertRaises(RuntimeError) as e7:
+                    mod.verify_disk_safe_to_wipe(base_disk)
+                self.assertIn("Swap ativo detectado", str(e7.exception))
+
+            with mock.patch.object(mod.subprocess, "run", side_effect=make_runner(swapon_rc=1)):
+                with self.assertRaises(RuntimeError) as e7b:
+                    mod.verify_disk_safe_to_wipe(base_disk)
+                self.assertIn("swapon", str(e7b.exception))
+
+            # 8. findmnt failure or mounted partition via findmnt fails closed
+            with mock.patch.object(mod.subprocess, "run", side_effect=make_runner(findmnt_rc=1)):
+                with self.assertRaises(RuntimeError) as e8:
+                    mod.verify_disk_safe_to_wipe(base_disk)
+                self.assertIn("findmnt", str(e8.exception))
+
+            with mock.patch.object(
+                mod.subprocess,
+                "run",
+                side_effect=make_runner(lsblk_j_out=children_tree, findmnt_out=f"{fake_part}[/@] /mnt\n"),
+            ):
+                with self.assertRaises(RuntimeError) as e8b:
+                    mod.verify_disk_safe_to_wipe(base_disk)
+                self.assertIn("findmnt", str(e8b.exception))
+
+            # 9. Device identity drift (size/serial/model/name) between selection and wipe rejected
+            drifted_json = make_lsblk_json(serial="DIFFERENT_DISK")
+            with mock.patch.object(mod.subprocess, "run", side_effect=make_runner(lsblk_j_out=drifted_json)):
+                with self.assertRaises(RuntimeError) as e9:
+                    mod.verify_disk_safe_to_wipe(base_disk)
+                self.assertIn("Serial do disco", str(e9.exception))
+
+            # 10. Clean safe disk with matching identity and no mounts/swap passes
+            with mock.patch.object(mod.subprocess, "run", side_effect=make_runner()):
+                mod.verify_disk_safe_to_wipe(base_disk)
 
     def test_interactive_tty_and_accidental_wipe_abort_guards(self) -> None:
         from unittest import mock
@@ -1523,6 +1649,110 @@ class TestSnapperConcurrencyAndEdgeCases(unittest.TestCase):
             saved = json.loads(state_file.read_text(encoding="utf-8"))
             self.assertEqual((saved["anchor_pre"], saved["latest_post"]), (9, 10))
 
+    def test_snapper_lock_acquisition_fails_closed_without_mutating_state(self) -> None:
+        from unittest import mock
+
+        loader = importlib.machinery.SourceFileLoader(
+            "nox_snapper_cleanup", str(REPO / "configs/bin/nox-snapper-cleanup")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            state_file = root / "state.json"
+            initial_state = json.dumps({"session_id": "topgrade:1:1", "anchor_pre": 5, "latest_post": 6})
+            state_file.write_text(initial_state, encoding="utf-8")
+            snap_log = root / "snapper.log"
+            mock_snapper = root / "mock-snapper"
+            mock_snapper.write_text(
+                f"#!/usr/bin/env bash\necho \"$*\" >> '{snap_log}'\n",
+                encoding="utf-8",
+            )
+            mock_snapper.chmod(0o755)
+            in_json = root / "entries.json"
+            in_json.write_text(
+                json.dumps(
+                    {
+                        "root": [
+                            {"number": 1, "type": "pre", "cleanup": "number"},
+                            {"number": 2, "type": "post", "pre-number": 1, "cleanup": "number"},
+                            {"number": 5, "type": "pre", "cleanup": "number"},
+                            {"number": 6, "type": "post", "pre-number": 5, "cleanup": "number"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            # 1. os.open failure prevents any snapper command or state modification
+            bad_lock = root / "nonwritable" / "sub" / "lock"
+            with mock.patch("os.open", side_effect=PermissionError("EACCES simulated")):
+                with mock.patch("sys.argv", [
+                    "nox-snapper-cleanup",
+                    "--input-json", str(in_json),
+                    "--session-id", "",
+                    "--state-file", str(state_file),
+                    "--lock-file", str(bad_lock),
+                    "--snapper-bin", str(mock_snapper),
+                ]):
+                    rc = mod.main()
+            self.assertEqual(rc, 1)
+            self.assertFalse(snap_log.exists(), "No snapper command may execute when lock open fails")
+            self.assertEqual(state_file.read_text(encoding="utf-8"), initial_state)
+
+            # 2. fcntl.flock failure closes fd cleanly and prevents snapper execution
+            ok_lock = root / "real.lock"
+            with (
+                mock.patch.object(mod.fcntl, "flock", side_effect=OSError("EWOULDBLOCK simulated")),
+                mock.patch("os.close", wraps=os.close) as close_spy,
+                mock.patch("sys.argv", [
+                    "nox-snapper-cleanup",
+                    "--input-json", str(in_json),
+                    "--session-id", "",
+                    "--state-file", str(state_file),
+                    "--lock-file", str(ok_lock),
+                    "--snapper-bin", str(mock_snapper),
+                ]),
+            ):
+                rc2 = mod.main()
+            self.assertEqual(rc2, 1)
+            close_spy.assert_called()
+            self.assertFalse(snap_log.exists(), "No snapper command may execute when flock fails")
+            self.assertEqual(state_file.read_text(encoding="utf-8"), initial_state)
+
+            # 3. Lock is released cleanly after exception inside critical section
+            with self.assertRaises(RuntimeError):
+                with mod._cleanup_lock(ok_lock):
+                    raise RuntimeError("boom inside locked section")
+            # Re-acquiring non-blocking flock proves previous lock was released cleanly
+            import fcntl as _fcntl
+            fd_check = os.open(str(ok_lock), os.O_CREAT | os.O_RDWR, 0o600)
+            try:
+                _fcntl.flock(fd_check, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+                _fcntl.flock(fd_check, _fcntl.LOCK_UN)
+            finally:
+                os.close(fd_check)
+
+            # 4. --dry-run remains safe and read-only without needing lock mutation
+            dry_res = subprocess.run(
+                [
+                    "python3",
+                    str(REPO / "configs/bin/nox-snapper-cleanup"),
+                    "--input-json", str(in_json),
+                    "--session-id", "",
+                    "--state-file", str(state_file),
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertEqual(json.loads(dry_res.stdout)["delete"], [1, 2])
+            self.assertEqual(state_file.read_text(encoding="utf-8"), initial_state)
+
 
 class TestLimineAndSecureBootHardening(unittest.TestCase):
     def test_secureboot_verify_and_limine_integrity_detect_and_repair_failures(self) -> None:
@@ -1653,7 +1883,7 @@ class TestLimineAndSecureBootHardening(unittest.TestCase):
             # 2. --require-active fails when UEFI Secure Boot is disabled in firmware
             req_res = run_verify("--require-active")
             self.assertNotEqual(req_res.returncode, 0)
-            self.assertIn("UEFI Secure Boot is NOT active", req_res.stderr)
+            self.assertIn("UEFI Secure Boot is Disabled (--require-active)", req_res.stderr)
 
             # 3. Partially updated config (dirty marker present) fails verification
             dirty_marker.write_text("", encoding="utf-8")
@@ -1701,11 +1931,55 @@ class TestLimineAndSecureBootHardening(unittest.TestCase):
             env["NOX_LIMINE_DEFAULT"] = str(limine_default)
             env["NOX_NORMALIZE_BIN"] = str(REPO / "configs/bin/nox-limine-normalize")
             env["NOX_FALLBACK_HOOK"] = str(REPO / "configs/boot-hooks/95-nox-sbctl-fallback")
+            env["NOX_VERIFY_BIN"] = str(REPO / "configs/bin/nox-secureboot-verify")
             env["NOX_LIMINE_SRC_EFI"] = str(src_efi)
             env["NOX_SBCTL_BIN"] = str(mock_sbctl)
             env["NOX_ALLOW_NONROOT_TEST"] = "1"
             env["NOX_FORCE_EFI_HOOK"] = "1"
 
+            # 7a. Missing mandatory dependencies must fail and PRESERVE dirty_marker
+            bad_env_norm = env.copy()
+            bad_env_norm["NOX_NORMALIZE_BIN"] = str(root / "missing-normalize")
+            r_no_norm = subprocess.run(
+                ["bash", str(REPO / "configs/bin/nox-limine-integrity"), "--repair-if-dirty"],
+                env=bad_env_norm, capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(r_no_norm.returncode, 0)
+            self.assertTrue(dirty_marker.exists(), "Dirty marker must stay when normalizer is missing")
+
+            bad_env_hook = env.copy()
+            bad_env_hook["NOX_FALLBACK_HOOK"] = str(root / "missing-hook")
+            r_no_hook = subprocess.run(
+                ["bash", str(REPO / "configs/bin/nox-limine-integrity"), "--repair-if-dirty"],
+                env=bad_env_hook, capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(r_no_hook.returncode, 0)
+            self.assertTrue(dirty_marker.exists(), "Dirty marker must stay when fallback hook is missing")
+
+            bad_env_enroll = env.copy()
+            bad_env_enroll["NOX_LIMINE_ENROLL_BIN"] = str(root / "missing-enroll")
+            r_no_enroll = subprocess.run(
+                ["bash", str(REPO / "configs/bin/nox-limine-integrity"), "--repair-if-dirty"],
+                env=bad_env_enroll, capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(r_no_enroll.returncode, 0)
+            self.assertTrue(dirty_marker.exists(), "Dirty marker must stay when limine-enroll-config is missing")
+
+            # 7b. Failing step (normalizer error / enroll error / signing failure) preserves dirty_marker
+            fail_script = root / "fail-step"
+            fail_script.write_text("#!/usr/bin/env bash\nexit 42\n", encoding="utf-8")
+            fail_script.chmod(0o755)
+            for override_var in ("NOX_NORMALIZE_BIN", "NOX_LIMINE_ENROLL_BIN", "NOX_FALLBACK_HOOK"):
+                f_env = env.copy()
+                f_env[override_var] = str(fail_script)
+                r_fail = subprocess.run(
+                    ["bash", str(REPO / "configs/bin/nox-limine-integrity"), "--repair-if-dirty"],
+                    env=f_env, capture_output=True, text=True, check=False,
+                )
+                self.assertNotEqual(r_fail.returncode, 0, f"Expected failure when {override_var} exits 42")
+                self.assertTrue(dirty_marker.exists(), f"Dirty marker must stay when {override_var} fails")
+
+            # 7c. Successful transactional recovery clears dirty_marker ONLY at the end
             rep_res = subprocess.run(
                 ["bash", str(REPO / "configs/bin/nox-limine-integrity"), "--repair-if-dirty"],
                 env=env,
@@ -1713,12 +1987,167 @@ class TestLimineAndSecureBootHardening(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(rep_res.returncode, 0, rep_res.stderr)
+            self.assertEqual(rep_res.returncode, 0, rep_res.stderr + rep_res.stdout)
             self.assertFalse(dirty_marker.exists())
             self.assertIn("  //Project Nox\n", conf_path.read_text(encoding="utf-8"))
 
             post_rep_verify = run_verify()
             self.assertEqual(post_rep_verify.returncode, 0, post_rep_verify.stderr + post_rep_verify.stdout)
+
+    def test_secureboot_verify_firmware_json_matrix_and_enroll_fail_closed(self) -> None:
+        import hashlib
+
+        def b2(data: bytes) -> str:
+            return hashlib.blake2b(data, digest_size=64).hexdigest()
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            esp = root / "boot"
+            (esp / "EFI/limine").mkdir(parents=True)
+            (esp / "EFI/BOOT").mkdir(parents=True)
+            (esp / "abc/linux-cachyos").mkdir(parents=True)
+            (esp / "efi_sys").mkdir()
+            kern = b"kernel"
+            (esp / "abc/linux-cachyos/vmlinuz").write_bytes(kern)
+            conf = esp / "limine.conf"
+            conf.write_text(
+                "timeout: 5\n/+Arch Linux\n  //Project Nox\n  comment: kernel-id=linux-cachyos\n"
+                f"  path: boot():/abc/linux-cachyos/vmlinuz#{b2(kern)}\n",
+                encoding="utf-8",
+            )
+            conf_h = b2(conf.read_bytes())
+            lim_efi = esp / "EFI/limine/limine_x64.efi"
+            fb_efi = esp / "EFI/BOOT/BOOTX64.EFI"
+            src_efi = root / "BOOTX64.EFI.src"
+            src_efi.write_bytes(b"SRC-EFI")
+            lim_efi.write_bytes(b"EFI-" + conf_h.encode())
+            fb_efi.write_bytes(b"EFI-" + conf_h.encode())
+            lim_def = root / "default-limine"
+            lim_def.write_text("ENABLE_VERIFICATION=yes\nENABLE_ENROLL_LIMINE_CONFIG=yes\n", encoding="utf-8")
+            dirty = root / "dirty"
+            status_file = root / "status.json"
+            status_rc_file = root / "status.rc"
+            status_rc_file.write_text("0", encoding="utf-8")
+            enroll_effect = root / "enrolled.flag"
+
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            mock_sbctl = bin_dir / "sbctl"
+            mock_sbctl.write_text(
+                "#!/usr/bin/env bash\n"
+                "case \"$1\" in\n"
+                "  setup) echo '{\"installed\": true}' ;;\n"
+                "  verify) echo \"✓ $2 is signed\" ;;\n"
+                "  sign) echo \"✓ Signed ${@: -1}\" ;;\n"
+                "  enroll-keys)\n"
+                f"    : > '{enroll_effect}'\n"
+                "    echo '{\"setup_mode\": false, \"secure_boot\": false}' > '" + str(status_file) + "'\n"
+                "    ;;\n"
+                "  status)\n"
+                f"    rc=$(cat '{status_rc_file}')\n"
+                "    if [[ \"$rc\" -ne 0 ]]; then exit \"$rc\"; fi\n"
+                f"    cat '{status_file}'\n"
+                "    ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            mock_sbctl.chmod(0o755)
+
+            mock_lim_inst = bin_dir / "limine-install"
+            mock_lim_inst.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            mock_lim_inst.chmod(0o755)
+            mock_lim_enr = bin_dir / "limine-enroll-config"
+            mock_lim_enr.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            mock_lim_enr.chmod(0o755)
+            mock_limine = bin_dir / "limine"
+            mock_limine.write_text(
+                f"#!/usr/bin/env bash\nprintf 'EFI-%s' \"$3\" > \"$2\"\n", encoding="utf-8"
+            )
+            mock_limine.chmod(0o755)
+
+            def verify_status(json_payload: str, rc: int = 0, extra: tuple[str, ...] = ()) -> subprocess.CompletedProcess[str]:
+                status_file.write_text(json_payload, encoding="utf-8")
+                status_rc_file.write_text(str(rc), encoding="utf-8")
+                return subprocess.run(
+                    [
+                        "bash", str(REPO / "configs/bin/nox-secureboot-verify"),
+                        "--esp-path", str(esp),
+                        "--limine-default", str(lim_def),
+                        "--dirty-marker", str(dirty),
+                        "--sbctl-bin", str(mock_sbctl),
+                        *extra,
+                    ],
+                    capture_output=True, text=True, check=False,
+                )
+
+            # A. Verify all 10 firmware JSON scenarios
+            r_setup = verify_status('{"setup_mode": true, "secure_boot": false}')
+            self.assertEqual(r_setup.returncode, 0, r_setup.stderr)
+            self.assertIn("Setup Mode", r_setup.stdout)
+
+            r_user = verify_status('{"setup_mode": false, "secure_boot": false}')
+            self.assertEqual(r_user.returncode, 0, r_user.stderr)
+            self.assertIn("User Mode", r_user.stdout)
+
+            r_active = verify_status('{"setup_mode": false, "secure_boot": true}', extra=("--require-active",))
+            self.assertEqual(r_active.returncode, 0, r_active.stderr)
+            self.assertIn("actively enforced", r_active.stdout)
+
+            r_req_off = verify_status('{"setup_mode": false, "secure_boot": false}', extra=("--require-active",))
+            self.assertNotEqual(r_req_off.returncode, 0)
+
+            # Empty, malformed, missing fields, wrong types, non-zero exit must ALL FAIL (UNKNOWN)
+            for bad_json, bad_rc in (
+                ("", 0),
+                ("{bad-json", 0),
+                ('{"setup_mode": false}', 0),
+                ('{"secure_boot": false}', 0),
+                ('{"setup_mode": "false", "secure_boot": false}', 0),
+                ('{"setup_mode": false, "secure_boot": 1}', 0),
+                ('{"setup_mode": false, "secure_boot": false}', 1),
+            ):
+                for extra in ((), ("--require-active",)):
+                    r_bad = verify_status(bad_json, rc=bad_rc, extra=extra)
+                    self.assertNotEqual(
+                        r_bad.returncode, 0,
+                        f"Expected FAIL for bad status payload={bad_json!r} rc={bad_rc} extra={extra}",
+                    )
+                    self.assertIn("UNKNOWN", r_bad.stderr)
+
+            # B. Enroll fails preflight cleanly if mandatory tools are absent (before calling sbctl enroll-keys)
+            status_file.write_text('{"setup_mode": true, "secure_boot": false}', encoding="utf-8")
+            status_rc_file.write_text("0", encoding="utf-8")
+            enroll_env = os.environ.copy()
+            enroll_env["PATH"] = f"{bin_dir}:{enroll_env.get('PATH', '')}"
+            enroll_env["ESP_PATH"] = str(esp)
+            enroll_env["NOX_EFI_SYS_DIR"] = str(esp / "efi_sys")
+            enroll_env["NOX_LIMINE_DEFAULT"] = str(lim_def)
+            enroll_env["NOX_DIRTY_MARKER"] = str(dirty)
+            enroll_env["NOX_LIMINE_SRC_EFI"] = str(src_efi)
+            enroll_env["NOX_FALLBACK_HOOK"] = str(REPO / "configs/boot-hooks/95-nox-sbctl-fallback")
+            enroll_env["NOX_VERIFY_BIN"] = str(REPO / "configs/bin/nox-secureboot-verify")
+            enroll_env["NOX_SBCTL_BIN"] = str(mock_sbctl)
+            enroll_env["NOX_ALLOW_NONROOT_TEST"] = "1"
+            enroll_env["NOX_FORCE_EFI_HOOK"] = "1"
+
+            bad_enroll_env = enroll_env.copy()
+            bad_enroll_env["NOX_LIMINE_ENROLL_BIN"] = str(root / "missing-limine-enroll")
+            re_miss = subprocess.run(
+                ["bash", str(REPO / "configs/bin/nox-secureboot-enroll"), "--yes-enroll-uefi-keys"],
+                env=bad_enroll_env, capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(re_miss.returncode, 0)
+            self.assertFalse(enroll_effect.exists(), "Must NOT enroll keys if mandatory tool missing")
+
+            # C. Successful enroll executes all steps, verifies chain, distinguishes Enrolled vs Active
+            re_ok = subprocess.run(
+                ["bash", str(REPO / "configs/bin/nox-secureboot-enroll"), "--yes-enroll-uefi-keys"],
+                env=enroll_env, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(re_ok.returncode, 0, re_ok.stderr + re_ok.stdout)
+            self.assertIn("Stage 1-4 OK", re_ok.stdout)
+            self.assertIn("Stage 5 PENDING", re_ok.stdout)
+            self.assertTrue(enroll_effect.exists())
 
 
 class TestDocumentationAndManifestIntegrity(unittest.TestCase):
@@ -1774,6 +2203,90 @@ class TestDocumentationAndManifestIntegrity(unittest.TestCase):
             self.assertNotIn("raw.githubusercontent.com/Awerkori/arch-install/main/", doc_text)
             self.assertIn(launcher_sha, doc_text)
             self.assertIn("sha256sum -c -", doc_text)
+
+    def test_release_manifest_schema_v2_and_verify_only_chain(self) -> None:
+        manifest = json.loads((REPO / "manifests/release.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest.get("schema_version"), 2)
+        for req in (
+            "version",
+            "payload_commit",
+            "source_commit",
+            "config_commit",
+            "bootstrap_commit",
+            "launcher_commit",
+            "generated_at_utc",
+            "trust_model",
+            "payload_url",
+            "payload_sha256",
+            "config_sha256",
+            "bootstrap_sha256",
+            "launcher_sha256",
+            "artifacts",
+            "reproducibility",
+        ):
+            self.assertIn(req, manifest, f"Missing schema v2 key: {req}")
+            self.assertTrue(manifest[req], f"Empty schema v2 key: {req}")
+
+        for art_key in ("launcher", "bootstrap", "config"):
+            art = manifest["artifacts"][art_key]
+            for fkey in ("name", "path", "commit", "url", "sha256"):
+                self.assertIn(fkey, art, f"Missing artifacts.{art_key}.{fkey}")
+                self.assertTrue(art[fkey])
+
+        # Verify CI secret scan covers .github workflows and detects a runtime canary secret
+        ci_yml = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assertNotIn("--exclude-dir=.github", ci_yml)
+        scan_line = ""
+        for line in ci_yml.splitlines():
+            if "grep -rnE" in line:
+                scan_line = line.strip()
+                break
+        self.assertTrue(scan_line, "Secret scan grep command missing from .github/workflows/ci.yml")
+        grep_args = scan_line.lstrip("! ").replace(" \\", "").strip() + " --exclude-dir=.git --exclude-dir=dist --exclude-dir=reports --exclude-dir=__pycache__ ."
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wf = root / ".github/workflows"
+            wf.mkdir(parents=True)
+            canary = ("gh" + "p_") + ("Z9x8C7v6B5n4M3k2J1h0" * 2)[:36]
+            (wf / "canary.yml").write_text(f"env:\n  TOKEN: {canary}\n", encoding="utf-8")
+            scan_res = subprocess.run(
+                ["bash", "-c", grep_args],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(scan_res.returncode, 0, "Secret scan failed to detect canary inside .github/workflows/")
+            self.assertIn(".github/workflows/canary.yml", scan_res.stdout)
+
+    def test_build_release_verify_only_detects_stale_manifest_and_validates_chain(self) -> None:
+        # 1. Running --verify-only on the live repository must pass once chain commits are synchronized
+        res = subprocess.run(
+            ["bash", str(REPO / "scripts/build-release.sh"), "--verify-only"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(res.returncode, 0, res.stderr + res.stdout)
+        self.assertIn("VERIFY_RELEASE_CHAIN=PASS", res.stdout)
+
+        # 2. Verify build-release.sh --verify-only FAILS when payload_sha256 is stale in a temp repo copy
+        with tempfile.TemporaryDirectory() as td:
+            tmp_repo = Path(td) / "repo"
+            subprocess.run(["git", "clone", "--quiet", str(REPO), str(tmp_repo)], check=True)
+            mpath = tmp_repo / "manifests/release.json"
+            mdata = json.loads(mpath.read_text(encoding="utf-8"))
+            mdata["payload_sha256"] = "f" * 64
+            mpath.write_text(json.dumps(mdata, indent=2) + "\n", encoding="utf-8")
+            bad_res = subprocess.run(
+                ["bash", str(tmp_repo / "scripts/build-release.sh"), "--verify-only", "--skip-git-match"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(bad_res.returncode, 0)
+            self.assertIn("ERRO payload", bad_res.stderr)
+
 
 
 

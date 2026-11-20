@@ -84,17 +84,17 @@ O Project Nox utiliza uma **única cadeia oficial de instalação** baseada em *
 
 | Estágio | Artefato | Referência Imutável (`v1.0.1`) | SHA-256 Verificado antes do uso |
 |---|---|---|---|
-| **1. Iniciador** | [`i`](../i) | Commit `16f858e924a4565fca85bb36a75c873eeeba3778` | `dd439e6364a5d97e970d1c8ed62224fea2e7c9c38018724c1216eae1f4ca50de` |
-| **2. Bootstrap** | [`bootstrap/nox-install.py`](../bootstrap/nox-install.py) | Commit `5e1128cba9796a88c0d62e22963c67bd18ccd79a` | `bee5edb22d802fe82fa4727377172694f4b53fd81839c5774e9ebcd6eb39ab80` |
-| **3. Configuração** | [`user_configuration.json`](../user_configuration.json) | Commit `e2e84418d045b8856157265dd4f74f9172211e4e` | `aef4bdeb5268d1bbbebb42ad8de00cf7d98b71b687332bfab1f259cadb8311f9` |
-| **4. Payload** | `nox-archinstall-payload-v1.0.1.tar.gz` | Release `v1.0.1` | `660d6caa4a418a17a6a4138f2a1d61f10673718aeca775adca6bcf3fdbdd1ec3` |
+| **1. Iniciador** | [`i`](../i) | Commit `058c37de6279d427c8d902bde47e124d6a671106` | `36ce94494db9fb13caad373fa13ed55b8f2d6b15ed4dac8f3b4827ecb687ad11` |
+| **2. Bootstrap** | [`bootstrap/nox-install.py`](../bootstrap/nox-install.py) | Commit `e3944d172bc07de3852e931a3c703241df4031ce` | `8aeabbd274fa0ab3375e12bd5ea2b096299e806c530df62e4821161fd0ea9ccf` |
+| **3. Configuração** | [`user_configuration.json`](../user_configuration.json) | Commit `9e810de859f731984b7af09fad03c8767cef071c` | `8358edd4bdb154d1157c187f6dbfa83df341d91df64b45fcb0180a9872a87641` |
+| **4. Payload** | `nox-archinstall-payload-v1.0.1.tar.gz` | Candidato `v1.0.1` (`hardening/v1.0.1`) | `6e9500f44ce9c4882db27e91e20aa3e276499d3f1681ed0872c92dae696a2509` |
 
 > **Nota sobre o modelo de segurança e suas limitações:** Como o projeto não utiliza infraestrutura externa de chaves de assinatura digital pré-instaladas na ISO oficial do Arch Linux, a autenticidade da cadeia é estabelecida pela pinagem criptográfica de hashes SHA-256 combinada a URLs imutáveis por commit SHA sobre HTTPS/TLSv1.2+ (com bloqueio de downgrade HTTP em redirecionamentos). A raiz de confiança parte do comando e hash SHA-256 do Estágio 1 copiados pelo operador a partir desta documentação.
 
 ### Opção 1 — Comando oficial verificado em linha única (Recomendado)
 
 ```bash
-sh -c 'set -eu; umask 077; f=$(mktemp /tmp/nox-i.XXXXXX); trap "rm -f \"$f\"" EXIT INT TERM; curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/16f858e924a4565fca85bb36a75c873eeeba3778/i -o "$f"; printf "%s  %s\n" "dd439e6364a5d97e970d1c8ed62224fea2e7c9c38018724c1216eae1f4ca50de" "$f" | sha256sum -c -; sh "$f"'
+sh -c 'set -eu; umask 077; f=$(mktemp /tmp/nox-i.XXXXXX); trap "rm -f \"$f\"" EXIT INT TERM; curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/058c37de6279d427c8d902bde47e124d6a671106/i -o "$f"; printf "%s  %s\n" "36ce94494db9fb13caad373fa13ed55b8f2d6b15ed4dac8f3b4827ecb687ad11" "$f" | sha256sum -c -; sh "$f"'
 ```
 
 ### Opção 2 — Download, verificação SHA-256 e inspeção manual passo a passo
@@ -103,8 +103,8 @@ Se desejar inspecionar o iniciador antes de executá-lo, execute os passos abaix
 
 ```bash
 umask 077
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/16f858e924a4565fca85bb36a75c873eeeba3778/i -o /tmp/nox-i
-printf '%s  /tmp/nox-i\n' 'dd439e6364a5d97e970d1c8ed62224fea2e7c9c38018724c1216eae1f4ca50de' | sha256sum -c -
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Awerkori/arch-install/058c37de6279d427c8d902bde47e124d6a671106/i -o /tmp/nox-i
+printf '%s  /tmp/nox-i\n' '36ce94494db9fb13caad373fa13ed55b8f2d6b15ed4dac8f3b4827ecb687ad11' | sha256sum -c -
 less /tmp/nox-i
 sh /tmp/nox-i
 rm -f /tmp/nox-i
