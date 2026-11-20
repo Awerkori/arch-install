@@ -19,7 +19,7 @@ jobs:
       - name: Install shellcheck and shfmt
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends shellcheck shfmt jq
+          sudo apt-get install -y --no-install-recommends shellcheck shfmt jq python3-cairo python3-pil python3-numpy
 
       - name: Bash syntax and ShellCheck
         run: |
