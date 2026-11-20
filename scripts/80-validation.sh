@@ -71,6 +71,7 @@ done
 
 # 4. Desktop, Greeter, Kitty, Bash, Luciole, Firefox Pure, Btop, Fastfetch, Minimalist Launcher & Obsidian Purple
 check "umbriel, noctalia, noctalia-greeter, greetd, mpvpaper, socat, kitty instalados" bash -c "pacman -Q umbriel noctalia noctalia-greeter greetd mpvpaper socat kitty >/dev/null"
+# shellcheck disable=SC2016
 check "binarios graficos e mpvpaper sem bibliotecas ausentes (ldd)" bash -c '
   for b in /usr/bin/mpvpaper /usr/bin/mpv /usr/bin/ffmpeg /usr/bin/ffmpegthumbnailer /usr/bin/noctalia /usr/bin/noctalia-greeter /usr/bin/umbriel /usr/bin/kitty /usr/bin/firefox /usr/lib/glycin-loaders/2+/glycin-jxl /usr/lib/glycin-loaders/2+/glycin-svg /usr/lib/glycin-loaders/2+/glycin-image-rs; do
     test -x "$b" && ! ldd "$b" 2>/dev/null | grep -q "not found"
