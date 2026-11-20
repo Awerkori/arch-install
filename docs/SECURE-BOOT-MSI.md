@@ -77,7 +77,7 @@ O utilitário `sbctl enroll-keys` possui dois parâmetros frequentemente citados
 
 Abaixo está a análise técnica exata do que cada parâmetro faz nas variáveis UEFI e por que essa distinção é crítica:
 
-| Aspecto Técnico | `sbctl enroll-keys --microsoft` *(Padrão do `nox-secureboot-enroll`)* | `sbctl enroll-keys --microsoft --firmware-builtin` | `sbctl enroll-keys` *(ou `nox-secureboot-enroll --custom-only`)* |
+| Aspecto Técnico | `sbctl enroll-keys --microsoft` *(Padrão do `nox-secureboot-enroll`)* | `sbctl enroll-keys --microsoft --firmware-builtin` | `sbctl enroll-keys` *(ou `nox-secureboot-enroll --no-microsoft`)* |
 |---|---|---|---|
 | **O que inscreve na `PK`** | Somente a chave pública `PK` local gerada pelo `sbctl` no seu PC (`/var/lib/sbctl/keys/PK/PK.pem`). | Somente a chave pública `PK` local gerada pelo `sbctl` (**não** mantém a `PK` original da MSI, pois só pode existir 1 `PK` no UEFI). | Somente a chave pública `PK` local gerada pelo `sbctl`. |
 | **O que inscreve na `KEK`** | Chave `KEK` local do `sbctl` + certificado `Microsoft Corporation KEK CA`. | Chave `KEK` local do `sbctl` + certificado `Microsoft Corporation KEK CA` + cópia de todas as entradas presentes em `KEKDefault` do firmware. | Somente a chave `KEK` local do `sbctl`. |
@@ -104,10 +104,10 @@ Preste muita atenção a esta característica específica do seu computador fís
    - Durante o POST (logo que você liga o PC), a BIOS da MSI PRO B650M-P lê o módulo **UEFI GOP (Option ROM)** gravado na memória flash VBIOS (`113-APM7842CL-102`) da sua RX 9060 XT.
    - Se o Secure Boot estiver ativo e com política restrita (`Deny Execute` para Option ROM), a BIOS da MSI verifica a assinatura digital desse driver GOP da RX 9060 XT contra a base **`db`** da placa-mãe.
    - Se o certificado **`Microsoft Corporation UEFI CA`** estiver presente na `db` (o que é garantido pelo padrão `--microsoft` do `nox-secureboot-enroll`), a assinatura da Option ROM da RX 9060 XT é validada com sucesso e o vídeo funciona normalmente desde o primeiro segundo do boot.
-   - Se alguém executasse `nox-secureboot-enroll --custom-only` (sem `--microsoft`) **e** ativasse a verificação estrita de Option ROM, a placa-mãe recusaria o driver GOP da RX 9060 XT. Como o Ryzen 5 7500F não tem vídeo integrado de reserva na placa-mãe, o PC ligaria com **tela preta** (sem exibir nem a tela da BIOS!).
+   - Se alguém executasse `nox-secureboot-enroll --no-microsoft` (sem `--microsoft`) **e** ativasse a verificação estrita de Option ROM, a placa-mãe recusaria o driver GOP da RX 9060 XT. Como o Ryzen 5 7500F não tem vídeo integrado de reserva na placa-mãe, o PC ligaria com **tela preta** (sem exibir nem a tela da BIOS!).
 
 ### Regras obrigatórias de segurança para a sua RX 9060 XT
-1. **Sempre utilize o modo padrão do `nox-secureboot-enroll` (que inclui `--microsoft`).** Nunca use `--custom-only` nesta máquina.
+1. **Sempre utilize o modo padrão do `nox-secureboot-enroll` (que inclui `--microsoft`).** Nunca use `--no-microsoft` nesta máquina.
 2. **Nunca utilize flags do `sbctl` que tentem contornar ou desabilitar verificações de Option ROM de forma improvisada.**
 3. **Saiba onde fica o jumper `JBAT1` (Clear CMOS) antes de ativar o Secure Boot:** caso qualquer configuração de BIOS deixe o PC sem vídeo durante um teste, desligar a fonte e fechar contato nos 2 pinos do jumper **`JBAT1`** da MSI PRO B650M-P por 5 a 10 segundos reseta as configurações da BIOS para o padrão de fábrica (desativando o Secure Boot imediatamente e devolvendo a imagem da RX 9060 XT no próximo boot).
 

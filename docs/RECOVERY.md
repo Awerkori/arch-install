@@ -172,7 +172,7 @@ O Project Nox mantém snapshots automáticos do subvolume raiz `@` em `/.snapsho
    ```bash
    sudo /usr/local/bin/limine-snapper-restore
    ```
-4. O assistente `nox-limine-snapper-restore` exibirá a tabela de snapshots disponíveis (`limine-snapper-list`), pedirá que você informe o ID a restaurar, restaurará o subvolume `@` e o kernel correspondente em `/boot` e executará automaticamente `/usr/local/libexec/nox/nox-limine-integrity --force` para atualizar o hash BLAKE2B e re-assinar os binários EFI com `sbctl`.
+4. O assistente `/usr/local/bin/limine-snapper-restore` exibirá a tabela de snapshots disponíveis (`limine-snapper-list`), pedirá que você informe o ID a restaurar, restaurará o subvolume `@` e o kernel correspondente em `/boot` e executará automaticamente `/usr/local/libexec/nox/nox-limine-integrity --force` para atualizar o hash BLAKE2B e re-assinar os binários EFI com `sbctl`.
 5. Reinicie o computador ao concluir.
 
 ### Método 5.2 — Restauração manual de `@` via ISO oficial (Caso o sistema nem inicie e houve queda de energia)

@@ -1,0 +1,49 @@
+
+We trust you have received the usual lecture from the local System
+Administrator. It usually boils down to these three things:
+
+    #1) Respect the privacy of others.
+    #2) Think before you type.
+    #3) With great power comes great responsibility.
+
+For security reasons, the password you type will not be visible.
+
+[sudo] password for noxdev: HOSTNAME=Nox-Device-PC
+KERNEL=7.3.5-2-cachyos
+KERNEL_PKGS=2 total=711 explicit=100
+KERNEL_PKG_COUNT=1
+REPOS=[options] [cachyos-znver4] [cachyos-core-znver4] [cachyos-extra-znver4] [cachyos] [core] [extra] [multilib] 
+MOUNTS=/proc proc proc rw,nosuid,nodev,noexec,relatime|/sys sys sysfs rw,nosuid,nodev,noexec,relatime|/dev dev devtmpfs rw,nosuid,relatime,size=3989184k,nr_inodes=997296,mode=755,inode64,huge=advise|/run run tmpfs rw,nosuid,nodev,relatime,mode=755,inode64,huge=advise|/sys/firmware/efi/efivars efivarfs efivarfs rw,nosuid,nodev,noexec,relatime|/sys/kernel/security securityfs securityfs rw,nosuid,nodev,noexec,relatime|/dev/shm tmpfs tmpfs rw,nosuid,nodev,inode64,huge=advise,usrquota|/dev/pts devpts devpts rw,nosuid,noexec,relatime,gid=5,mode=600,ptmxmode=000|/sys/fs/cgroup cgroup2 cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot,memory_hugetlb_accounting|/sys/fs/pstore none pstore rw,nosuid,nodev,noexec,relatime|/sys/fs/bpf bpf bpf rw,nosuid,nodev,noexec,relatime,mode=700|/proc/sys/fs/binfmt_misc systemd-1 autofs rw,relatime,fd=44,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=6173|/sys/kernel/config configfs configfs rw,nosuid,nodev,noexec,relatime|/sys/kernel/tracing tracefs tracefs rw,nosuid,nodev,noexec,relatime|/dev/mqueue mqueue mqueue rw,nosuid,nodev,noexec,relatime|/sys/kernel/debug debugfs debugfs rw,nosuid,nodev,noexec,relatime|/sys/fs/fuse/connections fusectl fusectl rw,nosuid,nodev,noexec,relatime|/dev/hugepages hugetlbfs hugetlbfs rw,nosuid,nodev,relatime,pagesize=2M|/run/credentials/systemd-journald.service none tmpfs ro,nosuid,nodev,noexec,relatime,nosymfollow,size=1024k,nr_inodes=1024,mode=700,inode64,huge=advise,noswap|/run/credentials/systemd-resolved.service none tmpfs ro,nosuid,nodev,noexec,relatime,nosymfollow,size=1024k,nr_inodes=1024,mode=700,inode64,huge=advise,noswap|/home /dev/vda2[/@home] btrfs rw,relatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=258,subvol=/@home|/.snapshots /dev/vda2[/@.snapshots] btrfs rw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=257,subvol=/@.snapshots|/nox-swap /dev/vda2[/@swap] btrfs rw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=264,subvol=/@swap|/var/cache/pacman/pkg /dev/vda2[/@pkg] btrfs rw,relatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=260,subvol=/@pkg|/var/log /dev/vda2[/@log] btrfs rw,relatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=259,subvol=/@log|/boot /dev/vda1 vfat rw,relatime,fmask=0177,dmask=0077,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro|/tmp tmpfs tmpfs rw,nosuid,nodev,nr_inodes=1048576,inode64,huge=advise,usrquota|/run/user/1000 tmpfs tmpfs rw,nosuid,nodev,relatime,size=805228k,nr_inodes=201307,mode=700,uid=1000,gid=1000,inode64,huge=advise|/run/user/1000/gvfs gvfsd-fuse fuse.gvfsd-fuse rw,nosuid,nodev,relatime,user_id=1000,group_id=1000|/run/credentials/getty@tty2.service none tmpfs ro,nosuid,nodev,noexec,relatime,nosymfollow,size=1024k,nr_inodes=1024,mode=700,inode64,huge=advise,noswap|
+FSTAB_NOATIME=6
+SWAP=/dev/zram0         partition 7.7G 0B 100|/nox-swap/swapfile file        2G 0B  10|
+SWAPFILE_ATTR=---------------C------ /nox-swap/swapfile
+SYS_FAILED=0
+USR_FAILED=0
+ROOT_STATUS=root L 2010-09-19 -1 -1 -1 -1
+LOCALE=LANG=en_CA.UTF-8
+TZ=America/Sao_Paulo
+AUDIO=PipeWire 'pipewire-0' [1.6.11, noxdev@Nox-Device-PC, cookie:2374301248]| ├─ Sinks:| ├─ Sources:| ├─ Sinks:| ├─ Sources:|
+GUI_PROCS=1182 /bin/sh /usr/bin/start-umbriel|1225 /usr/bin/umbriel|1273 noctalia|1618 mpvpaper --auto-pause --auto-mode FULL -o loop-file=inf panscan=1.0 no-audio hwdec=auto input-ipc-server=/home/noxdev/.local/state/noctalia/mpvpaper/ipc-Virtual-1.sock Virtual-1 /usr/share/nox-archinstall/wallpapers/nox-g5-runtime.webm|
+BIN_CHECKS=OK
+FIRST_BOOT_DONE=2026-11-20T18:28:20-03:00
+SBCTL_STATUS={   "installed": true,   "guid": "a2fde7a8-0267-41f6-ab1c-c8f373b95bcb",   "setup_mode": true,   "secure_boot": false,   "vendors": [],   "firmware_quirks": [] } 
+LIMINE_INTEG_VERIFY=PASS
+[PASS] Stage 1 (Key Preparation): sbctl per-install private keys present
+[PASS] Stage 3 (Transaction State): no dirty Limine transaction marker
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/limine/limine_x64.efi is signed
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/6969529263ff402aaddc177677186276/linux-cachyos/vmlinuz is signed
+[PASS] Stage 3 (Limine Policy): /etc/default/limine enables verification + config enrollment
+[PASS] Stage 3 (Config Syntax): /boot/limine.conf all kernel/initramfs paths carry BLAKE2 checksums
+[PASS] Stage 3 (Asset Integrity): all boot():/ files referenced in /boot/limine.conf match their BLAKE2B hashes on disk
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (94177733e4ef7417...) enrolled in /boot/EFI/limine/limine_x64.efi
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (94177733e4ef7417...) enrolled in /boot/EFI/BOOT/BOOTX64.EFI
+[INFO] Stage 4 (Firmware Key Enrollment): UEFI is in Setup Mode (keys prepared on disk, NOT yet enrolled in UEFI NVRAM)
+[INFO] Stage 5 (UEFI Enforcement): UEFI Secure Boot is Disabled in firmware (offline signing & BLAKE2B verified; NOT actively enforced)
+[NOX SECUREBOOT] OK: chaves verificadas, Limine/kernel assinados, hash BLAKE2B de limine.conf inscrito e estado do firmware valido.
+OK
+OK
+OK
+OK
+OK
+__NOX_EXIT=0

@@ -1,0 +1,6 @@
+acceptA-v101-final-pacman-log: fatal_library_error_lookup_self=0
+acceptA-v101-final-install-log: fatal_library_error_lookup_self=0
+acceptA-v101-final-tty-log: fatal_library_error_lookup_self=0
+acceptB-v101-final-pacman-log: fatal_library_error_lookup_self=0
+acceptB-v101-final-install-log: fatal_library_error_lookup_self=0
+acceptB-v101-final-tty-log: fatal_library_error_lookup_self=0

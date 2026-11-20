@@ -2827,6 +2827,10 @@ class TestDocumentationAndPublicationContracts(unittest.TestCase):
             "acceptB-clean-secureboot-enroll.log",
             "acceptB-clean-secureboot-active-and-snapper.log",
             "acceptB-clean-snap-pac-and-cleanup.log",
+            "acceptA-v101-final-verify.log",
+            "acceptB-v101-final-stage5-and-restore.log",
+            "acceptB-v101-final-reboot1.log",
+            "acceptB-v101-final-reboot2.log",
         ):
             self.assertIn(expected, report)
 

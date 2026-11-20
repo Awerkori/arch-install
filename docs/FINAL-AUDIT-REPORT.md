@@ -19,11 +19,11 @@
 
 | Estágio | Artefato | Commit de Origem Imutável | SHA-256 |
 |---|---|---|---|
-| **Estágio 1 (Iniciador)** | [`i`](../i) | `3527e5b8ed53d5488363f518cfc37b93a63fb3c3` | `6b8a30d07a4c8dc53a5a1e64081324a1dfddf1ec36511ca97c1749ff7bef8291` |
-| **Estágio 2 (Bootstrap)** | [`bootstrap/nox-install.py`](../bootstrap/nox-install.py) | `0a09230666fffb8d28f273993248e8f19d9f4ec0` | `73eb625d7f4063aa6f81c3cf6fc07ff4614fe35ab8be1dbb2effed0f4c8a4685` |
-| **Estágio 3 (Configuração)** | [`user_configuration.json`](../user_configuration.json) | `5e9d69e1751d1c57b5b5921daec5573c7e808009` | `827065474be7487bcf88878bc22a10ef85fc2a440acff29df70e66227160cb58` |
-| **Estágio 4 (Payload)** | `nox-archinstall-payload-v1.0.1.tar.gz` | `5e9d69e1751d1c57b5b5921daec5573c7e808009` | `c82ed371ff11d2d523e46360903bad1a9417abd11793e0a3d9f2afe47c4747ad` |
-| **Arquivo `.sha256`** | `nox-archinstall-payload-v1.0.1.tar.gz.sha256` | `5e9d69e1751d1c57b5b5921daec5573c7e808009` | `4fe2e698cbcb98b719f0fab7d2198888dd0ae78ff0db7dbd4df8f185982413ba` |
+| **Estágio 1 (Iniciador)** | [`i`](../i) | `978c1f1892d19a42d3b1eb3bc0c2a9f1e9b093db` | `ebd6a6515dad718530486bb8a14d7ce4e3f45d25bd0c7b364ba5b16996f5ce31` |
+| **Estágio 2 (Bootstrap)** | [`bootstrap/nox-install.py`](../bootstrap/nox-install.py) | `46d3835b05ab43252454ce1648dd054f110857d5` | `fa6c2a3b1ee86cd60976857555326bf6a63c341914e9c061f557a62a74e03b47` |
+| **Estágio 3 (Configuração)** | [`user_configuration.json`](../user_configuration.json) | `83624813f3f32fd8608ee881b21b7ab6ec92cf3e` | `9cb32121cb9a87b54b7c07749a92d3b8cb6cffcf6e4dadc502f3fa9a3da3a867` |
+| **Estágio 4 (Payload)** | `nox-archinstall-payload-v1.0.1.tar.gz` | `83624813f3f32fd8608ee881b21b7ab6ec92cf3e` | `52008f9c454c8b39c91d6e51b3546f6a76546f021c3c6a0850dc7a55d5bf92b2` |
+| **Arquivo `.sha256`** | `nox-archinstall-payload-v1.0.1.tar.gz.sha256` | `83624813f3f32fd8608ee881b21b7ab6ec92cf3e` | `c6d52792ff1e1038663c633ea81a4f96d9db953ef54139a221b00ee46373ccf0` |
 
 ---
 
@@ -54,8 +54,11 @@
 5. **Eliminação de `fatal library error, lookup self` no `pacstrap` (`user_configuration.json` + `scripts/60-snapshots.sh`):**
    - Causa raiz identificada no `/var/log/pacman.log`: `user_configuration.json` pré-instalava `"snapper"` e `"snap-pac"` já no `pacstrap` inicial do `archinstall`, acionando `zz-snap-pac-post.hook` (`ps -p <ppid>` via `libproc2`) em ambiente chroot antes da configuração do Snapper.
    - Removidos `"snapper"` e `"snap-pac"` da lista base de `pacstrap` em `user_configuration.json` (mantendo ambos instalados explicitamente via `SNAP_PAC_SKIP=y pacman -S` no estágio `60-snapshots.sh`, após montagem e configuração completas do sistema-alvo).
-6. **Integridade de documentação, hashes `v1.0.0` e logs de evidência em `.gitignore`/CI:**
-   - Corrigidos URL e hashes congelados da release estável `v1.0.0` em [`docs/INSTALLATION.md`](INSTALLATION.md), unificada a apresentação visual do [`README.md`](../README.md) com único comando ativo da release publicada `v1.0.0` e adicionada exceção `!docs/evidence/**/*.log` em `.gitignore` com checagem `sha256sum -c MANIFEST.sha256` no CI.
+6. **Eliminação de colisão em hooks pós-boot e encaminhamento interativo real de TTY no restore (`configs/boot-hooks/95-nox-sbctl-fallback`, `configs/bin/nox-limine-integrity` e `configs/bin/nox-limine-snapper-restore`):**
+   - Serialização exclusiva por `flock` e diretório temporário isolado (`mktemp -d`) por execução em `95-nox-sbctl-fallback` e lock dedicado (`202`) em `nox-limine-integrity`, eliminando a colisão `BOOTX64.EFI.nox.tmp` / `unrecognized PE machine` durante transações simultâneas.
+   - Correção do código de retorno (`repair_rc`) em `nox-limine-snapper-restore`, supressão de reparo concorrente disparado pelo `limine-snapper-watcher` enquanto `/run/lock/limine-snapper-restore.lock` está ativo, e encaminhamento real do descritor TTY (`3<&0`) no helper PTY até o prompt final `Reboot now? [Y/n]:` (sem ser capturado pelo pipe do heredoc `<<'PY'`).
+7. **Integridade de documentação, hashes `v1.0.0` e logs de evidência em `.gitignore`/CI:**
+   - Corrigidos URL e hashes congelados da release estável `v1.0.0` em [`docs/INSTALLATION.md`](INSTALLATION.md), unificada a apresentação visual do [`README.md`](../README.md) com captura real do desktop e único comando ativo da release publicada `v1.0.0`, e adicionada exceção `!docs/evidence/**/*.log` em `.gitignore` com checagem `sha256sum -c MANIFEST.sha256` no CI.
 
 ---
 
@@ -66,8 +69,8 @@
   - Validação sintática JSON (`jq empty`) em `user_configuration.json`, `manifests/release.json`, `profiles/hardware.json` e `configs/noctalia/palettes/ObsidianPurple.json`: **PASS (4/4)**.
   - Verificação da cadeia criptográfica (`./scripts/build-release.sh --verify-only`): **`VERIFY_RELEASE_CHAIN=PASS`** (tarball determinístico idêntico localmente e no runner Ubuntu).
   - Scan de segredos incluindo `.github/`: **PASS** (validado em teste unitário com canário injetado em `.github/workflows/canary.yml`).
-  - Suite unitária e de contrato (`python3 -B -m unittest discover -s tests/unit -p 'test_*.py' -v`): **PASS (`53/53` testes aprovados, `0` falhas, `0` ignorados)** — incluindo matrizes fail-closed de lock/concorrência Snapper, disco/wipe, JSON do `sbctl`, estados e modo `--verify` do `nox-limine-integrity`, diferimento do `snap-pac` fora do `pacstrap`, propagação de `umask 022`, consistência do manifesto schema v2 e checagem documental (`README.md`, `docs/`, `MANIFEST.sha256`). *(Nota: os testes unitários cobrem lógica, contratos, documentos e wrappers com mocks de comandos de sistema onde aplicável; o fluxo real ponta a ponta foi validado separadamente nas VMs limpas abaixo.)*
-  - Verificação de integridade das evidências públicas (`cd docs/evidence/v1.0.1 && sha256sum -c MANIFEST.sha256`): **PASS (`22/22` arquivos `OK`)**.
+  - Suite unitária e de contrato (`python3 -B -m unittest discover -s tests/unit -p 'test_*.py' -v`): **PASS (`58/58` testes aprovados, `0` falhas, `0` ignorados)** — incluindo matrizes fail-closed de lock/concorrência Snapper, disco/wipe, JSON do `sbctl`, estados e modo `--verify` do `nox-limine-integrity`, teste PTY interativo completo de `nox-limine-snapper-restore` até `Reboot now? [Y/n]:`, inibição de colisão com `limine-snapper-restore.lock`, diferimento do `snap-pac` fora do `pacstrap`, propagação de `umask 022`, consistência do manifesto schema v2 e checagem documental (`README.md`, `docs/`, `MANIFEST.sha256`). *(Nota: os testes unitários cobrem lógica, contratos, documentos e wrappers com mocks de comandos de sistema onde aplicável; o fluxo real ponta a ponta foi validado separadamente nas VMs limpas abaixo.)*
+  - Verificação de integridade das evidências públicas (`cd docs/evidence/v1.0.1 && sha256sum -c MANIFEST.sha256`): **PASS (`41/41` arquivos `OK`)**.
 
 ---
 
@@ -103,24 +106,36 @@ Para eliminar qualquer resíduo de VMs reaproveitadas, foram criadas **duas nova
 - **`systemctl list-unit-files --state=enabled` (sistema):** **`22` vs `22`** — **0 diferenças**.
 - **`systemctl --user list-unit-files --state=enabled` (usuário):** **`7` vs `7`** — **0 diferenças**.
 
-*(Registro histórico separado: as evidências anteriores de pré-hardening permanecem separadas no laboratório local, fora do repositório público, mantendo aqui apenas as evidências das instalações limpas `v1.0.1-clean` e pós-hardening em [`docs/evidence/v1.0.1/`](evidence/v1.0.1/MANIFEST.sha256). Nota: as instalações limpas `ACCEPT-A-CLEAN` e `ACCEPT-B-CLEAN` foram executadas com o payload anterior `5db77939...`; os ajustes subsequentes em `user_configuration.json`, `scripts/60-snapshots.sh` e `configs/bin/nox-limine-integrity` atualizaram o candidato atual para `c82ed371...`, validados por `--verify-only`, 53 testes unitários e validação direta de `nox-limine-integrity --verify` e `--repair-if-dirty` na VM `ACCEPT-B-CLEAN`.)*
+*(Registro histórico separado: as evidências anteriores à limpeza permanecem isoladas no laboratório local. A bateria intermediária `ACCEPT-A-CLEAN` / `ACCEPT-B-CLEAN` validou o payload `5db77939...` e os respectivos artefatos seguem preservados em `docs/evidence/v1.0.1/logs/accept*-clean-*`. Após os ajustes finais de boot/restore, o payload definitivo congelado **`52008f9c454c8b39c91d6e51b3546f6a76546f021c3c6a0850dc7a55d5bf92b2`** (`I_URL` no commit `978c1f1892d19a42d3b1eb3bc0c2a9f1e9b093db`, `I_SHA256` `ebd6a6515dad718530486bb8a14d7ce4e3f45d25bd0c7b364ba5b16996f5ce31`) foi integralmente rehomologado do zero em **duas novas instalações limpas independentes (`ACCEPT-A-V101-FINAL` e `ACCEPT-B-V101-FINAL`)**.)*
+
+### 4.3. Homologação Definitiva sobre o Payload Congelado Final (`ACCEPT-A-V101-FINAL` e `ACCEPT-B-V101-FINAL`)
+
+| Critério Verificado | `ACCEPT-A-V101-FINAL` (Setup Mode) | `ACCEPT-B-V101-FINAL` (Secure Boot Ativo) | Resultado |
+|---|---|---|---|
+| **Instalação limpa ISO → `vda`** | `EXIT_CODE=0`, zero erros `lookup self` (`pacman.log=0`, `install.log=0`, `tty.log=0`) | `EXIT_CODE=0`, zero erros `lookup self` (`pacman.log=0`, `install.log=0`, `tty.log=0`) | **PASS** |
+| **Boot em disco (`hd`) + Greeter + Umbriel + Noctalia + mpvpaper** | `7.3.5-2-cachyos`, `SYS_FAILED=0`, `USR_FAILED=0`, `FIRST_BOOT_DONE` | Idêntico, `SYS_FAILED=0`, `USR_FAILED=0`, `FIRST_BOOT_DONE` | **PASS** |
+| **Paridade exata A × B** | `711` pacotes / `100` explícitos / `2` AUR / `22` sys units / `7` user units | `diff -u` = **`0` diferenças** entre A e B | **PASS** |
+| **Secure Boot (`Setup Mode` → `User Mode` → `--require-active`)** | Estágios 1–3 `PASS`, `nox-limine-integrity --verify` `PASS` | `nox-secureboot-enroll` (`Stage 4`) + reboot OVMF → **Estágio 5 `PASS`** | **PASS** |
+| **Snapshot manual + `pacman -S/-Rns tree` + `journalctl`** | N/A | Snapshot `1` (`nox-manual-keep`) preservado após install+remove de `tree`; `0` erros de `95-nox-sbctl-fallback`, `repair_rc` ou colisão no `journalctl` | **PASS** |
+| **Rollback durável PRE via `/usr/local/bin/limine-snapper-restore` + 2 reboots** | N/A | `PRE #6` restaurado via PTY interativo até `Reboot now? [Y/n]: n` (`RESTORE_PTY_EXIT=0`, `JOURNAL_FALLBACK_ERRORS_POST_RESTORE=0`); após Reboot 1: mutações descartáveis ausentes, `/home` sentinel (`ab53c5a359bd...`) íntegro, `Stage 5 PASS`; após Reboot 2 consecutivo: `linux-cachyos: 7843 total files, 0 missing files`, GUI ativa, `nox-limine-integrity --verify` `EXIT=0`, **Estágio 5 `PASS`**, `SYS_FAILED=0`, `USR_FAILED=0` | **PASS** |
 
 ---
 
 ## 5. Evidências Públicas Sanitizadas (`docs/evidence/v1.0.1/`)
 
-Todas as evidências abaixo foram verificadas quanto à ausência de senhas, tokens, chaves privadas, seriais de hardware, endereços MAC e SSIDs Wi-Fi, acompanhadas de [`evidence/v1.0.1/MANIFEST.sha256`](evidence/v1.0.1/MANIFEST.sha256):
+Todas as evidências abaixo foram verificadas quanto à ausência de senhas, tokens, chaves privadas, seriais de hardware, endereços MAC e SSIDs Wi-Fi, acompanhadas de [`evidence/v1.0.1/MANIFEST.sha256`](evidence/v1.0.1/MANIFEST.sha256) (`41/41 OK`):
 
 - **Capturas reais das VMs limpas (`docs/evidence/v1.0.1/screenshots/`):**
   1. [`01-limine-boot.png`](evidence/v1.0.1/screenshots/01-limine-boot.png) — Boot pelo Limine (`Project Nox`, kernel `linux-cachyos`, timeout `5s`).
   2. [`02-noctalia-greeter.png`](evidence/v1.0.1/screenshots/02-noctalia-greeter.png) — Noctalia Greeter (`greetd`, sessão `Umbriel`, tema Obsidian Purple).
   3. [`03-desktop-clean.png`](evidence/v1.0.1/screenshots/03-desktop-clean.png) — Desktop limpo inicial com Umbriel, Noctalia Shell e wallpaper animado `mpvpaper`.
   4. [`04-lockscreen-clean.png`](evidence/v1.0.1/screenshots/04-lockscreen-clean.png) — Noctalia Lock Screen na instalação limpa (`Mod+L`).
-- **Logs e paridade (`docs/evidence/v1.0.1/logs/`):**
-  - Resultados de instalação limpa (`acceptA-clean-install-result.txt`, `acceptB-clean-install-result.txt`).
-  - Logs de verificação pós-boot (`acceptA-clean-verify.log`, `acceptB-clean-verify.log`).
-  - Listas completas `pkg-qq`, `pkg-qqe`, `pkg-qqm`, `units-sys` e `units-usr` de ambas as VMs.
-  - Logs de enrollment e enforcement UEFI Secure Boot + poda Snapper real + rollback durável PRE (`acceptB-clean-secureboot-enroll.log`, `acceptB-clean-secureboot-active-and-snapper.log`, `acceptB-clean-snap-pac-and-cleanup.log`, `acceptB-clean-durable-rollback.log`).
+- **Logs e paridade da rodada intermediária (`docs/evidence/v1.0.1/logs/`):**
+  - Resultados de instalação limpa (`acceptA-clean-install-result.txt`, `acceptB-clean-install-result.txt`), pós-boot (`acceptA-clean-verify.log`, `acceptB-clean-verify.log`), listas `pkg-*`/`units-*`, Secure Boot + Snapper + rollback (`acceptB-clean-secureboot-enroll.log`, `acceptB-clean-secureboot-active-and-snapper.log`, `acceptB-clean-snap-pac-and-cleanup.log`, `acceptB-clean-durable-rollback.log`).
+- **Logs e paridade da rodada definitiva sobre o payload congelado `52008f9c...` (`docs/evidence/v1.0.1/logs/`):**
+  - Resultados de instalação limpa e auditoria zero `lookup self` (`acceptA-v101-final-install-result.txt`, `acceptB-v101-final-install-result.txt`, `accept-v101-final-lookup-self-summary.txt`).
+  - Pós-boot e paridade completa A × B (`acceptA-v101-final-verify.log`, `acceptB-v101-final-verify.log`, `accept*-v101-final-pkg-*`, `accept*-v101-final-units-*`).
+  - Enrollment UEFI, Stage 5 ativo + `pacman -S/-Rns tree` + rollback durável PRE via PTY interativo e dois reboots consecutivos (`acceptB-v101-final-secureboot-enroll.log`, `acceptB-v101-final-stage5-and-restore.log`, `acceptB-v101-final-reboot1.log`, `acceptB-v101-final-reboot2.log`).
 
 ---
 
