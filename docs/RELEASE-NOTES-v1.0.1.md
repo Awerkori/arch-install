@@ -1,7 +1,7 @@
-# Release Notes — Nox Archinstall `v1.0.1` (Candidata em Homologação)
+# Release Notes — Nox Archinstall `v1.0.1`
 
-> **Estado:** Preparada no Pull Request #1 (`hardening/v1.0.1` → `main`). **Ainda não publicada como release/tag.**  
-> A release estável [`v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0) e sua tag/artefatos permanecem integralmente preservados.
+> **Estado:** Publicada em [`releases/tag/v1.0.1`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.1) (`Latest`, `immutable: true`, integrada via [PR #1](https://github.com/Awerkori/arch-install/pull/1) no commit `efc8e9018a2c4bf15ff3493af1f36d0b7eddc84a`).  
+> A release estável anterior [`v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0) e sua tag/artefatos permanecem integralmente preservados.
 
 ## 1. Resumo das Melhorias e Correções de Hardening (`v1.0.1`)
 
@@ -19,7 +19,7 @@
    - Diferimento de `snapper` e `snap-pac` para o estágio `60-snapshots.sh` com `SNAP_PAC_SKIP=y`, zerando erros `fatal library error, lookup self` no `pacstrap` (`0` ocorrências).
 
 3. **Documentação e apresentação pública:**
-   - Separação clara entre o comando estável da release publicada `v1.0.0` (com `mktemp -d`, `trap` e verificação SHA-256 antes da execução) e os artefatos da `v1.0.1` em homologação.
+   - Atualização do comando principal de instalação para a release publicada `v1.0.1` (com `mktemp -d`, `trap` e verificação SHA-256 antes da execução), preservando `v1.0.0` no histórico.
    - Correções em [`docs/INSTALLATION.md`](INSTALLATION.md), [`docs/RECOVERY.md`](RECOVERY.md), [`docs/SECURE-BOOT.md`](SECURE-BOOT.md), [`docs/SECURE-BOOT-MSI.md`](SECURE-BOOT-MSI.md) (`--no-microsoft`, `/usr/local/bin/limine-snapper-restore`, 4 etapas numeradas + confirmação destrutiva final) e captura oficial do desktop real no [`README.md`](../README.md).
 
 ## 2. Cadeia Congelada Verificada (`manifests/release.json`)
@@ -32,7 +32,9 @@
 | `nox-archinstall-payload-v1.0.1.tar.gz` | `83624813f3f32fd8608ee881b21b7ab6ec92cf3e` | `52008f9c454c8b39c91d6e51b3546f6a76546f021c3c6a0850dc7a55d5bf92b2` |
 | `nox-archinstall-payload-v1.0.1.tar.gz.sha256` | `—` | `c6d52792ff1e1038663c633ea81a4f96d9db953ef54139a221b00ee46373ccf0` |
 
-## 3. Roteiro Pós-Aprovação (Executar somente após aprovação do proprietário)
+## 3. Registro do Roteiro Executado na Publicação (`v1.0.1`)
+
+*(Sequência executada após aprovação humana do PR #1 para integrar em `main`, habilitar imutabilidade e publicar os 4 assets congelados em [`releases/tag/v1.0.1`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.1):)*
 
 ```bash
 # 1. Conferir CI verde no PR #1 e revisar diff contra main

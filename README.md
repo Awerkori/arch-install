@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Awerkori/arch-install/actions/workflows/ci.yml"><img src="https://github.com/Awerkori/arch-install/actions/workflows/ci.yml/badge.svg?branch=hardening%2Fv1.0.1" alt="Nox Archinstall CI" /></a>
-  <a href="https://github.com/Awerkori/arch-install/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/release-v1.0.0%20est%C3%A1vel-7c3aed?style=flat-square" alt="Release estável v1.0.0" /></a>
+  <a href="https://github.com/Awerkori/arch-install/actions/workflows/ci.yml"><img src="https://github.com/Awerkori/arch-install/actions/workflows/ci.yml/badge.svg?branch=main" alt="Nox Archinstall CI" /></a>
+  <a href="https://github.com/Awerkori/arch-install/releases/tag/v1.0.1"><img src="https://img.shields.io/badge/release-v1.0.1%20est%C3%A1vel-7c3aed?style=flat-square" alt="Release estável v1.0.1" /></a>
   <img src="https://img.shields.io/badge/arch-x86--64--v4%20%C2%B7%20linux--cachyos-5b21b6?style=flat-square" alt="Arquitetura x86-64-v4 e linux-cachyos" />
   <img src="https://img.shields.io/badge/boot-Limine%20%C2%B7%20BLAKE2B%20%C2%B7%20sbctl-a855f7?style=flat-square" alt="Limine BLAKE2B e sbctl" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0-1f1635?style=flat-square" alt="Licença AGPL-3.0" /></a>
@@ -51,20 +51,20 @@ Ele parte da **ISO oficial do Arch Linux** (`archinstall 4.5`) para garantir bas
 
 ---
 
-## Como Instalar (`v1.0.0` Estável Publicada)
+## Como Instalar (`v1.0.1` Estável Publicada)
 
-> **Estado das versões:** a release atualmente **publicada e disponível para uso imediato** é a **[`v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0)**. A revisão **`v1.0.1`** permanece em homologação no [PR #1](https://github.com/Awerkori/arch-install/pull/1) (branch `hardening/v1.0.1`, ainda **não publicada**; sua cadeia determinística para o futuro lançamento está em [`manifests/release.json`](manifests/release.json)).
+> **Estado das versões:** a release estável atual, publicada e protegida por imutabilidade no GitHub é a **[`v1.0.1`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.1)** (`Latest`, cadeia verificada em [`manifests/release.json`](manifests/release.json)). A versão anterior **[`v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0)** permanece preservada integralmente no histórico de releases.
 
 > **AVISO DESTRUTIVO:** O disco selecionado durante a instalação será **formatado integralmente** e **todos os dados existentes serão apagados permanentemente**. Faça backup antes de continuar.
 
-Na **ISO oficial do Arch Linux** (`archlinux-2026.11.01-x86_64.iso`, modo UEFI 64 bits, Secure Boot temporariamente desativado na BIOS e conexão de rede ativa), execute este **único comando público oficial da release publicada `v1.0.0`**:
+Na **ISO oficial do Arch Linux** (`archlinux-2026.11.01-x86_64.iso`, modo UEFI 64 bits, Secure Boot temporariamente desativado na BIOS e conexão de rede ativa), execute este **único comando público oficial da release publicada `v1.0.1`**:
 
 ```bash
 sh -c 'set -eu; d=$(umask 077; mktemp -d); trap "rm -rf \"$d\"" EXIT INT TERM; \
-curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-install.py -o "$d/nox-install.py"; \
-printf "%s  %s/nox-install.py\n" "fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10" "$d" | sha256sum -c -; \
-curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/user_configuration.json -o "$d/nox-cfg.json"; \
-printf "%s  %s/nox-cfg.json\n" "6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c" "$d" | sha256sum -c -; \
+curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-install.py -o "$d/nox-install.py"; \
+printf "%s  %s/nox-install.py\n" "fa6c2a3b1ee86cd60976857555326bf6a63c341914e9c061f557a62a74e03b47" "$d" | sha256sum -c -; \
+curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.1/user_configuration.json -o "$d/nox-cfg.json"; \
+printf "%s  %s/nox-cfg.json\n" "9cb32121cb9a87b54b7c07749a92d3b8cb6cffcf6e4dadc502f3fa9a3da3a867" "$d" | sha256sum -c -; \
 umask 022; python3 "$d/nox-install.py" --config "$d/nox-cfg.json"'
 ```
 
@@ -76,7 +76,7 @@ O assistente exibe **4 etapas numeradas** (`[1/4]` seleção do disco → `[2/4]
 
 | Guia | Assunto |
 |---|---|
-| [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Guia passo a passo na ISO, Wi-Fi `iwctl` e hashes congelados da `v1.0.0` |
+| [`docs/INSTALLATION.md`](docs/INSTALLATION.md) | Guia passo a passo na ISO, Wi-Fi `iwctl` e hashes congelados da `v1.0.1` (e histórico `v1.0.0`) |
 | [`docs/KEYBINDS_MIGRATION.md`](docs/KEYBINDS_MIGRATION.md) | Atalhos completos do compositor **Umbriel** e launcher **Noctalia** |
 | [`docs/SECURE-BOOT-MSI.md`](docs/SECURE-BOOT-MSI.md) | Guia físico para **MSI PRO B650M-P** (`FQ0001`, `--microsoft`, `JBAT1`, Fases A–F) |
 | [`docs/SECURE-BOOT.md`](docs/SECURE-BOOT.md) | Arquitetura geral de **Secure Boot**, `sbctl` e fluxo de 5 estágios |

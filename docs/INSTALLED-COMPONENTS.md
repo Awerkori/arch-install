@@ -6,8 +6,8 @@
 ## Metadados da Revisão Documentada
 
 - **Repositório:** `https://github.com/Awerkori/arch-install`
-- **Release estável publicada:** `v1.0.0` (`https://github.com/Awerkori/arch-install/releases/tag/v1.0.0`, payload SHA-256 `08fbf62a2325b2a3a4b30a3d7ec4b986bc17f412970ba25f83839624444d6fd9`)
-- **Revisão de hardening em homologação:** `v1.0.1` (branch `hardening/v1.0.1`, PR #1 ainda não publicado, payload SHA-256 `52008f9c454c8b39c91d6e51b3546f6a76546f021c3c6a0850dc7a55d5bf92b2`)
+- **Release estável atual (`Latest`):** [`v1.0.1`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.1) (payload SHA-256 `52008f9c454c8b39c91d6e51b3546f6a76546f021c3c6a0850dc7a55d5bf92b2`)
+- **Release anterior preservada:** [`v1.0.0`](https://github.com/Awerkori/arch-install/releases/tag/v1.0.0) (payload SHA-256 `08fbf62a2325b2a3a4b30a3d7ec4b986bc17f412970ba25f83839624444d6fd9`)
 - **Base de comprovação:** Instalações limpas independentes a partir da ISO oficial `archlinux-2026.11.01-x86_64.iso` (`ACCEPT-A-CLEAN` / `ACCEPT-B-CLEAN` e par definitivo congelado `ACCEPT-A-V101-FINAL` / `ACCEPT-B-V101-FINAL`), verificadas com `diff` nulo entre ambas e contra [`INSTALLED-PACKAGES.tsv`](INSTALLED-PACKAGES.tsv).
 
 ### Contagem Total de Pacotes (`ACCEPT-A` e `ACCEPT-B`)
