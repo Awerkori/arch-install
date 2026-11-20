@@ -3,6 +3,14 @@
 set -Eeuo pipefail
 
 MODE="${1:---repair-if-dirty}"
+case "$MODE" in
+  --repair-if-dirty | --repair | --force | --verify | --check) ;;
+  *)
+    echo "Uso: $0 [--repair-if-dirty|--repair|--force|--verify|--check]" >&2
+    exit 2
+    ;;
+esac
+
 ESP="${ESP_PATH:-/boot}"
 if [[ -z "${ESP_PATH:-}" ]] && ! findmnt "$ESP" >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
   ESP="/efi"
@@ -20,7 +28,21 @@ FALLBACK_HOOK="${NOX_FALLBACK_HOOK:-/etc/boot/hooks/post.d/95-nox-sbctl-fallback
 VERIFY_BIN="${NOX_VERIFY_BIN:-/usr/local/bin/nox-secureboot-verify}"
 SBCTL_BIN="${NOX_SBCTL_BIN:-sbctl}"
 
-[[ -f "$CONF" ]] || exit 0
+if [[ ! -f "$CONF" ]]; then
+  if [[ -f "$DIRTY_MARKER" ]]; then
+    echo "nox-limine-integrity: ERRO CRITICO — $CONF ausente durante transacao interrompida ($DIRTY_MARKER preservado)." >&2
+    exit 1
+  fi
+  if [[ "$MODE" == "--force" || "$MODE" == "--repair" || "$MODE" == "--verify" || "$MODE" == "--check" ]]; then
+    echo "nox-limine-integrity: ERRO CRITICO — configuracao obrigatoria ausente ($CONF) para modo ${MODE}." >&2
+    exit 1
+  fi
+  if [[ -s "$LIMINE_EFI" || -s "$FALLBACK_EFI" || -f "$LIMINE_DEFAULT" ]]; then
+    echo "nox-limine-integrity: ERRO CRITICO — instalacao do Limine detectada, mas $CONF esta ausente." >&2
+    exit 1
+  fi
+  exit 0
+fi
 
 _is_config_normalized() {
   ! grep -Eq '^[[:space:]]*//linux-cachyos$|^[[:space:]]*///[0-9]+[[:space:]]*\||^[[:space:]]*/\+Snapshots\b' "$CONF" || return 1
@@ -60,6 +82,30 @@ _are_efi_binaries_signed() {
   done
   return 0
 }
+
+if [[ "$MODE" == "--verify" || "$MODE" == "--check" ]]; then
+  if [[ -f "$DIRTY_MARKER" ]]; then
+    echo "nox-limine-integrity: ERRO CRITICO — marcador de transacao pendente encontrado ($DIRTY_MARKER)." >&2
+    exit 1
+  fi
+  if ! _is_config_normalized; then
+    echo "nox-limine-integrity: ERRO CRITICO — $CONF nao esta normalizado." >&2
+    exit 1
+  fi
+  if ! _are_blake2b_enrolled; then
+    echo "nox-limine-integrity: ERRO CRITICO — hash BLAKE2B de $CONF ausente ou divergente nos binarios EFI." >&2
+    exit 1
+  fi
+  if ! _are_efi_binaries_signed; then
+    echo "nox-limine-integrity: ERRO CRITICO — assinatura EFI sbctl invalida ou ausente." >&2
+    exit 1
+  fi
+  exec "$VERIFY_BIN" \
+    --esp-path "$ESP" \
+    --limine-default "$LIMINE_DEFAULT" \
+    --dirty-marker "$DIRTY_MARKER" \
+    --sbctl-bin "$SBCTL_BIN"
+fi
 
 needs_repair=false
 if [[ "$MODE" == "--force" || "$MODE" == "--repair" ]]; then

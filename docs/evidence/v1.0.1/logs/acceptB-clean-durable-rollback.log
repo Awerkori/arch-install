@@ -1,0 +1,62 @@
+=== ACCEPT-B-CLEAN: A5 DURABLE PRE SNAPSHOT ROLLBACK VERIFICATION (WITH ACTIVE SECURE BOOT) ===
+Target VM: nox-archinstall-lab-acceptB-clean (UEFI OVMF Secure Boot Active / User Mode)
+Sentinel on @home: /home/noxdev/nox-home-sentinel.txt
+Sentinel content: NOX_HOME_SENTINEL_V101_DURABLE_ROLLBACK
+Sentinel SHA-256 (pre-rollback): 147365d8958188ca86c60c4e90d456fb115c0eaf457843343ae85d7bf6440f75
+
+--- Pre-restore snapshots & disposable root mutations ---
+ # | Type   | Pre # | Description          | Cleanup
+ 7 | pre    |       | nox-a5-rollback-pre  | number
+ 8 | post   |     7 | nox-a5-rollback-post | number
+10 | single |       | nox-a5-backup        |
+Disposable files created between PRE (#7) and POST (#8):
+- /etc/nox-disposable-rollback-test
+- /usr/local/share/nox-disposable-dir/marker.txt
+
+--- Pre-reboot Limine BLAKE2B & sbctl verification ---
+limine.conf b2=6266b221c6828f7199c7eebb446b01d07ea9aafe4b356e8750465359d844b426caaac2a056854d9b7fcd1da75cc541c9579b6070ab6deb16065f709445bbc2b3
+PRIMARY_B2_ENROLLED=OK
+FALLBACK_B2_ENROLLED=OK
+✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+✓ /boot/EFI/limine/limine_x64.efi is signed
+✓ /boot/ee2397ec1a1d41228abf12fa4d3f0a5a/limine_history/vmlinuz_xxh_1e68f16c2e7455d9 is signed
+✓ /boot/ee2397ec1a1d41228abf12fa4d3f0a5a/linux-cachyos/vmlinuz is signed
+
+--- Post-reboot verification (booted from Limine into Noctalia Greeter & tty2) ---
+PASS_ABSENT: /etc/nox-disposable-rollback-test and /usr/local/share/nox-disposable-dir absent
+NOX_HOME_SENTINEL_V101_DURABLE_ROLLBACK
+147365d8958188ca86c60c4e90d456fb115c0eaf457843343ae85d7bf6440f75  /home/noxdev/nox-home-sentinel.txt
+root=UUID=22ecb8d7-0fed-44c6-9fc5-1ead3ecaf872 rw rootflags=subvol=/@ rootfstype=btrfs quiet loglevel=3 systemd.show_status=auto rd.udev.log_level=3 amd_pstate=active amd_iommu=on iommu=pt zswap.enabled=0 nowatchdog
+
+/ /dev/vda2[/@] btrfs rw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=273,subvol=/@
+/home /dev/vda2[/@home] btrfs rw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=258,subvol=/@home
+/.snapshots /dev/vda2[/@.snapshots] btrfs rw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=257,subvol=/@.snapshots
+/boot /dev/vda1 vfat rw,relatime,fmask=0177,dmask=0077,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro
+/var/log /dev/vda2[/@log] btrfs rw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=259,subvol=/@log
+/var/cache/pacman/pkg /dev/vda2[/@pkg] btrfs rw,noatime,compress=zstd:3,discard=async,space_cache=v2,subvolid=260,subvol=/@pkg
+
+[PASS] Stage 1 (Key Preparation): sbctl per-install private keys present
+[PASS] Stage 3 (Transaction State): no dirty Limine transaction marker
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/limine/limine_x64.efi is signed
+[PASS] Stage 2 (Binary Signature): ✓ /boot/EFI/BOOT/BOOTX64.EFI is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/ee2397ec1a1d41228abf12fa4d3f0a5a/limine_history/vmlinuz_xxh_1e68f16c2e7455d9 is signed
+[PASS] Stage 2 (Kernel Signature): ✓ /boot/ee2397ec1a1d41228abf12fa4d3f0a5a/linux-cachyos/vmlinuz is signed
+[PASS] Stage 3 (Limine Policy): /etc/default/limine enables verification + config enrollment
+[PASS] Stage 3 (Config Syntax): /boot/limine.conf all kernel/initramfs paths carry BLAKE2 checksums
+[PASS] Stage 3 (Asset Integrity): all boot():/ files referenced in /boot/limine.conf match their BLAKE2B hashes on disk
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (6266b221c6828f71...) enrolled in /boot/EFI/limine/limine_x64.efi
+[PASS] Stage 3 (Config Enrollment): /boot/limine.conf BLAKE2B (6266b221c6828f71...) enrolled in /boot/EFI/BOOT/BOOTX64.EFI
+[PASS] Stage 4 (Firmware Key Enrollment): Keys enrolled in UEFI NVRAM (User Mode; Setup Mode Disabled)
+[PASS] Stage 5 (UEFI Enforcement): UEFI Secure Boot is actively enforced by firmware
+[NOX SECUREBOOT] OK: chaves verificadas, Limine/kernel assinados, hash BLAKE2B de limine.conf inscrito e estado do firmware valido.
+NEW_VERIFY_EXIT=0
+NEW_REPAIR_IF_DIRTY_EXIT=0
+SECUREBOOT_ACTIVE_EXIT=0
+{"installed": true, "guid": "0b661124-6dd8-4188-b816-6bc207a9d8fb", "setup_mode": false, "secure_boot": true, "vendors": ["microsoft"], "firmware_quirks": []}
+uname_r=7.3.5-2-cachyos
+/lib/modules/7.3.5-2-cachyos/modules.dep: present (935K)
+linux-cachyos 7.3.5-2
+ethtool 1:7.2-1.1
+linux-cachyos: 7843 total files, 0 missing files
+systemd_failed_system=0
+SENTINEL_REMOVED=OK

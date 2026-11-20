@@ -1,4 +1,4 @@
-# Guia Geral e Didático de Secure Boot — Project Nox (`v1.0.0`)
+# Guia Geral e Didático de Secure Boot — Nox Archinstall (`v1.0.0` / `v1.0.1`)
 
 Este documento explica, passo a passo e sem exigir conhecimento prévio de criptografia ou firmware, como o **UEFI Secure Boot** funciona no **Project Nox**, como ele se integra ao bootloader **Limine**, ao **`sbctl`** e ao **Snapper**, e como ativá-lo utilizando o **Método A (Procedimento Geral Simples)**.
 

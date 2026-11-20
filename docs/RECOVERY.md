@@ -1,4 +1,4 @@
-# Manual Completo de Recuperação — Project Nox (`v1.0.0`)
+# Manual Completo de Recuperação — Nox Archinstall (`v1.0.0` / `v1.0.1`)
 
 Este manual descreve, passo a passo, como recuperar o sistema **Project Nox** nos **10 cenários reais de falha ou manutenção** sem precisar formatar o SSD e sem perder seus arquivos pessoais em `/home`.
 

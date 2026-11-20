@@ -2373,5 +2373,286 @@ class TestDocumentationAndManifestIntegrity(unittest.TestCase):
             self.assertEqual(post_umask, 0o077)
 
 
+class TestLimineIntegrityAndSnapPacRegression(unittest.TestCase):
+    def test_a3_snap_pac_deferred_out_of_pacstrap_to_stage_60(self) -> None:
+        cfg = json.loads((REPO / "user_configuration.json").read_text(encoding="utf-8"))
+        self.assertNotIn("snap-pac", cfg["packages"])
+        self.assertNotIn("snapper", cfg["packages"])
+        stage60 = (REPO / "scripts/60-snapshots.sh").read_text(encoding="utf-8")
+        self.assertIn("SNAP_PAC_SKIP=y pacman -S --needed --noconfirm snapper snap-pac", stage60)
+
+    def test_a4_nox_limine_integrity_state_matrix_and_verify_mode(self) -> None:
+        import hashlib
+
+        def b2(data: bytes) -> str:
+            return hashlib.blake2b(data, digest_size=64).hexdigest()
+
+        script = REPO / "configs/bin/nox-limine-integrity"
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            esp = root / "boot"
+            (esp / "EFI/limine").mkdir(parents=True)
+            (esp / "EFI/BOOT").mkdir(parents=True)
+            conf = esp / "limine.conf"
+            lim_efi = esp / "EFI/limine/limine_x64.efi"
+            fb_efi = esp / "EFI/BOOT/BOOTX64.EFI"
+            dirty = root / "dirty.marker"
+            lim_def = root / "default-limine"
+            state_signed = root / "signed.flag"
+
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            mock_norm = bin_dir / "norm"
+            mock_norm.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "from pathlib import Path\n"
+                "f = Path(sys.argv[sys.argv.index('--file') + 1])\n"
+                "f.write_text('/+Arch Linux\\n  //Project Nox\\n', encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            mock_norm.chmod(0o755)
+
+            mock_enr = bin_dir / "limine-enroll-config"
+            mock_enr.write_text(
+                "#!/usr/bin/env python3\n"
+                "import hashlib, os\n"
+                "from pathlib import Path\n"
+                "esp = Path(os.environ['ESP_PATH'])\n"
+                "h = hashlib.blake2b((esp / 'limine.conf').read_bytes(), digest_size=64).hexdigest()\n"
+                "(esp / 'EFI/limine/limine_x64.efi').write_bytes(b'EFI-' + h.encode())\n",
+                encoding="utf-8",
+            )
+            mock_enr.chmod(0o755)
+
+            mock_fb = bin_dir / "fallback"
+            mock_fb.write_text(
+                "#!/usr/bin/env python3\n"
+                "import hashlib, os\n"
+                "from pathlib import Path\n"
+                "esp = Path(os.environ['ESP_PATH'])\n"
+                "h = hashlib.blake2b((esp / 'limine.conf').read_bytes(), digest_size=64).hexdigest()\n"
+                "(esp / 'EFI/BOOT/BOOTX64.EFI').write_bytes(b'FB-' + h.encode())\n",
+                encoding="utf-8",
+            )
+            mock_fb.chmod(0o755)
+
+            mock_sbctl = bin_dir / "sbctl"
+            mock_sbctl.write_text(
+                "#!/usr/bin/env bash\n"
+                "case \"$1\" in\n"
+                "  setup) echo '{\"installed\": true}' ;;\n"
+                f"  verify) [[ -f '{state_signed}' ]] && echo \"✓ $2 is signed\" || exit 1 ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            mock_sbctl.chmod(0o755)
+
+            mock_verify = bin_dir / "verify"
+            mock_verify.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            mock_verify.chmod(0o755)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{bin_dir}:{env['PATH']}",
+                    "ESP_PATH": str(esp),
+                    "NOX_DIRTY_MARKER": str(dirty),
+                    "NOX_LIMINE_DEFAULT": str(lim_def),
+                    "NOX_NORMALIZE_BIN": str(mock_norm),
+                    "NOX_LIMINE_ENROLL_BIN": "limine-enroll-config",
+                    "NOX_FALLBACK_HOOK": str(mock_fb),
+                    "NOX_VERIFY_BIN": str(mock_verify),
+                    "NOX_SBCTL_BIN": str(mock_sbctl),
+                    "NOX_ALLOW_NONROOT_TEST": "1",
+                }
+            )
+
+            def run_integ(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    ["bash", str(script), *args],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+            # 1. Unknown flag must exit 2
+            self.assertEqual(run_integ("--bogus-flag").returncode, 2)
+
+            # 2. Clean pre-boot uninitialized state (no limine.conf, no .dirty, no Limine artifacts) -> 0
+            self.assertEqual(run_integ("--repair-if-dirty").returncode, 0)
+
+            # 3. Missing limine.conf WITH .dirty marker -> fail closed AND preserve .dirty marker!
+            dirty.write_text("dirty\n", encoding="utf-8")
+            r_dirty_missing = run_integ("--repair-if-dirty")
+            self.assertNotEqual(r_dirty_missing.returncode, 0)
+            self.assertTrue(dirty.exists(), ".dirty marker must be preserved when limine.conf is missing")
+
+            # 4. Missing limine.conf under explicit --force/--repair/--verify/--check -> fail closed
+            dirty.unlink()
+            for flag in ("--force", "--repair", "--verify", "--check"):
+                res_m = run_integ(flag)
+                self.assertNotEqual(res_m.returncode, 0, f"{flag} must fail when {conf} missing")
+
+            # 5. Missing limine.conf when Limine artifacts already exist -> fail closed even under --repair-if-dirty
+            lim_def.write_text("ENABLE_ENROLL_LIMINE_CONFIG=yes\n", encoding="utf-8")
+            self.assertNotEqual(run_integ("--repair-if-dirty").returncode, 0)
+
+            # 6. Converged config + --verify / --check matrix (including dirty marker preservation)
+            conf.write_text("/+Arch Linux\n  //Project Nox\n", encoding="utf-8")
+            h_ok = b2(conf.read_bytes())
+            lim_efi.write_bytes(b"EFI-" + h_ok.encode())
+            fb_efi.write_bytes(b"FB-" + h_ok.encode())
+            state_signed.write_text("1", encoding="utf-8")
+
+            self.assertEqual(run_integ("--verify").returncode, 0)
+            self.assertEqual(run_integ("--check").returncode, 0)
+
+            dirty.write_text("pending\n", encoding="utf-8")
+            r_v_dirty = run_integ("--verify")
+            self.assertNotEqual(r_v_dirty.returncode, 0)
+            self.assertTrue(dirty.exists(), "--verify must not delete .dirty marker")
+
+            # Cleanup via --repair-if-dirty succeeds and clears .dirty
+            r_fix = run_integ("--repair-if-dirty")
+            self.assertEqual(r_fix.returncode, 0, r_fix.stderr)
+            self.assertFalse(dirty.exists())
+            self.assertEqual(run_integ("--verify").returncode, 0)
+
+
+class TestDocumentationAndPublicationContracts(unittest.TestCase):
+    V100_FROZEN = {
+        "nox-install.py": "fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10",
+        "user_configuration.json": "6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c",
+        "payload": "08fbf62a2325b2a3a4b30a3d7ec4b986bc17f412970ba25f83839624444d6fd9",
+    }
+
+    def test_relative_markdown_links_and_images_resolve(self) -> None:
+        import re
+
+        md_files = [REPO / "README.md", *sorted((REPO / "docs").glob("*.md"))]
+        link_re = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)\)")
+        img_re = re.compile(r'<img\b[^>]*\bsrc=["\']([^"\']+)["\']')
+        for md in md_files:
+            text = md.read_text(encoding="utf-8")
+            targets = link_re.findall(text) + img_re.findall(text)
+            for raw in targets:
+                if raw.startswith(("http://", "https://", "mailto:", "#")):
+                    continue
+                rel = raw.split("#", 1)[0]
+                if not rel:
+                    continue
+                target_path = (md.parent / rel).resolve()
+                self.assertTrue(
+                    target_path.exists(),
+                    f"Broken relative link {raw!r} in {md.relative_to(REPO)} -> {target_path}",
+                )
+
+    def test_evidence_manifest_complete_tracked_and_valid(self) -> None:
+        import hashlib
+
+        ev_dir = REPO / "docs/evidence/v1.0.1"
+        manifest = ev_dir / "MANIFEST.sha256"
+        lines = [line.strip() for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertGreaterEqual(len(lines), 22)
+        listed_paths: set[str] = set()
+        for line in lines:
+            digest, rel = line.split(None, 1)
+            rel = rel.lstrip("*./")
+            fpath = ev_dir / rel
+            self.assertTrue(fpath.is_file(), f"Missing manifest file: {fpath}")
+            actual = hashlib.sha256(fpath.read_bytes()).hexdigest()
+            self.assertEqual(actual, digest, f"SHA-256 mismatch for {fpath}")
+            listed_paths.add(f"docs/evidence/v1.0.1/{rel}")
+
+            ign = subprocess.run(
+                ["git", "-C", str(REPO), "check-ignore", f"docs/evidence/v1.0.1/{rel}"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(ign.returncode, 0, f"Evidence file is gitignored: docs/evidence/v1.0.1/{rel}")
+
+        # Verify all evidence references inside FINAL-AUDIT-REPORT.md exist
+        report = (REPO / "docs/FINAL-AUDIT-REPORT.md").read_text(encoding="utf-8")
+        for expected in (
+            "docs/evidence/v1.0.1/MANIFEST.sha256",
+            "acceptB-clean-durable-rollback.log",
+            "acceptA-clean-verify.log",
+            "acceptB-clean-verify.log",
+            "acceptB-clean-secureboot-enroll.log",
+            "acceptB-clean-secureboot-active-and-snapper.log",
+            "acceptB-clean-snap-pac-and-cleanup.log",
+        ):
+            self.assertIn(expected, report)
+
+    def test_readme_and_docs_install_commands_use_published_v100_and_verified_hashes(self) -> None:
+        import re
+
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+        install_doc = (REPO / "docs/INSTALLATION.md").read_text(encoding="utf-8")
+        audit_doc = (REPO / "docs/FINAL-AUDIT-REPORT.md").read_text(encoding="utf-8")
+        comp_doc = (REPO / "docs/INSTALLED-COMPONENTS.md").read_text(encoding="utf-8")
+        rel_manifest = json.loads((REPO / "manifests/release.json").read_text(encoding="utf-8"))
+
+        # README must expose only ONE bash install block, targeting published v1.0.0 with immutable assets and umask 022
+        bash_blocks = re.findall(r"```bash\n(.*?)```", readme, flags=re.S)
+        self.assertEqual(len(bash_blocks), 1, "README.md must contain exactly ONE primary live bash install block")
+        cmd = bash_blocks[0]
+        self.assertIn("https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-install.py", cmd)
+        self.assertIn(self.V100_FROZEN["nox-install.py"], cmd)
+        self.assertIn("https://github.com/Awerkori/arch-install/releases/download/v1.0.0/user_configuration.json", cmd)
+        self.assertIn(self.V100_FROZEN["user_configuration.json"], cmd)
+        self.assertIn("umask 022", cmd)
+        self.assertNotIn("releases/download/v1.0.1", cmd)
+        self.assertNotIn("/refs/heads/main", cmd)
+        self.assertNotIn("/main/", cmd)
+
+        # Must clearly separate published v1.0.0 from unpublished v1.0.1 candidate
+        self.assertIn("v1.0.0", readme)
+        self.assertIn("não publicada", readme.lower())
+        self.assertIn("não foi publicada", install_doc.lower())
+
+        # INSTALLATION.md must carry matching v1.0.0 hashes & URLs, never broken 404 or mismatched daeea6fb
+        self.assertIn(self.V100_FROZEN["nox-install.py"], install_doc)
+        self.assertIn(self.V100_FROZEN["user_configuration.json"], install_doc)
+        self.assertIn(self.V100_FROZEN["payload"], install_doc)
+        self.assertNotIn("32c074ca3819d261a774b92ee4c7359411b963d5", install_doc)
+        self.assertNotIn("daeea6fb99a7c76b071036c97d041e95783b54c5f46bfa2360ac4c1c173688e0", install_doc)
+        self.assertNotIn("raw.githubusercontent.com/Awerkori/arch-install/main/", install_doc)
+
+        # FINAL-AUDIT-REPORT.md and INSTALLED-COMPONENTS.md must stay synchronized with current manifests/release.json
+        self.assertIn(rel_manifest["payload_sha256"], audit_doc)
+        self.assertIn(rel_manifest["config_commit"], audit_doc)
+        self.assertIn(rel_manifest["bootstrap_commit"], audit_doc)
+        self.assertIn(rel_manifest["launcher_commit"], audit_doc)
+        self.assertIn(rel_manifest["launcher_sha256"], audit_doc)
+        self.assertIn(rel_manifest["bootstrap_sha256"], audit_doc)
+        self.assertIn(rel_manifest["config_sha256"], audit_doc)
+        self.assertIn(self.V100_FROZEN["payload"], comp_doc)
+        self.assertIn(rel_manifest["payload_sha256"], comp_doc)
+
+    def test_docs_and_evidence_have_no_secrets_private_paths_or_unverified_user_anecdotes(self) -> None:
+        import re
+
+        secret_re = re.compile(
+            r"noxdev123|[g]hp_|[g]ho_|[g]ithub_pat_|AKIA[0-9A-Z]{16}|BEGIN (?:OPENSSH|RSA|EC|DSA|PGP)? ?PRIVATE KEY|/home/awerkori|52:54:00"
+        )
+        paths_to_check = [
+            REPO / "README.md",
+            *sorted((REPO / "docs").glob("*.md")),
+            *sorted((REPO / "docs/evidence/v1.0.1/logs").glob("*")),
+        ]
+        for p in paths_to_check:
+            txt = p.read_text(encoding="utf-8", errors="replace")
+            self.assertIsNone(secret_re.search(txt), f"Sensitive or private string found in {p.relative_to(REPO)}")
+
+        msi_doc = (REPO / "docs/SECURE-BOOT-MSI.md").read_text(encoding="utf-8")
+        self.assertNotIn("Relatos reais de usuários", msi_doc)
+        self.assertIn("Cenários técnicos documentados", msi_doc)
+
+
+
 
 

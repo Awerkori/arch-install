@@ -10,7 +10,8 @@ if $NOX_DRY_RUN; then
 fi
 
 nox_wait_pacman_lock
-pacman -S --needed --noconfirm snapper snap-pac limine-snapper-sync inotify-tools xxhash
+# Skip pre/post snap-pac hooks during initial installation before root snapper config and /etc/snap-pac.ini exist.
+SNAP_PAC_SKIP=y pacman -S --needed --noconfirm snapper snap-pac limine-snapper-sync inotify-tools xxhash
 
 BOOT_MP="/boot"
 if ! findmnt /boot >/dev/null 2>&1 && findmnt /efi >/dev/null 2>&1; then
