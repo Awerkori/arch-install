@@ -2288,7 +2288,10 @@ class TestDocumentationAndManifestIntegrity(unittest.TestCase):
             self.assertIn("ERRO payload", bad_res.stderr)
 
     def test_nox_install_restores_umask_022_before_invoking_archinstall(self) -> None:
-        mod = self._load_nox_install()
+        import hashlib
+        from unittest import mock
+
+        mod = TestTrustChainHardening._load_nox_install()
         observed: dict[str, object] = {}
 
         with tempfile.TemporaryDirectory() as td:
@@ -2299,9 +2302,7 @@ class TestDocumentationAndManifestIntegrity(unittest.TestCase):
             if not payload_tar.is_file():
                 subprocess.run(["bash", str(REPO / "scripts/build-release.sh")], cwd=REPO, check=True)
             manifest = json.loads((REPO / "manifests/release.json").read_text(encoding="utf-8"))
-            payload_url = manifest["payload_url"]
             payload_sha = manifest["payload_sha256"]
-            override_cmd = manifest["artifacts"]
 
             fake_disk = {
                 "name": "vda",
@@ -2346,10 +2347,12 @@ class TestDocumentationAndManifestIntegrity(unittest.TestCase):
                 )
                 with (
                     mock.patch.object(mod, "ensure_interactive_tty"),
-                    mock.patch.object(mod, "preflight_environment", return_value="4.5"),
+                    mock.patch.object(mod, "ensure_arch_iso_environment"),
+                    mock.patch.object(mod, "detect_archinstall_version", return_value="4.5"),
                     mock.patch.object(mod, "list_candidate_disks", return_value=[fake_disk]),
                     mock.patch.object(mod, "verify_disk_safe_to_wipe"),
                     mock.patch.object(mod, "_read_disk_sector_size", return_value=512),
+                    mock.patch.object(mod, "hash_password_sha512", return_value="$6$test$hash"),
                     mock.patch.object(mod, "select_tmpfs_dir", return_value=td),
                     mock.patch.object(mod, "scrub_persisted_archinstall_credentials"),
                     mock.patch("builtins.input", side_effect=lambda _prompt="": next(answers)),
@@ -2368,7 +2371,6 @@ class TestDocumentationAndManifestIntegrity(unittest.TestCase):
             self.assertEqual(observed["cfg_mode"], 0o600)
             self.assertEqual(observed["creds_mode"], 0o600)
             self.assertEqual(post_umask, 0o077)
-            _ = override_cmd
 
 
 
