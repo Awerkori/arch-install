@@ -12,25 +12,50 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
+import hmac
+import http.client
 import json
 import os
 import re
+import socket
+import ssl
 import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
 
-DEFAULT_CONFIG_URL = "https://raw.githubusercontent.com/Awerkori/arch-install/main/user_configuration.json"
+NOX_RELEASE_VERSION = "v1.0.1"
+OFFICIAL_CONFIG_COMMIT = "e2e84418d045b8856157265dd4f74f9172211e4e"
+DEFAULT_CONFIG_URL = (
+    f"https://raw.githubusercontent.com/Awerkori/arch-install/{OFFICIAL_CONFIG_COMMIT}/user_configuration.json"
+)
+OFFICIAL_CONFIG_SHA256 = "aef4bdeb5268d1bbbebb42ad8de00cf7d98b71b687332bfab1f259cadb8311f9"
+OFFICIAL_PAYLOAD_URL = (
+    "https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz"
+)
+OFFICIAL_PAYLOAD_SHA256 = "660d6caa4a418a17a6a4138f2a1d61f10673718aeca775adca6bcf3fdbdd1ec3"
+
 LEGACY_RC_TAG = "v1.0.0-rc10"
+LEGACY_RC_PREFIX = "v1.0.0-rc"
 HOMOLOGATED_ARCHINSTALL_SERIES = "4.5"
 REQUIRED_ARCHINSTALL_FLAGS = ("--silent", "--config", "--creds", "--skip-version-check", "--skip-wifi-check")
 MIN_DISK_BYTES = 20 * 1024 * 1024 * 1024  # 20 GiB safety floor
 ESP_SIZE_MIB = 4096
 ESP_START_MIB = 1
 BTRFS_START_MIB = ESP_START_MIB + ESP_SIZE_MIB
+
+SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+UNSAFE_URL_CHARS_RE = re.compile(r'[\s"\';|&$`<>\\\x00-\x1f]')
+MUTABLE_BRANCH_URL_RE = re.compile(
+    r"^https?://(?:raw\.githubusercontent\.com/[^/]+/[^/]+/(?:refs/heads/)?(?:main|master)/|"
+    r"github\.com/[^/]+/[^/]+/(?:raw|blob)/(?:refs/heads/)?(?:main|master)/)",
+    re.IGNORECASE,
+)
 
 RESERVED_USERS = {
     "root",
@@ -63,6 +88,82 @@ RESERVED_USERS = {
 USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 
 
+class SafeHTTPSRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject any HTTP redirect downgrade or unsupported scheme."""
+
+    def __init__(self, allow_insecure_http: bool = False) -> None:
+        super().__init__()
+        self.allow_insecure_http = allow_insecure_http
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        parsed = urllib.parse.urlparse(newurl)
+        scheme = (parsed.scheme or "").lower()
+        if scheme == "http" and not self.allow_insecure_http:
+            raise ValueError(f"Redirecionamento inseguro recusado (downgrade HTTPS->HTTP): {newurl}")
+        if scheme not in ("https", "http") or not parsed.netloc:
+            raise ValueError(f"Alvo de redirecionamento invalido ou esquema nao suportado: {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def verify_sha256_bytes(data: bytes, expected_sha256: str, label: str = "artefato") -> str:
+    """Verify SHA-256 of raw bytes before parsing or executing content."""
+    if not SHA256_RE.fullmatch(expected_sha256 or ""):
+        raise ValueError(f"Formato de SHA-256 esperado invalido para {label}: {expected_sha256!r}")
+    actual = hashlib.sha256(data).hexdigest()
+    if not hmac.compare_digest(actual.lower(), expected_sha256.lower()):
+        raise ValueError(
+            f"Falha na verificacao SHA-256 de {label}: esperado={expected_sha256.lower()}, obtido={actual.lower()}"
+        )
+    return actual
+
+
+def _fetch_url_bytes(url: str, allow_insecure_http: bool = False, timeout: int = 30) -> tuple[bytes, str]:
+    """Download URL bytes over validated HTTPS with redirect protection and truncation detection."""
+    if UNSAFE_URL_CHARS_RE.search(url or ""):
+        raise ValueError(f"URL contem caracteres invalidos ou inseguros: {url!r}")
+    parsed = urllib.parse.urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme == "http" and not allow_insecure_http:
+        raise ValueError(f"URL insegura recusada (use https://): {url}")
+    if scheme not in ("https", "http") or not parsed.netloc:
+        raise ValueError(f"URL invalida ou esquema nao suportado: {url}")
+
+    opener = urllib.request.build_opener(SafeHTTPSRedirectHandler(allow_insecure_http=allow_insecure_http))
+    req = urllib.request.Request(url, headers={"User-Agent": f"nox-install/{NOX_RELEASE_VERSION}"})
+    try:
+        with opener.open(req, timeout=timeout) as resp:
+            final_url = resp.geturl() or url
+            final_scheme = (urllib.parse.urlparse(final_url).scheme or "").lower()
+            if final_scheme == "http" and not allow_insecure_http:
+                raise ValueError(f"URL final apos redirecionamento usa HTTP inseguro: {final_url}")
+            expected_len_hdr = resp.headers.get("Content-Length") if resp.headers else None
+            raw_bytes = resp.read()
+    except ValueError:
+        raise
+    except http.client.IncompleteRead as exc:
+        raise RuntimeError(f"Download incompleto de {url}: {exc}") from exc
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"Erro HTTP {exc.code} ao baixar {url}") from exc
+    except ssl.SSLError as exc:
+        raise RuntimeError(f"Erro TLS/SSL ao acessar {url}: {exc}") from exc
+    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+        raise RuntimeError(f"Falha de rede/DNS/timeout ao acessar {url}: {exc}") from exc
+
+    if expected_len_hdr is not None:
+        try:
+            exp_len = int(expected_len_hdr.strip())
+        except ValueError as exc:
+            raise RuntimeError(f"Cabecalho Content-Length invalido em {url}: {expected_len_hdr!r}") from exc
+        if len(raw_bytes) != exp_len:
+            raise RuntimeError(
+                f"Download truncado/incompleto de {url}: esperado={exp_len} bytes, recebido={len(raw_bytes)} bytes."
+            )
+
+    if not raw_bytes or not raw_bytes.strip():
+        raise ValueError(f"Resposta vazia recebida de {url}.")
+    return raw_bytes, final_url
+
+
 def ensure_interactive_tty() -> None:
     """Ensure stdin reads from the interactive controlling TTY even if invoked via pipe."""
     if sys.stdin.isatty():
@@ -75,6 +176,23 @@ def ensure_interactive_tty() -> None:
             "stdin nao e um terminal interativo e /dev/tty nao esta disponivel. "
             "Baixe o instalador para um arquivo temporario antes de executar com python3."
         ) from exc
+
+
+def ensure_arch_iso_environment(
+    euid: int | None = None,
+    efi_dir: Path = Path("/sys/firmware/efi"),
+    archiso_dir: Path = Path("/run/archiso"),
+) -> None:
+    """Refuse execution outside the official UEFI Arch Linux live ISO environment."""
+    actual_euid = os.geteuid() if euid is None else euid
+    if actual_euid != 0:
+        raise RuntimeError("execute o instalador como root na ISO oficial do Arch Linux.")
+    if not efi_dir.is_dir():
+        raise RuntimeError("sistema nao inicializado em modo UEFI.")
+    if not archiso_dir.is_dir():
+        raise RuntimeError(
+            "este instalador deve ser executado na ISO live oficial do Arch Linux (/run/archiso)."
+        )
 
 
 def list_candidate_disks() -> list[dict[str, Any]]:
@@ -253,22 +371,54 @@ def hash_password_sha512(password: str) -> str:
     ).strip()
 
 
-def load_base_config(source: str, allow_insecure_http: bool = False) -> dict[str, Any]:
-    if source.startswith("http://") and not allow_insecure_http:
-        raise ValueError(f"URL insegura recusada (use https://): {source}")
-    if source.startswith(("http://", "https://")):
-        req = urllib.request.Request(source, headers={"User-Agent": "nox-install/1.0"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            raw_text = resp.read().decode("utf-8")
-    else:
-        raw_text = Path(source).read_text(encoding="utf-8")
+def load_base_config(
+    source: str,
+    allow_insecure_http: bool = False,
+    expected_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Load and authenticate user_configuration.json before parsing JSON."""
+    if not source or not source.strip():
+        raise ValueError("Fonte de configuracao vazia.")
 
-    data = json.loads(raw_text)
+    is_official_source = source == DEFAULT_CONFIG_URL
+    if is_official_source and MUTABLE_BRANCH_URL_RE.match(source):
+        raise ValueError(f"Configuracao oficial nao pode apontar para branch mutavel: {source}")
+
+    effective_sha256 = expected_sha256
+    if is_official_source and effective_sha256 is None:
+        effective_sha256 = OFFICIAL_CONFIG_SHA256
+
+    if source.startswith(("http://", "https://")):
+        if MUTABLE_BRANCH_URL_RE.match(source) and not effective_sha256 and not allow_insecure_http:
+            raise ValueError(
+                f"Configuracao remota em branch mutavel recusada sem --config-sha256: {source}"
+            )
+        raw_bytes, _final_url = _fetch_url_bytes(source, allow_insecure_http=allow_insecure_http, timeout=30)
+    else:
+        cfg_path = Path(source)
+        if not cfg_path.is_file():
+            raise FileNotFoundError(f"Arquivo de configuracao nao encontrado: {source}")
+        raw_bytes = cfg_path.read_bytes()
+        if not raw_bytes or not raw_bytes.strip():
+            raise ValueError(f"Arquivo de configuracao vazio: {source}")
+
+    if effective_sha256 is not None:
+        verify_sha256_bytes(raw_bytes, effective_sha256, label="user_configuration.json")
+
+    try:
+        raw_text = raw_bytes.decode("utf-8")
+        data = json.loads(raw_text)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"user_configuration.json malformado ou JSON invalido: {exc}") from exc
+
     if not isinstance(data, dict) or not data.get("custom_commands"):
         raise ValueError("user_configuration.json invalido ou sem 'custom_commands'.")
     for req_key in ("bootloader_config", "locale_config", "network_config"):
         if req_key not in data:
             raise ValueError(f"user_configuration.json incompleto (ausente: '{req_key}').")
+    for forbidden_key in ("disk_config", "auth_config", "users", "root_enc_password", "encryption_password"):
+        if forbidden_key in data:
+            raise ValueError(f"user_configuration.json contem chave proibida na base publica: '{forbidden_key}'.")
     return data
 
 
@@ -278,9 +428,12 @@ def override_payload_cmd(
     payload_sha: str | None,
     allow_insecure_http: bool = False,
 ) -> None:
-    if payload_url and payload_url.startswith("http://") and not allow_insecure_http:
-        raise ValueError(f"Payload URL HTTP recusada sem --allow-insecure-http: {payload_url}")
-    if payload_sha and not re.fullmatch(r"[0-9a-fA-F]{64}", payload_sha):
+    if payload_url:
+        if UNSAFE_URL_CHARS_RE.search(payload_url):
+            raise ValueError(f"Payload URL contem caracteres invalidos: {payload_url!r}")
+        if payload_url.startswith("http://") and not allow_insecure_http:
+            raise ValueError(f"Payload URL HTTP recusada sem --allow-insecure-http: {payload_url}")
+    if payload_sha and not SHA256_RE.fullmatch(payload_sha):
         raise ValueError(f"SHA-256 de payload invalido: {payload_sha}")
     if not payload_url and not payload_sha:
         return
@@ -291,7 +444,7 @@ def override_payload_cmd(
         if payload_url:
             updated = re.sub(r'URL=\\?"[^"]+\\?"', f'URL="{payload_url}"', updated)
             if payload_url.startswith("http://") and allow_insecure_http:
-                updated = updated.replace('--proto "=https" ', "")
+                updated = updated.replace('--proto "=https" ', "").replace('--proto-redir "=https" ', "")
         if payload_sha:
             updated = re.sub(r'SHA=\\?"[0-9a-fA-F]{64}\\?"', f'SHA="{payload_sha}"', updated)
         new_cmds.append(updated)
@@ -300,8 +453,8 @@ def override_payload_cmd(
 
 def extract_payload_spec(cfg: dict[str, Any]) -> tuple[str, str]:
     joined = "\n".join(cfg.get("custom_commands") or [])
-    m_url = re.search(r'URL="([^"]+)"', joined)
-    m_sha = re.search(r'SHA="([0-9a-fA-F]{64})"', joined)
+    m_url = re.search(r'URL="([^"]*)"', joined)
+    m_sha = re.search(r'SHA="([^"]*)"', joined)
     return (m_url.group(1) if m_url else "", m_sha.group(1) if m_sha else "")
 
 
@@ -309,17 +462,35 @@ def validate_payload_spec(
     cfg: dict[str, Any],
     allow_insecure_http: bool = False,
     allow_legacy_rc: bool = False,
+    enforce_official_payload: bool = False,
 ) -> tuple[str, str]:
     url, sha = extract_payload_spec(cfg)
     if not url or not sha:
         raise ValueError("Nao foi possivel extrair URL/SHA-256 validos do payload em custom_commands.")
-    if url.startswith("http://") and not allow_insecure_http:
+    if UNSAFE_URL_CHARS_RE.search(url):
+        raise ValueError(f"URL do payload contem caracteres invalidos: {url!r}")
+    if not SHA256_RE.fullmatch(sha):
+        raise ValueError(f"Formato de SHA-256 do payload invalido em custom_commands: {sha!r}")
+
+    parsed = urllib.parse.urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme == "http" and not allow_insecure_http:
         raise ValueError(f"Payload deve usar HTTPS: {url}")
-    if LEGACY_RC_TAG in url and not allow_legacy_rc:
+    if scheme not in ("https", "http") or not parsed.netloc:
+        raise ValueError(f"URL do payload invalida: {url}")
+    if MUTABLE_BRANCH_URL_RE.match(url) and not allow_insecure_http:
+        raise ValueError(f"Payload oficial nao pode apontar para branch mutavel: {url}")
+    if (LEGACY_RC_TAG in url or LEGACY_RC_PREFIX in url) and not allow_legacy_rc:
         raise ValueError(
-            f"Configuracao base aponta para o payload antigo '{LEGACY_RC_TAG}' ({url}). "
-            "Atualize user_configuration.json antes da publicacao v1.0.0 ou passe --payload-url/--payload-sha256."
+            f"Configuracao base aponta para payload RC legado ({url}). "
+            "Utilize a configuracao vinculada a release oficial ou passe --payload-url/--payload-sha256."
         )
+    if enforce_official_payload:
+        if url != OFFICIAL_PAYLOAD_URL or not hmac.compare_digest(sha.lower(), OFFICIAL_PAYLOAD_SHA256.lower()):
+            raise ValueError(
+                "Configuracao incompativel com esta versao do bootstrap: URL ou SHA-256 do payload "
+                f"diverge do manifesto oficial ({NOX_RELEASE_VERSION})."
+            )
     return url, sha
 
 
@@ -343,11 +514,11 @@ def detect_archinstall_version(allow_untested: bool = False) -> str:
     return ver
 
 
-def select_tmpfs_dir() -> str:
+def select_tmpfs_dir(mounts_file: Path = Path("/proc/mounts")) -> str:
     """Return a verified in-memory tmpfs directory (/dev/shm, /run, or /tmp) for temporary credentials."""
     mounts: dict[str, str] = {}
     try:
-        for line in Path("/proc/mounts").read_text(encoding="utf-8").splitlines():
+        for line in mounts_file.read_text(encoding="utf-8").splitlines():
             parts = line.split()
             if len(parts) >= 3:
                 mounts[parts[1]] = parts[2]
@@ -359,9 +530,11 @@ def select_tmpfs_dir() -> str:
     raise RuntimeError("Nenhum filesystem temporario em RAM (tmpfs) disponivel para armazenar credenciais temporarias.")
 
 
-def scrub_persisted_archinstall_credentials() -> None:
+def scrub_persisted_archinstall_credentials(
+    log_dirs: tuple[Path, ...] = (Path("/var/log/archinstall"), Path("/mnt/var/log/archinstall")),
+) -> None:
     """Ensure archinstall log directories never retain user_credentials.json or world-readable logs."""
-    for log_dir in (Path("/var/log/archinstall"), Path("/mnt/var/log/archinstall")):
+    for log_dir in log_dirs:
         if not log_dir.is_dir():
             continue
         try:
@@ -377,11 +550,20 @@ def scrub_persisted_archinstall_credentials() -> None:
                     pass
 
 
-def verify_network_preflight(payload_url: str) -> None:
+def verify_network_preflight(payload_url: str, allow_insecure_http: bool = False) -> None:
+    opener = urllib.request.build_opener(SafeHTTPSRedirectHandler(allow_insecure_http=allow_insecure_http))
     for test_url in (payload_url, "https://archlinux.org"):
-        req = urllib.request.Request(test_url, method="HEAD", headers={"User-Agent": "nox-install/1.0"})
+        req = urllib.request.Request(
+            test_url,
+            method="HEAD",
+            headers={"User-Agent": f"nox-install/{NOX_RELEASE_VERSION}"},
+        )
         try:
-            with urllib.request.urlopen(req, timeout=12) as resp:
+            with opener.open(req, timeout=12) as resp:
+                final_url = resp.geturl() or test_url
+                final_scheme = (urllib.parse.urlparse(final_url).scheme or "").lower()
+                if final_scheme == "http" and not allow_insecure_http:
+                    raise RuntimeError(f"Redirecionamento inseguro para HTTP detectado em {test_url} -> {final_url}")
                 if resp.status >= 400:
                     raise RuntimeError(f"Falha HTTP {resp.status} ao verificar {test_url}")
         except urllib.error.HTTPError as exc:
@@ -439,23 +621,31 @@ def interactive_main(args: argparse.Namespace) -> int:
 
     archinstall_ver = "dry-run"
     if not args.dry_run:
-        if os.geteuid() != 0:
-            print("ERRO: execute o instalador como root na ISO oficial do Arch Linux.", file=sys.stderr)
-            return 1
-        if not Path("/sys/firmware/efi").is_dir():
-            print("ERRO: sistema nao inicializado em modo UEFI.", file=sys.stderr)
-            return 1
-        if not Path("/run/archiso").exists():
-            print("ERRO: este instalador deve ser executado na ISO live oficial do Arch Linux (/run/archiso).", file=sys.stderr)
-            return 1
         try:
+            ensure_arch_iso_environment()
             archinstall_ver = detect_archinstall_version()
         except RuntimeError as exc:
             print(f"ERRO: {exc}", file=sys.stderr)
             return 1
 
+    is_official_config = (
+        args.config == DEFAULT_CONFIG_URL
+        and args.config_sha256 is None
+        and not args.payload_url
+        and not args.payload_sha256
+    )
+    config_mode_label = (
+        f"OFICIAL AUTENTICADA ({NOX_RELEASE_VERSION}, SHA-256 verificado)"
+        if is_official_config
+        else "PERSONALIZADA PELO OPERADOR (--config / override)"
+    )
+
     try:
-        base_cfg = load_base_config(args.config, allow_insecure_http=args.allow_insecure_http)
+        base_cfg = load_base_config(
+            args.config,
+            allow_insecure_http=args.allow_insecure_http,
+            expected_sha256=args.config_sha256,
+        )
         override_payload_cmd(
             base_cfg,
             args.payload_url,
@@ -466,9 +656,10 @@ def interactive_main(args: argparse.Namespace) -> int:
             base_cfg,
             allow_insecure_http=args.allow_insecure_http,
             allow_legacy_rc=args.allow_legacy_rc,
+            enforce_official_payload=is_official_config,
         )
         if not args.dry_run and not args.skip_net_check:
-            verify_network_preflight(payload_url)
+            verify_network_preflight(payload_url, allow_insecure_http=args.allow_insecure_http)
     except Exception as exc:
         print(f"ERRO DE PRE-VALIDACAO: {exc}", file=sys.stderr)
         return 1
@@ -476,7 +667,10 @@ def interactive_main(args: argparse.Namespace) -> int:
     print("=" * 68)
     print("  PROJECT NOX ARCHINSTALL — Instalacao Guiada Simplificada")
     print("=" * 68)
+    if not is_official_config:
+        print("  [AVISO] Utilizando configuracao ou payload personalizado pelo operador.")
     print("Configuracoes aplicadas automaticamente:")
+    print(f"  * Configuracao    : {config_mode_label}")
     print("  * Particionamento : GPT | /boot 4 GiB FAT32 + Btrfs compress=zstd")
     print("  * Subvolumes      : @ (/), @home, @log, @pkg, @.snapshots, @swap")
     print("  * Kernel & Boot   : linux-cachyos + Limine (Project Nox + sbctl)")
@@ -624,6 +818,11 @@ def interactive_main(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Project Nox simplified Arch ISO installer")
     parser.add_argument("--config", default=DEFAULT_CONFIG_URL, help="Path or URL to user_configuration.json")
+    parser.add_argument(
+        "--config-sha256",
+        default=None,
+        help="Expected SHA-256 for custom --config (defaults to pinned OFFICIAL_CONFIG_SHA256 for official config)",
+    )
     parser.add_argument("--payload-url", default=None, help="Optional override payload URL for lab testing")
     parser.add_argument("--payload-sha256", default=None, help="Optional override payload SHA-256")
     parser.add_argument("--allow-insecure-http", action="store_true", help="Allow http:// URLs for local lab HTTP servers")
