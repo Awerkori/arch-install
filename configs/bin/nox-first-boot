@@ -29,17 +29,19 @@ if command -v iw >/dev/null 2>&1; then
   fi
 fi
 
-# 3. Verify Limine configuration on booted target
+# 3. Verify and converge Limine configuration on booted target fail-closed
 if command -v limine-snapper-sync >/dev/null 2>&1 && [[ -f /boot/limine.conf ]]; then
   if ! grep -q 'linux-cachyos' /boot/limine.conf; then
-    limine-update || true
+    limine-update
   fi
   limine-snapper-sync || true
-  if [[ -x /usr/local/libexec/nox/nox-limine-normalize ]]; then
-    /usr/local/libexec/nox/nox-limine-normalize --post || true
+  if [[ -d /sys/firmware/efi ]]; then
+    /usr/local/libexec/nox/nox-limine-integrity --force
+  else
+    [[ -x /usr/local/libexec/nox/nox-limine-normalize ]] && /usr/local/libexec/nox/nox-limine-normalize --post
+    limine-enroll-config
+    [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback
   fi
-  command -v limine-enroll-config >/dev/null 2>&1 && limine-enroll-config >/dev/null 2>&1 || true
-  [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true
 fi
 
 # 4. Optimize Btrfs mount options in /etc/fstab (add noatime cleanly; deduplicate /nox-swap and /.snapshots)

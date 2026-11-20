@@ -118,17 +118,21 @@ systemctl enable limine-snapper-sync.service
 # Ensure //Snapshots placeholder exists under OS block in limine.conf if not added yet
 if [[ -f "${BOOT_MP}/limine.conf" ]] && ! grep -qE '^[[:space:]]*/+Snapshots' "${BOOT_MP}/limine.conf"; then
   printf '  //Snapshots\n' >>"${BOOT_MP}/limine.conf"
-  command -v limine-enroll-config >/dev/null 2>&1 && limine-enroll-config >/dev/null 2>&1 || true
-  [[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true
 fi
 
 # 8. Prune any excess initial snapshots left by base installation
-"${NOX_LIBEXEC_DIR}/nox-snapper-cleanup" || true
+"${NOX_LIBEXEC_DIR}/nox-snapper-cleanup"
 
-# 9. Sync Limine snapshot entries cleanly offline/target & keep config enrollment + EFI signatures updated
+# 9. Sync Limine snapshot entries cleanly offline/target & keep config enrollment + EFI signatures converged fail-closed
 limine-snapper-sync || nox_warn "limine-snapper-sync retornou aviso na sincronizacao inicial (sem snapshots iniciais ainda)."
-command -v limine-enroll-config >/dev/null 2>&1 && limine-enroll-config >/dev/null 2>&1 || true
-[[ -x /etc/boot/hooks/post.d/95-nox-sbctl-fallback ]] && /etc/boot/hooks/post.d/95-nox-sbctl-fallback >/dev/null 2>&1 || true
+if [[ -f "${BOOT_MP}/limine.conf" ]]; then
+  if [[ -d /sys/firmware/efi ]]; then
+    ESP_PATH="${BOOT_MP}" "${NOX_LIBEXEC_DIR}/nox-limine-integrity" --force || nox_die "Falha na sincronizacao/assinatura Limine apos 60-snapshots."
+  else
+    limine-enroll-config
+    /etc/boot/hooks/post.d/95-nox-sbctl-fallback
+  fi
+fi
 
 # 10. Sync launcher XDG user overlays now that limine-snapper-restore.desktop is installed
 nox_sync_hidden_tech_desktops

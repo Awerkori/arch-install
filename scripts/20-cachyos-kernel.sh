@@ -186,10 +186,14 @@ fi
 nox_info "Executando limine-update para gerar initramfs e entradas linux-cachyos..."
 limine-update
 
-# Enforce normalized header & Project Nox visual title idempotently, then re-enroll if needed
+# Enforce normalized header & Project Nox visual title idempotently, then enroll + sign fail-closed
 ESP_PATH="${BOOT_MP}" "${NOX_LIBEXEC_DIR}/nox-limine-normalize" --post
-limine-enroll-config || true
-/etc/boot/hooks/post.d/95-nox-sbctl-fallback || true
+if [[ -d /sys/firmware/efi ]]; then
+  ESP_PATH="${BOOT_MP}" "${NOX_LIBEXEC_DIR}/nox-limine-integrity" --force || nox_die "Falha na convergencia/assinatura do Limine via nox-limine-integrity."
+else
+  limine-enroll-config
+  /etc/boot/hooks/post.d/95-nox-sbctl-fallback
+fi
 
 # Guarantee EFI binaries are enrolled + signed cleanly
 if [[ -d /sys/firmware/efi ]]; then

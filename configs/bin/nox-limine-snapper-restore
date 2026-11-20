@@ -11,7 +11,7 @@ case "$CMD_NAME" in
   limine-snapper-sync) REAL_BIN="/usr/bin/limine-snapper-sync" ;;
   *) REAL_BIN="/usr/bin/limine-snapper-restore" ;;
 esac
-INTEGRITY_HELPER="/usr/local/libexec/nox/nox-limine-integrity"
+INTEGRITY_HELPER="${NOX_INTEGRITY_HELPER:-/usr/local/libexec/nox/nox-limine-integrity}"
 
 if [[ ! -x "$REAL_BIN" ]]; then
   echo "ERRO: $REAL_BIN nao encontrado." >&2
@@ -19,22 +19,44 @@ if [[ ! -x "$REAL_BIN" ]]; then
 fi
 
 repaired=0
+repair_rc=0
 repair_if_interrupted() {
   local rc="$1"
   ((repaired == 0)) || return 0
   repaired=1
-  if [[ "$rc" -ne 0 || -f /run/nox-limine-tx.dirty ]]; then
-    if ((EUID == 0)) && [[ -x "$INTEGRITY_HELPER" ]]; then
-      echo "[nox-limine] Verificando/reparando integridade de /boot/limine.conf e EFI apos saida ($rc)..." >&2
-      "$INTEGRITY_HELPER" --repair-if-dirty || true
+  if [[ "$rc" -ne 0 || -f "${NOX_DIRTY_MARKER:-/run/nox-limine-tx.dirty}" ]]; then
+    if ((EUID == 0)) || [[ "${NOX_ALLOW_NONROOT_TEST:-0}" == "1" ]]; then
+      if [[ -x "$INTEGRITY_HELPER" ]]; then
+        echo "[nox-limine] Verificando/reparando integridade de /boot/limine.conf e EFI apos saida ($rc)..." >&2
+        if ! "$INTEGRITY_HELPER" --repair-if-dirty; then
+          repair_rc=$?
+          echo "[nox-limine] ERRO CRITICO: falha no reparo de integridade apos saida (repair_rc=${repair_rc}); marcador .dirty preservado." >&2
+          return "$repair_rc"
+        fi
+      else
+        repair_rc=1
+        echo "[nox-limine] ERRO CRITICO: helper de integridade ausente: $INTEGRITY_HELPER" >&2
+        return 1
+      fi
+    fi
+  fi
+  return 0
+}
+
+# shellcheck disable=SC2329
+on_exit_cleanup() {
+  local rc=$?
+  if ! repair_if_interrupted "$rc"; then
+    if ((rc == 0)); then
+      exit "${repair_rc:-1}"
     fi
   fi
 }
 
-trap 'rc=$?; repair_if_interrupted "$rc"' EXIT
-trap 'repair_if_interrupted 130; exit 130' INT
-trap 'repair_if_interrupted 143; exit 143' TERM
-trap 'repair_if_interrupted 129; exit 129' HUP
+trap 'on_exit_cleanup' EXIT
+trap 'repair_if_interrupted 130 || true; exit 130' INT
+trap 'repair_if_interrupted 143 || true; exit 143' TERM
+trap 'repair_if_interrupted 129 || true; exit 129' HUP
 
 # Determine if this invocation is an interactive full snapshot restore
 is_interactive_restore=false
@@ -154,7 +176,9 @@ raise SystemExit(1)
 PY
   rc=$?
   set -e
-  repair_if_interrupted "$rc"
+  if ! repair_if_interrupted "$rc" && ((rc == 0)); then
+    rc="${repair_rc:-1}"
+  fi
   exit "$rc"
 fi
 
@@ -163,5 +187,7 @@ set +e
 rc=$?
 set -e
 
-repair_if_interrupted "$rc"
+if ! repair_if_interrupted "$rc" && ((rc == 0)); then
+  rc="${repair_rc:-1}"
+fi
 exit "$rc"

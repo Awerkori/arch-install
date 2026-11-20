@@ -4,7 +4,7 @@ Este guia explica, do começo ao fim e sem exigir experiência avançada com o `
 
 O fluxo completo resume-se a:
 
-> **ISO oficial do Arch Linux → Conexão com a Internet → Comando Oficial Verificado (SHA-256) → Etapa 1: Escolha do SSD → Etapa 2: Confirmação Destrutiva → Etapa 3: Usuário → Etapa 4: Senha → Etapa 5: Confirmação Final → Instalação Automática → Reinicialização.**
+> **ISO oficial do Arch Linux → Conexão com a Internet → Comando Oficial Verificado (SHA-256) → `[1/4]` Seleção do Disco → `[2/4]` Confirmação do Disco → `[3/4]` Usuário → `[4/4]` Senha → Confirmação Destrutiva Final → Instalação Automática → Reinicialização.**
 
 ---
 
@@ -92,16 +92,17 @@ curl -I https://archlinux.org
 | `user_configuration.json` | [`releases/download/v1.0.0/user_configuration.json`](https://github.com/Awerkori/arch-install/releases/download/v1.0.0/user_configuration.json) | `6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c` |
 | `nox-archinstall-payload-v1.0.0.tar.gz` | [`releases/download/v1.0.0/nox-archinstall-payload-v1.0.0.tar.gz`](https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-archinstall-payload-v1.0.0.tar.gz) | `08fbf62a2325b2a3a4b30a3d7ec4b986bc17f412970ba25f83839624444d6fd9` |
 
-Execute na ISO oficial do Arch Linux (**recomendado**):
+> **AVISO DESTRUTIVO:** O disco selecionado durante a instalação será **formatado integralmente** e **todos os dados existentes serão apagados permanentemente**.
+
+Execute na ISO oficial do Arch Linux (**recomendado**, usando diretório temporário seguro via `mktemp -d`, limpeza automática via `trap` e `umask 022` antes do `python3`):
 
 ```bash
-(umask 077; curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-install.py -o /tmp/nox-install.py) && \
-printf '%s  /tmp/nox-install.py\n' 'fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10' | sha256sum -c - && \
-(umask 077; curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/user_configuration.json -o /tmp/nox-cfg.json) && \
-printf '%s  /tmp/nox-cfg.json\n' '6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c' | sha256sum -c - && \
-umask 022 && \
-python3 /tmp/nox-install.py --config /tmp/nox-cfg.json && \
-rm -f /tmp/nox-install.py /tmp/nox-cfg.json
+sh -c 'set -eu; d=$(umask 077; mktemp -d); trap "rm -rf \"$d\"" EXIT INT TERM; \
+curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/nox-install.py -o "$d/nox-install.py"; \
+printf "%s  %s/nox-install.py\n" "fce3f9a83e2b8c13666cf583f143096de37b8dd312e59dd8c6af4acbabb82f10" "$d" | sha256sum -c -; \
+curl --proto "=https" --proto-redir "=https" --tlsv1.2 -fsSL https://github.com/Awerkori/arch-install/releases/download/v1.0.0/user_configuration.json -o "$d/nox-cfg.json"; \
+printf "%s  %s/nox-cfg.json\n" "6754aefcdfb659e1abdfb5036c158a609d1672f945186a1e692edeab2e104e4c" "$d" | sha256sum -c -; \
+umask 022; python3 "$d/nox-install.py" --config "$d/nox-cfg.json"'
 ```
 
 > **Nota sobre `umask` e modelo de confiança:** O download é feito em subshell com `umask 077` para manter os temporários restritos (`0600`), os dois arquivos passam por `sha256sum -c -` antes de executar código Python, e `umask 022` é garantido antes de invocar o `archinstall`. Sem chave pública offline pré-instalada na ISO do Arch Linux, a autenticidade apoia-se em HTTPS/TLSv1.2+ sem downgrade para HTTP e pinagem criptográfica SHA-256 explícita.
@@ -118,7 +119,7 @@ Na branch `hardening/v1.0.1` (PR #1), o projeto introduziu o iniciador curto [`i
 
 ---
 
-## 4. As 5 Etapas Interativas do Assistente e Aviso Destrutivo
+## 4. As 4 Etapas Numeradas e Confirmação Destrutiva Final
 
 > **AVISO CRÍTICO:** O disco selecionado na etapa `[1/4]` terá **todas as suas partições e dados apagados permanentemente**. Nunca tente adivinhar qual disco escolher.
 

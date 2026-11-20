@@ -326,7 +326,7 @@ cmd = (
     "curl --proto \"=https\" --proto-redir \"=https\" --tlsv1.2 -fsSL --retry 3 --max-time 60 \"$URL\" -o \"$TMP/p.tar.gz\"; "
     "printf \"%s  %s\\n\" \"$SHA\" \"$TMP/p.tar.gz\" | sha256sum -c -; "
     "rm -rf /var/lib/nox-archinstall/payload; mkdir -p /var/lib/nox-archinstall/payload; "
-    "tar --no-same-owner -xzf \"$TMP/p.tar.gz\" --strip-components=1 -C /var/lib/nox-archinstall/payload; "
+    "tar --no-same-owner --no-same-permissions -xzf \"$TMP/p.tar.gz\" --strip-components=1 -C /var/lib/nox-archinstall/payload; "
     "chmod +x /var/lib/nox-archinstall/payload/install.sh; "
     "exec /var/lib/nox-archinstall/payload/install.sh --stage target-offline'"
 )

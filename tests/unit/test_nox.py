@@ -2385,6 +2385,61 @@ class TestLimineIntegrityAndSnapPacRegression(unittest.TestCase):
         stage60 = (REPO / "scripts/60-snapshots.sh").read_text(encoding="utf-8")
         self.assertIn("SNAP_PAC_SKIP=y pacman -S --needed --noconfirm snapper snap-pac", stage60)
 
+    def test_no_silent_boot_integrity_suppression_in_stages_and_restore_wrapper(self) -> None:
+        for rel in (
+            "scripts/20-cachyos-kernel.sh",
+            "scripts/60-snapshots.sh",
+            "configs/bin/nox-first-boot",
+        ):
+            txt = (REPO / rel).read_text(encoding="utf-8")
+            self.assertNotIn("limine-enroll-config || true", txt, rel)
+            self.assertNotIn("limine-enroll-config >/dev/null 2>&1 || true", txt, rel)
+            self.assertNotIn("95-nox-sbctl-fallback || true", txt, rel)
+            self.assertNotIn("95-nox-sbctl-fallback >/dev/null 2>&1 || true", txt, rel)
+            self.assertRegex(txt, r'nox-limine-integrity"?\s+--force', rel)
+
+        stage80 = (REPO / "scripts/80-validation.sh").read_text(encoding="utf-8")
+        self.assertIn("nox-limine-integrity --verify", stage80)
+
+        # Verify restore wrapper propagates repair failure (non-zero) and preserves .dirty
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            real_sync = root / "limine-snapper-sync"
+            real_sync.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            real_sync.chmod(0o755)
+            bad_integ = root / "bad-integ"
+            bad_integ.write_text("#!/usr/bin/env bash\nexit 7\n", encoding="utf-8")
+            bad_integ.chmod(0o755)
+            dirty = root / "dirty"
+            dirty.write_text("pending\n", encoding="utf-8")
+            wrapper = root / "limine-snapper-sync-wrap"
+            # Point wrapper script at fake real binary by copying helper with swapped /usr/bin lookup
+            src_wrap = (REPO / "configs/bin/nox-limine-snapper-restore").read_text(encoding="utf-8")
+            wrapper.write_text(src_wrap.replace("/usr/bin/limine-snapper-sync", str(real_sync)), encoding="utf-8")
+            wrapper.chmod(0o755)
+            env = os.environ.copy()
+            env.update(
+                {
+                    "NOX_INTEGRITY_HELPER": str(bad_integ),
+                    "NOX_DIRTY_MARKER": str(dirty),
+                    "NOX_ALLOW_NONROOT_TEST": "1",
+                }
+            )
+            res = subprocess.run(["bash", str(wrapper), "--list"], env=env, capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 7)
+            self.assertTrue(dirty.exists())
+
+    def test_list_candidate_disks_fails_closed_on_lsblk_errors_and_bad_json(self) -> None:
+        from unittest import mock
+
+        mod = TestTrustChainHardening._load_nox_install()
+        with mock.patch.object(mod.subprocess, "run", return_value=subprocess.CompletedProcess(["lsblk"], 1, "", "io error")):
+            with self.assertRaises(RuntimeError):
+                mod.list_candidate_disks()
+        with mock.patch.object(mod.subprocess, "run", return_value=subprocess.CompletedProcess(["lsblk"], 0, "{bad-json", "")):
+            with self.assertRaises(RuntimeError):
+                mod.list_candidate_disks()
+
     def test_a4_nox_limine_integrity_state_matrix_and_verify_mode(self) -> None:
         import hashlib
 
@@ -2600,7 +2655,7 @@ class TestDocumentationAndPublicationContracts(unittest.TestCase):
         comp_doc = (REPO / "docs/INSTALLED-COMPONENTS.md").read_text(encoding="utf-8")
         rel_manifest = json.loads((REPO / "manifests/release.json").read_text(encoding="utf-8"))
 
-        # README must expose only ONE bash install block, targeting published v1.0.0 with immutable assets and umask 022
+        # README must expose only ONE bash install block, targeting published v1.0.0 with immutable assets, mktemp+trap, and umask 022
         bash_blocks = re.findall(r"```bash\n(.*?)```", readme, flags=re.S)
         self.assertEqual(len(bash_blocks), 1, "README.md must contain exactly ONE primary live bash install block")
         cmd = bash_blocks[0]
@@ -2608,10 +2663,23 @@ class TestDocumentationAndPublicationContracts(unittest.TestCase):
         self.assertIn(self.V100_FROZEN["nox-install.py"], cmd)
         self.assertIn("https://github.com/Awerkori/arch-install/releases/download/v1.0.0/user_configuration.json", cmd)
         self.assertIn(self.V100_FROZEN["user_configuration.json"], cmd)
+        self.assertIn("mktemp -d", cmd)
+        self.assertIn("trap ", cmd)
         self.assertIn("umask 022", cmd)
+        self.assertNotIn("/tmp/nox-install.py", cmd)
+        self.assertNotIn("/tmp/nox-cfg.json", cmd)
         self.assertNotIn("releases/download/v1.0.1", cmd)
         self.assertNotIn("/refs/heads/main", cmd)
         self.assertNotIn("/main/", cmd)
+
+        # Destructive warning before command, dynamic CI badge, and accurate interactive steps (4 numbered + final confirmation)
+        self.assertLess(readme.index("AVISO DESTRUTIVO"), readme.index("```bash"))
+        self.assertIn("actions/workflows/ci.yml/badge.svg", readme)
+        self.assertNotIn("5 etapas", readme.lower())
+        self.assertNotIn("5 confirmações", readme.lower())
+        self.assertNotIn("5 etapas", install_doc.lower())
+        self.assertNotIn("rollback automático", readme.lower())
+        self.assertIn("mktemp -d", install_doc)
 
         # Must clearly separate published v1.0.0 from unpublished v1.0.1 candidate
         self.assertIn("v1.0.0", readme)
