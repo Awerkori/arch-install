@@ -30,15 +30,15 @@ from pathlib import Path
 from typing import Any
 
 NOX_RELEASE_VERSION = "v1.0.1"
-OFFICIAL_CONFIG_COMMIT = "e2e84418d045b8856157265dd4f74f9172211e4e"
+OFFICIAL_CONFIG_COMMIT = "9e810de859f731984b7af09fad03c8767cef071c"
 DEFAULT_CONFIG_URL = (
     f"https://raw.githubusercontent.com/Awerkori/arch-install/{OFFICIAL_CONFIG_COMMIT}/user_configuration.json"
 )
-OFFICIAL_CONFIG_SHA256 = "aef4bdeb5268d1bbbebb42ad8de00cf7d98b71b687332bfab1f259cadb8311f9"
+OFFICIAL_CONFIG_SHA256 = "8358edd4bdb154d1157c187f6dbfa83df341d91df64b45fcb0180a9872a87641"
 OFFICIAL_PAYLOAD_URL = (
     "https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz"
 )
-OFFICIAL_PAYLOAD_SHA256 = "660d6caa4a418a17a6a4138f2a1d61f10673718aeca775adca6bcf3fdbdd1ec3"
+OFFICIAL_PAYLOAD_SHA256 = "6e9500f44ce9c4882db27e91e20aa3e276499d3f1681ed0872c92dae696a2509"
 
 LEGACY_RC_TAG = "v1.0.0-rc10"
 LEGACY_RC_PREFIX = "v1.0.0-rc"
@@ -195,6 +195,21 @@ def ensure_arch_iso_environment(
         )
 
 
+def _lsblk_mounts_for_device(path: str) -> list[str]:
+    """Query mountpoints for a block device and its partitions (fail-closed on error)."""
+    res = subprocess.run(
+        ["lsblk", "-nr", "-o", "MOUNTPOINT", path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if res.returncode != 0:
+        raise RuntimeError(
+            f"Falha ao consultar lsblk MOUNTPOINT para '{path}' (exit={res.returncode}): {res.stderr.strip()}"
+        )
+    return sorted({m.strip() for m in res.stdout.splitlines() if m.strip()})
+
+
 def list_candidate_disks() -> list[dict[str, Any]]:
     """Query lsblk and return eligible disks (>= 20 GiB), excluding live archiso media."""
     raw = subprocess.check_output(
@@ -202,6 +217,8 @@ def list_candidate_disks() -> list[dict[str, Any]]:
         text=True,
     )
     data = json.loads(raw)
+    if not isinstance(data, dict) or not isinstance(data.get("blockdevices"), list):
+        raise RuntimeError("Saida JSON invalida de lsblk ao listar discos.")
     disks: list[dict[str, Any]] = []
     by_id_map: dict[str, str] = {}
     by_id_dir = Path("/dev/disk/by-id")
@@ -222,13 +239,7 @@ def list_candidate_disks() -> list[dict[str, Any]]:
         size = int(dev.get("size") or 0)
         if not path or size < MIN_DISK_BYTES:
             continue
-        children_raw = subprocess.run(
-            ["lsblk", "-nr", "-o", "MOUNTPOINT", path],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        mounts = sorted({m.strip() for m in children_raw.stdout.splitlines() if m.strip()})
+        mounts = _lsblk_mounts_for_device(path)
         if any(m.startswith("/run/archiso") for m in mounts):
             continue
         rm_raw = dev.get("rm")
@@ -251,29 +262,171 @@ def list_candidate_disks() -> list[dict[str, Any]]:
     return disks
 
 
+def _collect_lsblk_tree(nodes: list[dict[str, Any]]) -> tuple[set[str], list[str]]:
+    """Collect all device paths and mountpoints recursively from lsblk JSON blockdevices."""
+    dev_paths: set[str] = set()
+    mounts: list[str] = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            raise RuntimeError("Estrutura JSON invalida em lsblk blockdevices (no nao e objeto).")
+        npath = node.get("path")
+        nname = node.get("name")
+        if isinstance(npath, str) and npath.strip():
+            p = npath.strip()
+            dev_paths.add(p)
+            dev_paths.add(os.path.realpath(p))
+        elif isinstance(nname, str) and nname.strip():
+            p = f"/dev/{nname.strip()}"
+            dev_paths.add(p)
+            dev_paths.add(os.path.realpath(p))
+        else:
+            raise RuntimeError("Estrutura JSON incompleta em lsblk (ausente path/name).")
+        mps = node.get("mountpoints")
+        if mps is not None:
+            if not isinstance(mps, list):
+                raise RuntimeError("Campo mountpoints invalido no JSON do lsblk.")
+            for mp in mps:
+                if isinstance(mp, str) and mp.strip():
+                    mounts.append(mp.strip())
+        children = node.get("children")
+        if children is not None:
+            if not isinstance(children, list):
+                raise RuntimeError("Campo children invalido no JSON do lsblk.")
+            c_paths, c_mounts = _collect_lsblk_tree(children)
+            dev_paths.update(c_paths)
+            mounts.extend(c_mounts)
+    return dev_paths, mounts
+
+
 def verify_disk_safe_to_wipe(disk: dict[str, Any]) -> None:
-    """Re-verify selected device path, persistent by-id target, and absence of active mounts."""
-    disk_path = Path(disk["path"])
+    """Fail-closed safety validation of target disk identity, mounts, and active swap before wipe."""
+    raw_path = str(disk.get("path") or "").strip()
+    if not raw_path:
+        raise RuntimeError("Caminho do disco selecionado vazio.")
+    disk_path = Path(raw_path)
     if not disk_path.exists():
-        raise RuntimeError(f"Disco selecionado '{disk['path']}' nao esta mais presente.")
+        raise RuntimeError(f"Disco selecionado '{raw_path}' nao esta mais presente.")
+
+    canonical_disk = os.path.realpath(raw_path)
     if disk.get("by_id"):
-        by_id_path = Path(disk["by_id"])
-        if not by_id_path.exists() or str(by_id_path.resolve()) != str(disk_path.resolve()):
+        by_id_path = Path(str(disk["by_id"]))
+        if not by_id_path.exists() or os.path.realpath(str(by_id_path)) != canonical_disk:
             raise RuntimeError(
-                f"Identificador persistente '{disk['by_id']}' nao aponta mais para '{disk['path']}'. Abortando."
+                f"Identificador persistente '{disk['by_id']}' nao aponta mais para '{raw_path}' ({canonical_disk}). Abortando."
             )
-    mounts_out = subprocess.run(
-        ["lsblk", "-nr", "-o", "MOUNTPOINT", str(disk_path)],
+
+    # 1. Re-identify selected device via lsblk -b -J (mandatory exit=0 and valid schema)
+    lsblk_json_proc = subprocess.run(
+        ["lsblk", "-b", "-J", "-o", "NAME,PATH,SIZE,MODEL,SERIAL,TRAN,TYPE,RM,MOUNTPOINTS", raw_path],
         capture_output=True,
         text=True,
         check=False,
     )
-    active_mounts = [m.strip() for m in mounts_out.stdout.splitlines() if m.strip()]
-    if active_mounts:
+    if lsblk_json_proc.returncode != 0:
         raise RuntimeError(
-            f"O disco '{disk['path']}' possui pontos montados ativos ({', '.join(active_mounts)}). "
+            f"Falha ao reidentificar '{raw_path}' via lsblk (exit={lsblk_json_proc.returncode}): "
+            f"{lsblk_json_proc.stderr.strip()}"
+        )
+    try:
+        lsblk_data = json.loads(lsblk_json_proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Saida JSON invalida de lsblk para '{raw_path}': {exc}") from exc
+
+    if not isinstance(lsblk_data, dict) or not isinstance(lsblk_data.get("blockdevices"), list) or not lsblk_data["blockdevices"]:
+        raise RuntimeError(f"Estrutura JSON incompleta de lsblk ao verificar '{raw_path}'.")
+
+    top_dev = lsblk_data["blockdevices"][0]
+    if not isinstance(top_dev, dict) or top_dev.get("type") != "disk":
+        raise RuntimeError(f"Dispositivo '{raw_path}' nao e reconhecido como disco ('type=disk').")
+
+    actual_path = str(top_dev.get("path") or "")
+    actual_name = str(top_dev.get("name") or "")
+    try:
+        actual_size = int(top_dev.get("size"))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"Tamanho invalido retornado pelo lsblk para '{raw_path}'.") from exc
+
+    if not actual_path or os.path.realpath(actual_path) != canonical_disk:
+        raise RuntimeError(f"Caminho canonico divergente para '{raw_path}': obtido '{actual_path}'.")
+    if disk.get("name") and actual_name != disk["name"]:
+        raise RuntimeError(f"Nome do disco mudou entre selecao e formatacao: '{disk['name']}' -> '{actual_name}'.")
+    if disk.get("size_bytes") is not None and int(disk["size_bytes"]) != actual_size:
+        raise RuntimeError(
+            f"Tamanho do disco '{raw_path}' mudou entre selecao e formatacao ({disk['size_bytes']} -> {actual_size})."
+        )
+    actual_model = str(top_dev.get("model") or "Desconhecido").strip()
+    if disk.get("model") and actual_model != str(disk["model"]).strip():
+        raise RuntimeError(
+            f"Modelo do disco '{raw_path}' mudou entre selecao e formatacao ('{disk['model']}' -> '{actual_model}')."
+        )
+    actual_serial = str(top_dev.get("serial") or "").strip()
+    if disk.get("serial") is not None and actual_serial != str(disk["serial"]).strip():
+        raise RuntimeError(
+            f"Serial do disco '{raw_path}' mudou entre selecao e formatacao ('{disk['serial']}' -> '{actual_serial}')."
+        )
+    actual_tran = str(top_dev.get("tran") or "disk").strip().lower()
+    if disk.get("tran") and actual_tran != str(disk["tran"]).strip().lower():
+        raise RuntimeError(
+            f"Transporte do disco '{raw_path}' mudou entre selecao e formatacao ('{disk['tran']}' -> '{actual_tran}')."
+        )
+
+    dev_paths, json_mounts = _collect_lsblk_tree(lsblk_data["blockdevices"])
+
+    # 2. Cross-check lsblk flat mount list (mandatory exit=0)
+    flat_mounts = _lsblk_mounts_for_device(raw_path)
+    all_mounts = sorted({*json_mounts, *flat_mounts})
+    if any(m.startswith("/run/archiso") for m in all_mounts):
+        raise RuntimeError(f"BLOQUEIO: '{raw_path}' contem ponto de montagem da midia Arch ISO (/run/archiso).")
+    if all_mounts:
+        raise RuntimeError(
+            f"O disco '{raw_path}' possui pontos montados ou alvos ativos ({', '.join(all_mounts)}). "
             "Desmonte-os manualmente antes de prosseguir."
         )
+
+    # 3. Cross-check findmnt (fail-closed if findmnt fails or finds any mount sourced from disk or partitions)
+    findmnt_proc = subprocess.run(
+        ["findmnt", "-rn", "-o", "SOURCE,TARGET"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if findmnt_proc.returncode != 0:
+        raise RuntimeError(
+            f"Falha ao consultar findmnt antes de formatar '{raw_path}' (exit={findmnt_proc.returncode}): "
+            f"{findmnt_proc.stderr.strip()}"
+        )
+    for line in findmnt_proc.stdout.splitlines():
+        parts = line.split(None, 1)
+        if not parts:
+            continue
+        src = parts[0].split("[", 1)[0].strip()
+        target = parts[1].strip() if len(parts) > 1 else "?"
+        if src in dev_paths or (src.startswith("/dev/") and os.path.realpath(src) in dev_paths):
+            raise RuntimeError(
+                f"Particao ou dispositivo '{src}' pertencente a '{raw_path}' esta montado em '{target}' via findmnt."
+            )
+
+    # 4. Verify no active swap resides on the selected disk or any descendant partition (fail-closed)
+    swapon_proc = subprocess.run(
+        ["swapon", "--noheadings", "--raw", "--show=NAME"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if swapon_proc.returncode != 0:
+        raise RuntimeError(
+            f"Falha ao consultar swap ativo via swapon (exit={swapon_proc.returncode}): "
+            f"{swapon_proc.stderr.strip()}"
+        )
+    for line in swapon_proc.stdout.splitlines():
+        sw_dev = line.strip()
+        if not sw_dev:
+            continue
+        if sw_dev in dev_paths or (sw_dev.startswith("/dev/") and os.path.realpath(sw_dev) in dev_paths):
+            raise RuntimeError(
+                f"Swap ativo detectado no disco/particao '{sw_dev}' (pertencente a '{raw_path}'). "
+                "Execute 'swapoff' antes de continuar."
+            )
 
 
 def validate_username(name: str) -> tuple[bool, str]:
@@ -807,6 +960,11 @@ def interactive_main(args: argparse.Namespace) -> int:
         ]
         if args.dry_run:
             cmd.append("--dry-run")
+        try:
+            verify_disk_safe_to_wipe(chosen)
+        except RuntimeError as exc:
+            print(f"ERRO CRITICO (revalidacao final antes de archinstall): {exc}", file=sys.stderr)
+            return 1
         print("\nIniciando archinstall com configuracao Project Nox automatica...")
         try:
             proc = subprocess.run(cmd, check=False)
