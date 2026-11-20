@@ -30,15 +30,15 @@ from pathlib import Path
 from typing import Any
 
 NOX_RELEASE_VERSION = "v1.0.1"
-OFFICIAL_CONFIG_COMMIT = "5e9d69e1751d1c57b5b5921daec5573c7e808009"
+OFFICIAL_CONFIG_COMMIT = "7b64e74308880246cd140b258b4554258a418208"
 DEFAULT_CONFIG_URL = (
     f"https://raw.githubusercontent.com/Awerkori/arch-install/{OFFICIAL_CONFIG_COMMIT}/user_configuration.json"
 )
-OFFICIAL_CONFIG_SHA256 = "827065474be7487bcf88878bc22a10ef85fc2a440acff29df70e66227160cb58"
+OFFICIAL_CONFIG_SHA256 = "44b535686205c5d6e0ccfbd06921b53d64671647caca6ad4815a466e35b7e963"
 OFFICIAL_PAYLOAD_URL = (
     "https://github.com/Awerkori/arch-install/releases/download/v1.0.1/nox-archinstall-payload-v1.0.1.tar.gz"
 )
-OFFICIAL_PAYLOAD_SHA256 = "c82ed371ff11d2d523e46360903bad1a9417abd11793e0a3d9f2afe47c4747ad"
+OFFICIAL_PAYLOAD_SHA256 = "87c330736f0080da51a3bda8b67a1abd0d94750d0f3ca1197d8356efdd559d13"
 
 LEGACY_RC_TAG = "v1.0.0-rc10"
 LEGACY_RC_PREFIX = "v1.0.0-rc"
@@ -211,12 +211,19 @@ def _lsblk_mounts_for_device(path: str) -> list[str]:
 
 
 def list_candidate_disks() -> list[dict[str, Any]]:
-    """Query lsblk and return eligible disks (>= 20 GiB), excluding live archiso media."""
-    raw = subprocess.check_output(
+    """Query lsblk and return eligible disks (>= 20 GiB), excluding live archiso media (fail-closed)."""
+    res = subprocess.run(
         ["lsblk", "-d", "-b", "-J", "-o", "NAME,PATH,SIZE,MODEL,SERIAL,TRAN,TYPE,RM,MOUNTPOINTS"],
+        capture_output=True,
         text=True,
+        check=False,
     )
-    data = json.loads(raw)
+    if res.returncode != 0:
+        raise RuntimeError(f"Falha ao listar discos via lsblk (exit={res.returncode}): {res.stderr.strip()}")
+    try:
+        data = json.loads(res.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Saida JSON invalida de lsblk ao listar discos: {exc}") from exc
     if not isinstance(data, dict) or not isinstance(data.get("blockdevices"), list):
         raise RuntimeError("Saida JSON invalida de lsblk ao listar discos.")
     disks: list[dict[str, Any]] = []
