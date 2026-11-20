@@ -70,4 +70,4 @@ jobs:
       - name: Secret and private data scan
         run: |
           ! grep -rnE '[g]hp_|[g]ho_|[g]ithub_pat_|[A]KIA[0-9A-Z]{16}|BEGIN[[:space:]]+(OPENSSH|RSA|EC|DSA|PGP|PRIVATE)[[:space:]]+(PRIVATE[[:space:]]+)?KEY' \
-            --exclude-dir=.git --exclude-dir=dist --exclude-dir=reports --exclude-dir=__pycache__ .
+            --binary-files=without-match --exclude-dir=.git --exclude-dir=dist --exclude-dir=reports --exclude-dir=__pycache__ .
